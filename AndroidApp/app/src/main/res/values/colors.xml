@@ -2,4 +2,36 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <color name="brand_primary">#0E7490</color>
+    <color name="brand_primary_dark">#164E63</color>
+    <color name="brand_primary_container">#CFFAFE</color>
+    <color name="brand_on_primary">#FFFFFF</color>
+    <color name="brand_secondary">#F59E0B</color>
+    <color name="brand_secondary_dark">#B45309</color>
+    <color name="brand_on_secondary">#1F2937</color>
+    <color name="brand_tertiary">#14B8A6</color>
+
+    <color name="bg">#F1F5F9</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#E2E8F0</color>
+    <color name="outline">#CBD5E1</color>
+
+    <color name="text_primary">#0F172A</color>
+    <color name="text_secondary">#64748B</color>
+    <color name="text_disabled">#94A3B8</color>
+
+    <color name="success">#16A34A</color>
+    <color name="success_container">#DCFCE7</color>
+    <color name="error">#DC2626</color>
+    <color name="error_container">#FEE2E2</color>
+    <color name="warning">#D97706</color>
+    <color name="warning_container">#FEF3C7</color>
+    <color name="info">#0284C7</color>
+    <color name="info_container">#E0F2FE</color>
+
+    <color name="dark_bg">#0F172A</color>
+    <color name="dark_surface">#1E293B</color>
+    <color name="dark_text_primary">#F1F5F9</color>
+    <color name="dark_text_secondary">#94A3B8</color>
 </resources>

@@ -2,7 +2,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.bluetooth"
+        android:required="false" />
+
+
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+
     <application
+        android:name=".SalexfyApp"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -14,13 +37,87 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.SalexfyPos">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".ui.login.LoginActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.login.SetupActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.products.ProductEditActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.products.BatchAddProductsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.products.CategoryActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.products.BrandActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.products.UnitActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.sell.SaleDetailActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.stock.PurchaseEditActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.stock.StockTakeActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.suppliers.SupplierEditActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.suppliers.SupplierListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.suppliers.CustomerEditActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.suppliers.CustomerListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.suppliers.CustomerDetailActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.reports.ReportsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.users.UserEditActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.users.UserListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.users.RoleActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.DebugActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.scan.ScanActivity"
+            android:exported="false"
+            android:theme="@style/Theme.SalexfyPos" />
+        <activity
+            android:name=".ui.help.HelpActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.crash.CrashRecoveryActivity"
+            android:exported="false"
+            android:excludeFromRecents="true" />
     </application>
 
 </manifest>
