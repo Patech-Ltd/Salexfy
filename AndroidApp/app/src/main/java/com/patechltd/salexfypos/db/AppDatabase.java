@@ -13,6 +13,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 import com.patechltd.salexfypos.db.dao.AdminDao;
 import com.patechltd.salexfypos.db.dao.CrashDao;
 import com.patechltd.salexfypos.db.dao.DirectoryDao;
+import com.patechltd.salexfypos.db.dao.ExpenseDao;
 import com.patechltd.salexfypos.db.dao.ProductDao;
 import com.patechltd.salexfypos.db.dao.PurchaseDao;
 import com.patechltd.salexfypos.db.dao.SaleDao;
@@ -25,6 +26,7 @@ import com.patechltd.salexfypos.db.entity.Category;
 import com.patechltd.salexfypos.db.entity.CrashLog;
 import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.DebtPayment;
+import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
 import com.patechltd.salexfypos.db.entity.Purchase;
@@ -47,9 +49,10 @@ import com.patechltd.salexfypos.db.entity.User;
                 Sale.class, SaleItem.class,
                 StockMovement.class, StockTake.class, StockTakeItem.class,
                 User.class, Role.class, AppSetting.class,
-                CrashLog.class, BackupLog.class
+                CrashLog.class, BackupLog.class,
+                Expense.class
         },
-        version = 3,
+        version = 5,
         exportSchema = false
 )
 @TypeConverters({Converters.class})
@@ -75,13 +78,15 @@ public abstract class AppDatabase extends RoomDatabase {
 
     public abstract CrashDao crashDao();
 
+    public abstract ExpenseDao expenseDao();
+
     public static AppDatabase getInstance(Context context) {
         if (instance == null) {
             synchronized (AppDatabase.class) {
                 if (instance == null) {
                     instance = Room.databaseBuilder(context.getApplicationContext(),
                                     AppDatabase.class, DATABASE_NAME)
-                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                             .fallbackToDestructiveMigration()
                             .build();
                 }
@@ -110,6 +115,30 @@ public abstract class AppDatabase extends RoomDatabase {
             database.execSQL("ALTER TABLE `customers` ADD COLUMN `totalSpent` REAL NOT NULL DEFAULT 0");
             database.execSQL("ALTER TABLE `sales` ADD COLUMN `pointsEarned` REAL NOT NULL DEFAULT 0");
             database.execSQL("ALTER TABLE `sales` ADD COLUMN `pointsRedeemed` REAL NOT NULL DEFAULT 0");
+        }
+    };
+
+    static final Migration MIGRATION_3_4 = new Migration(3, 4) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `expenses` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`description` TEXT, "
+                    + "`category` TEXT, "
+                    + "`amount` REAL NOT NULL DEFAULT 0, "
+                    + "`expenseDate` INTEGER NOT NULL DEFAULT 0, "
+                    + "`createdBy` TEXT, "
+                    + "`createdAt` INTEGER NOT NULL DEFAULT 0, "
+                    + "PRIMARY KEY(`id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_expenses_expenseDate` "
+                    + "ON `expenses` (`expenseDate`)");
+        }
+    };
+
+    static final Migration MIGRATION_4_5 = new Migration(4, 5) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `products` ADD COLUMN `imagePath` TEXT");
         }
     };
 

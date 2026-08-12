@@ -39,10 +39,18 @@
             android:text="Wholesale" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <com.google.android.material.textfield.TextInputLayout
+    <TextView
+        android:id="@+id/line_unit_label"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
+        android:layout_marginTop="10dp"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp" />
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/line_price_layout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:hint="Quantity"
         app:boxBackgroundMode="outline">
 
@@ -50,8 +58,19 @@
             android:id="@+id/line_qty"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="numberDecimal" />
+            android:inputType="numberDecimal"
+            android:selectAllOnFocus="true" />
     </com.google.android.material.textfield.TextInputLayout>
+
+    <TextView
+        android:id="@+id/line_total"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/bg_search"
+        android:padding="10dp"
+        android:textColor="@color/text_primary"
+        android:textSize="14sp" />
 
     <com.google.android.material.textfield.TextInputLayout
         android:layout_width="match_parent"

@@ -21,6 +21,7 @@ import com.patechltd.salexfypos.util.NumberUtil;
 import com.patechltd.salexfypos.util.Prefs;
 
 import java.util.List;
+import java.util.Map;
 
 public class CheckoutDialog {
 
@@ -33,6 +34,7 @@ public class CheckoutDialog {
     private final double total;
     private final double discount;
     private final List<Customer> customers;
+    private final Map<String, Double> customerDebts;
     private final String initialCustomer;
     private final Callback callback;
 
@@ -41,6 +43,7 @@ public class CheckoutDialog {
     private TextInputEditText received;
     private TextView changeLabel;
     private TextView changeAmount;
+    private TextView debtRow;
     private View pointsRow;
     private TextView pointsDiscountText;
     private SwitchMaterial usePoints;
@@ -49,11 +52,13 @@ public class CheckoutDialog {
     private final double pointValue;
 
     public CheckoutDialog(Context context, double total, double discount,
-                          List<Customer> customers, String initialCustomer, Callback callback) {
+                          List<Customer> customers, Map<String, Double> customerDebts,
+                          String initialCustomer, Callback callback) {
         this.context = context;
         this.total = total;
         this.discount = discount;
         this.customers = customers;
+        this.customerDebts = customerDebts;
         this.initialCustomer = initialCustomer;
         this.callback = callback;
         this.pointValue = Prefs.getDouble(context, Prefs.KEY_LOYALTY_POINT_VALUE, 0.5);
@@ -65,6 +70,14 @@ public class CheckoutDialog {
                 }
             }
         }
+    }
+
+    private double customerDebt(Customer c) {
+        if (c == null) return 0;
+        if (customerDebts != null && customerDebts.containsKey(c.id)) {
+            return Math.max(0, customerDebts.get(c.id));
+        }
+        return 0;
     }
 
     public void show() {
@@ -83,6 +96,7 @@ public class CheckoutDialog {
         pointsDiscountText = view.findViewById(R.id.points_discount);
         usePoints = view.findViewById(R.id.use_points);
         dueText = view.findViewById(R.id.due_amount);
+        debtRow = view.findViewById(R.id.debt_row);
 
         totalText.setText(NumberUtil.money(total));
 
@@ -90,6 +104,7 @@ public class CheckoutDialog {
             customerBtn.setText("Customer: " + selectedCustomer.name);
             refreshPointsUI();
         }
+        refreshDebtRow();
 
         customerBtn.setOnClickListener(v -> {
             if (customers == null || customers.isEmpty()) {
@@ -105,28 +120,12 @@ public class CheckoutDialog {
                         });
                 return;
             }
-            String[] options = new String[customers.size() + 1];
-            options[0] = "Cash Customer (Walk-in)";
-            for (int i = 0; i < customers.size(); i++) options[i + 1] = customers.get(i).name;
-            int selected = 0;
-            if (selectedCustomer != null) {
-                for (int i = 0; i < customers.size(); i++) {
-                    if (customers.get(i).name.equals(selectedCustomer.name)) {
-                        selected = i + 1;
-                        break;
-                    }
-                }
-            }
-            DialogUtil.pick(context, "Select customer", options, selected, which -> {
-                if (which == 0) {
-                    selectedCustomer = null;
-                    customerBtn.setText("Cash Customer (Walk-in)");
-                } else {
-                    selectedCustomer = customers.get(which - 1);
-                    customerBtn.setText("Customer: " + selectedCustomer.name);
-                }
+            new CustomerSearchDialog(context, customers, customerDebts, picked -> {
+                selectedCustomer = picked;
+                customerBtn.setText("Customer: " + picked.name);
                 refreshPointsUI();
-            });
+                refreshDebtRow();
+            }).show();
         });
 
         usePoints.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -148,6 +147,7 @@ public class CheckoutDialog {
             received.setHint(method == PaymentMethod.CREDIT
                     ? "Pay now (remainder on credit)"
                     : "Amount received");
+            refreshDebtRow();
             refreshPaymentUI();
         });
         ((Chip) view.findViewById(R.id.chip_cash)).setChecked(true);
@@ -173,6 +173,7 @@ public class CheckoutDialog {
             @Override
             public void afterTextChanged(Editable s) {
                 updatePaymentSummary();
+                if (method == PaymentMethod.CREDIT) refreshDebtRow();
             }
         });
 
@@ -239,12 +240,40 @@ public class CheckoutDialog {
         updatePaymentSummary();
     }
 
+    private void refreshDebtRow() {
+        if (debtRow == null) return;
+        if (method == PaymentMethod.CREDIT) {
+            if (selectedCustomer == null) {
+                debtRow.setVisibility(View.VISIBLE);
+                debtRow.setText("Select a credit account (customer) to continue");
+            } else {
+                double debt = customerDebt(selectedCustomer);
+                double newBalance = Math.max(0, dueAmount() - NumberUtil.parse(
+                        received == null || received.getText() == null ? "0" : received.getText().toString(), 0));
+                StringBuilder sb = new StringBuilder();
+                sb.append("Credit account: ").append(selectedCustomer.name);
+                if (debt > 0.01) sb.append("  •  Existing balance ").append(NumberUtil.money(debt));
+                if (newBalance > 0.01) sb.append("  •  Total loan ").append(NumberUtil.money(debt + newBalance));
+                if (debt <= 0.01 && newBalance <= 0.01) sb.append("  •  No balance");
+                debtRow.setText(sb.toString());
+            }
+        } else {
+            debtRow.setVisibility(View.GONE);
+        }
+    }
+
     private void updatePaymentSummary() {
         double paid = NumberUtil.parse(received.getText() == null ? "" : received.getText().toString(), 0);
         double due = dueAmount();
         if (method == PaymentMethod.CREDIT) {
-            changeLabel.setText("Balance to pay later");
-            changeAmount.setText(NumberUtil.money(Math.max(0, due - paid)));
+            double balance = due - paid;
+            if (balance < -0.001) {
+                changeLabel.setText("Overpayment (credit to account)");
+                changeAmount.setText(NumberUtil.money(-balance));
+            } else {
+                changeLabel.setText("Balance to pay later");
+                changeAmount.setText(NumberUtil.money(Math.max(0, balance)));
+            }
         } else {
             changeLabel.setText("Change");
             changeAmount.setText(NumberUtil.money(Math.max(0, paid - due)));

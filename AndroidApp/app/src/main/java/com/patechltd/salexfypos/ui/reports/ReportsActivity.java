@@ -15,6 +15,8 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.KeyValueAdapter;
 import com.patechltd.salexfypos.db.CashierReportRow;
@@ -40,6 +42,7 @@ public class ReportsActivity extends AppCompatActivity {
     private final List<View> rangeChips = new ArrayList<>();
 
     private TextView rangeLabel, totalSales, totalCount, totalProfit, totalCost, creditSales, paymentsReceived, purchasesTotal, itemsSold;
+    private TextView taxTotal, expensesTotal, netProfit, turnoverTotal;
     private KeyValueAdapter dailyAdapter, cashierAdapter, topAdapter;
 
     private long from = DateUtil.startOfDay(System.currentTimeMillis());
@@ -81,6 +84,10 @@ public class ReportsActivity extends AppCompatActivity {
         paymentsReceived = findViewById(R.id.payments_received);
         purchasesTotal = findViewById(R.id.purchases_total);
         itemsSold = findViewById(R.id.items_sold);
+        taxTotal = findViewById(R.id.tax_total);
+        expensesTotal = findViewById(R.id.expenses_total);
+        netProfit = findViewById(R.id.net_profit);
+        turnoverTotal = findViewById(R.id.turnover_total);
 
         dailyAdapter = new KeyValueAdapter();
         cashierAdapter = new KeyValueAdapter();
@@ -99,6 +106,7 @@ public class ReportsActivity extends AppCompatActivity {
         topList.setAdapter(topAdapter);
 
         findViewById(R.id.btn_export).setOnClickListener(v -> exportNow());
+        findViewById(R.id.btn_add_expense).setOnClickListener(v -> showAddExpenseDialog());
     }
 
     private void buildRangeChips() {
@@ -197,17 +205,24 @@ public class ReportsActivity extends AppCompatActivity {
             double credit = repo.sales.creditSalesBetween(from, to);
             double payments = repo.suppliers.paymentsBetween(from, to);
             double purchases = repo.purchases.purchasesTotal(from, to);
+            double tax = repo.sales.taxTotal(from, to);
+            double expenses = repo.expenses.totalBetween(from, to);
             List<DayReportRow> days = repo.sales.getDailyReport(from, to);
             List<CashierReportRow> cashiers = repo.sales.getCashierReport(from, to);
             List<TopProductRow> tops = repo.sales.getTopProducts(from, to, 10);
             handler.post(() -> {
+                double profit = sales - cost;
                 totalSales.setText(currency + " " + NumberUtil.money(sales));
                 totalCount.setText(count + (count == 1 ? " sale" : " sales"));
-                totalProfit.setText(currency + " " + NumberUtil.money(sales - cost));
+                totalProfit.setText(currency + " " + NumberUtil.money(profit));
                 totalCost.setText("Cost: " + currency + " " + NumberUtil.money(cost));
                 creditSales.setText(currency + " " + NumberUtil.money(credit));
                 paymentsReceived.setText(currency + " " + NumberUtil.money(payments));
                 purchasesTotal.setText(currency + " " + NumberUtil.money(purchases));
+                taxTotal.setText(currency + " " + NumberUtil.money(tax));
+                expensesTotal.setText(currency + " " + NumberUtil.money(expenses));
+                netProfit.setText(currency + " " + NumberUtil.money(profit - expenses));
+                turnoverTotal.setText(currency + " " + NumberUtil.money(sales));
                 int itemCount = 0;
                 for (DayReportRow d : days) itemCount += d.itemCount;
                 itemsSold.setText(String.valueOf(itemCount));
@@ -216,7 +231,8 @@ public class ReportsActivity extends AppCompatActivity {
                 for (DayReportRow d : days) {
                     dailyRows.add(new KeyValueAdapter.Row(
                             DateUtil.formatDate(d.dayStart),
-                            d.saleCount + " sales, " + d.itemCount + " items",
+                            d.saleCount + " sales • " + d.itemCount + " items • Profit "
+                                    + currency + " " + NumberUtil.money(d.profit),
                             currency + " " + NumberUtil.money(d.totalSales),
                             d.profit >= 0 ? 0xFF1565C0 : 0xFFB00020));
                 }
@@ -252,6 +268,41 @@ public class ReportsActivity extends AppCompatActivity {
         StorageUtil.createReportUri(this, DateUtil.formatDate(from) + "_" + DateUtil.formatDate(to));
     }
 
+    private void showAddExpenseDialog() {
+        View view = getLayoutInflater().inflate(R.layout.dialog_add_expense, null);
+        TextInputEditText desc = view.findViewById(R.id.expense_desc);
+        TextInputEditText amount = view.findViewById(R.id.expense_amount);
+        TextInputEditText category = view.findViewById(R.id.expense_category);
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Add expense")
+                .setView(view)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    String d = desc.getText() == null ? "" : desc.getText().toString().trim();
+                    double amt = NumberUtil.parse(amount.getText() == null ? "" : amount.getText().toString(), 0);
+                    if (d.isEmpty()) {
+                        DialogUtil.toast(this, "Enter a description");
+                        return;
+                    }
+                    if (amt <= 0) {
+                        DialogUtil.toast(this, "Enter a valid amount");
+                        return;
+                    }
+                    String cat = category.getText() == null ? "" : category.getText().toString().trim();
+                    final String fDesc = d;
+                    final String fCat = cat;
+                    final double fAmt = amt;
+                    repo.run(() -> {
+                        repo.addExpense(fDesc, fCat, fAmt, System.currentTimeMillis());
+                        handler.post(() -> {
+                            DialogUtil.toast(this, "Expense added");
+                            load();
+                        });
+                    });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -261,6 +312,7 @@ public class ReportsActivity extends AppCompatActivity {
                 List<DayReportRow> days = repo.sales.getDailyReport(from, to);
                 List<CashierReportRow> cashiers = repo.sales.getCashierReport(from, to);
                 List<TopProductRow> tops = repo.sales.getTopProducts(from, to, 50);
+                List<com.patechltd.salexfypos.db.entity.Expense> expenses = repo.expenses.getBetween(from, to);
                 List<ExcelUtil.Section> sections = new ArrayList<>();
                 sections.add(new ExcelUtil.Section("Daily", days,
                         new ExcelUtil.RowWriter() {
@@ -290,6 +342,16 @@ public class ReportsActivity extends AppCompatActivity {
                             @Override public Object[] row(Object item, int index) {
                                 TopProductRow t = (TopProductRow) item;
                                 return new Object[]{t.name, t.totalQty, t.totalSales};
+                            }
+                        }));
+                sections.add(new ExcelUtil.Section("Expenses", expenses,
+                        new ExcelUtil.RowWriter() {
+                            @Override public Object[] header() {
+                                return new Object[]{"Date", "Description", "Category", "Amount"};
+                            }
+                            @Override public Object[] row(Object item, int index) {
+                                com.patechltd.salexfypos.db.entity.Expense e = (com.patechltd.salexfypos.db.entity.Expense) item;
+                                return new Object[]{DateUtil.formatDate(e.expenseDate), e.description, e.category, e.amount};
                             }
                         }));
                 boolean ok = ExcelUtil.exportMulti(this, uri, sections);

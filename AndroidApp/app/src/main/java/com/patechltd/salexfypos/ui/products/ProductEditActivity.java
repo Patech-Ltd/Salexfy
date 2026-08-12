@@ -1,6 +1,7 @@
 package com.patechltd.salexfypos.ui.products;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -9,6 +10,8 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.patechltd.salexfypos.util.ImageUtil;
 
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
@@ -50,6 +53,8 @@ public class ProductEditActivity extends AppCompatActivity {
     private SwitchMaterial activeSwitch;
     private LinearLayout extraBarcodesList;
     private MaterialButton btnAddBarcode;
+    private ImageView imagePreview;
+    private String imagePath;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -93,6 +98,8 @@ public class ProductEditActivity extends AppCompatActivity {
         extraBarcodesList = findViewById(R.id.extra_barcodes_list);
         btnAddBarcode = findViewById(R.id.btn_add_barcode);
         btnAddBarcode.setOnClickListener(v -> addExtraBarcode());
+        imagePreview = findViewById(R.id.image_preview);
+        findViewById(R.id.btn_pick_image).setOnClickListener(v -> pickImage());
         renderBarcodes();
         MaterialButton save = findViewById(R.id.btn_save);
         MaterialButton delete = findViewById(R.id.btn_delete);
@@ -148,6 +155,19 @@ public class ProductEditActivity extends AppCompatActivity {
 
     private static final int REQ_SCAN = 5001;
     private static final int REQ_SCAN_EXTRA = 5002;
+    private static final int REQ_IMAGE = 5003;
+
+    private void pickImage() {
+        if (viewOnly) return;
+        if (!PermissionChecker.has(this, Authority.PRODUCT_EDIT)) return;
+        Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+        intent.setType("image/*");
+        try {
+            startActivityForResult(Intent.createChooser(intent, "Select product image"), REQ_IMAGE);
+        } catch (Exception e) {
+            Toast.makeText(this, "No image picker available", Toast.LENGTH_SHORT).show();
+        }
+    }
 
     private void setupSection(int headerId, int bodyId, int chevronId, boolean defaultOpen) {
         View header = findViewById(headerId);
@@ -283,6 +303,11 @@ public class ProductEditActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == RESULT_OK && data != null) {
+            if (requestCode == REQ_IMAGE) {
+                Uri uri = data.getData();
+                if (uri != null) copyImageToStorage(uri);
+                return;
+            }
             String code = data.getStringExtra(com.patechltd.salexfypos.ui.scan.ScanActivity.EXTRA_CODE);
             if (code == null) return;
             if (requestCode == REQ_SCAN) {
@@ -291,6 +316,21 @@ public class ProductEditActivity extends AppCompatActivity {
                 addBarcodeToList(code.trim());
             }
         }
+    }
+
+    private void copyImageToStorage(Uri uri) {
+        repo.io(() -> {
+            String tmp = ImageUtil.copyImage(this, uri, UUID.randomUUID().toString());
+            if (tmp == null) {
+                handler.post(() -> Toast.makeText(this, "Could not load image", Toast.LENGTH_SHORT).show());
+                return;
+            }
+            handler.post(() -> {
+                imagePath = tmp;
+                imagePreview.setTag(imagePath);
+                ImageUtil.load(imagePreview, imagePath, 256);
+            });
+        });
     }
 
     private void loadReferences() {
@@ -344,6 +384,11 @@ public class ProductEditActivity extends AppCompatActivity {
         factorInput.setText(String.valueOf(p.wholesaleFactor));
         notesInput.setText(p.notes);
         activeSwitch.setChecked(p.isActive);
+        imagePath = p.imagePath;
+        if (imagePath != null) {
+            imagePreview.setTag(imagePath);
+            ImageUtil.load(imagePreview, imagePath, 256);
+        }
         categoryId = p.categoryId;
         brandId = p.brandId;
         retailUnitId = unitIdByName(p.retailUnit);
@@ -543,6 +588,7 @@ public class ProductEditActivity extends AppCompatActivity {
             p.reorderLevel = reorder;
             p.taxPercent = tax;
             p.notes = notes;
+            p.imagePath = imagePath;
             p.isActive = activeSwitch.isChecked();
             p.updatedAt = System.currentTimeMillis();
             if (isNew) {

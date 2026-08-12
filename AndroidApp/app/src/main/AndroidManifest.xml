@@ -69,6 +69,9 @@
             android:name=".ui.sell.SaleDetailActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.sell.SalesHistoryActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.stock.PurchaseEditActivity"
             android:exported="false" />
         <activity
@@ -103,6 +106,21 @@
             android:exported="false" />
         <activity
             android:name=".ui.settings.SettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.BusinessSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.ScannerSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.PrinterSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.LoyaltySettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.BackupSettingsActivity"
             android:exported="false" />
         <activity
             android:name=".ui.settings.DebugActivity"

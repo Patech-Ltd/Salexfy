@@ -3,6 +3,7 @@ package com.patechltd.salexfypos.adapter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -10,6 +11,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.db.ProductStock;
+import com.patechltd.salexfypos.util.ImageUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
 
 import java.util.ArrayList;
@@ -56,6 +58,8 @@ public class ProductAdapter extends RecyclerView.Adapter<ProductAdapter.VH> {
         holder.meta.setText(meta.length() == 0 ? "Uncategorised" : meta.toString());
         holder.barcode.setText(ps.product.barcode == null || ps.product.barcode.isEmpty()
                 ? "No barcode" : "Barcode: " + ps.product.barcode);
+        holder.image.setTag(ps.product.imagePath);
+        ImageUtil.load(holder.image, ps.product.imagePath, 128);
         String unit = ps.product.retailUnit == null ? "" : " / " + ps.product.retailUnit;
         holder.price.setText(NumberUtil.money(ps.product.retailPrice) + unit);
         holder.stock.setText("Stock: " + NumberUtil.qty(ps.currentQty));
@@ -70,6 +74,7 @@ public class ProductAdapter extends RecyclerView.Adapter<ProductAdapter.VH> {
 
     static class VH extends RecyclerView.ViewHolder {
         final TextView name, meta, barcode, price, stock, lowStock;
+        final ImageView image;
 
         VH(@NonNull View itemView) {
             super(itemView);
@@ -79,6 +84,7 @@ public class ProductAdapter extends RecyclerView.Adapter<ProductAdapter.VH> {
             price = itemView.findViewById(R.id.retail_price);
             stock = itemView.findViewById(R.id.stock_qty);
             lowStock = itemView.findViewById(R.id.low_stock);
+            image = itemView.findViewById(R.id.product_image);
         }
     }
 }

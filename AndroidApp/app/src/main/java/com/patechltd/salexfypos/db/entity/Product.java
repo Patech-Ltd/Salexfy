@@ -26,6 +26,8 @@ public class Product {
 
     public String sku;
 
+    public String imagePath;
+
     public String categoryId;
 
     public String brandId;

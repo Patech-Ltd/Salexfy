@@ -93,9 +93,17 @@ public class SaleDetailActivity extends AppCompatActivity {
         if ("CREDIT".equals(sale.paymentMethod)) {
             sb.append("Payment: ON CREDIT\n");
             if (sale.customerName != null) sb.append("Customer: ").append(sale.customerName).append('\n');
+            if (sale.paidAmount > 0) sb.append("Paid now: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
+            sb.append("Balance: ").append(NumberUtil.money(sale.total - sale.paidAmount)).append('\n');
         } else {
             sb.append("Paid: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
             sb.append("Change: ").append(NumberUtil.money(sale.changeAmount)).append('\n');
+        }
+        if (sale.pointsEarned > 0) {
+            sb.append("Loyalty points earned: ").append(NumberUtil.qty(sale.pointsEarned)).append('\n');
+        }
+        if (sale.notes != null && !sale.notes.isEmpty()) {
+            sb.append("Note: ").append(sale.notes).append('\n');
         }
         String footer = Prefs.getString(this, Prefs.KEY_RECEIPT_FOOTER, "");
         if (!footer.isEmpty()) sb.append(footer).append('\n');

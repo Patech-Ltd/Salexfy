@@ -28,6 +28,7 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.CartAdapter;
 import com.patechltd.salexfypos.db.Repository;
+import com.patechltd.salexfypos.db.entity.Category;
 import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
@@ -61,7 +62,7 @@ public class SellFragment extends Fragment {
     private final List<Product> products = new ArrayList<>();
     private boolean wholesaleMode;
     private Sale currentSale;
-    private TextView subtotalView, taxView, totalView, itemCountView, feedbackView;
+    private TextView subtotalView, taxView, totalView, itemCountView, feedbackView, transNoView;
     private MaterialButton btnHold, btnCheckout, btnPause, btnTogglePreview, btnSearch;
     private View previewContainer;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -88,12 +89,15 @@ public class SellFragment extends Fragment {
         taxView = view.findViewById(R.id.tax_amount);
         totalView = view.findViewById(R.id.total);
         itemCountView = view.findViewById(R.id.item_count);
+        transNoView = view.findViewById(R.id.trans_no);
         feedbackView = view.findViewById(R.id.scan_feedback);
         btnHold = view.findViewById(R.id.btn_hold);
         btnCheckout = view.findViewById(R.id.btn_checkout);
         btnPause = view.findViewById(R.id.btn_pause);
         btnTogglePreview = view.findViewById(R.id.btn_toggle_preview);
         btnSearch = view.findViewById(R.id.btn_search);
+        view.findViewById(R.id.btn_sales).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), SalesHistoryActivity.class)));
 
         MaterialButtonToggleGroup toggle = view.findViewById(R.id.unit_toggle);
         toggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
@@ -103,6 +107,7 @@ public class SellFragment extends Fragment {
             wholesaleMode = wholesale;
             convertCartPrices();
         });
+        toggle.check(R.id.btn_retail);
 
         cartAdapter = new CartAdapter(new CartAdapter.Listener() {
             @Override
@@ -317,16 +322,62 @@ public class SellFragment extends Fragment {
         MaterialButton retailBtn = view.findViewById(R.id.line_btn_retail);
         MaterialButton wholesaleBtn = view.findViewById(R.id.line_btn_wholesale);
         TextInputEditText qtyInput = view.findViewById(R.id.line_qty);
+        TextView unitLabel = view.findViewById(R.id.line_unit_label);
         TextInputEditText priceInput = view.findViewById(R.id.line_price);
+        TextView totalView = view.findViewById(R.id.line_total);
 
         title.setText(item.productName);
         qtyInput.setText(String.valueOf(item.qty));
-        priceInput.setText(String.valueOf(item.unitPrice));
         if (item.isWholesale) {
             wholesaleBtn.setChecked(true);
         } else {
             retailBtn.setChecked(true);
         }
+
+        priceInput.setFocusable(false);
+        priceInput.setClickable(false);
+        priceInput.setCursorVisible(false);
+
+        Runnable refreshPrice = () -> {
+            boolean wholesale = wholesaleBtn.isChecked();
+            double price = 0;
+            String unit = "";
+            if (product != null) {
+                price = wholesale ? product.wholesalePrice : product.retailPrice;
+                if (price <= 0) price = wholesale ? product.retailPrice : product.wholesalePrice;
+                unit = wholesale ? product.wholesaleUnit : product.retailUnit;
+                if (unit == null) unit = "";
+            } else {
+                price = item.unitPrice;
+            }
+            double qty = Math.max(0.001, NumberUtil.parse(qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
+            priceInput.setText(NumberUtil.money(price));
+            unitLabel.setText("Price (" + (wholesale ? "wholesale" : "retail") + (unit.isEmpty() ? "" : " — " + unit) + ")");
+            String c = Prefs.currency(requireContext());
+            totalView.setText("Line total: " + c + " " + NumberUtil.money(qty * price));
+        };
+
+        toggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            refreshPrice.run();
+        });
+
+        qtyInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                refreshPrice.run();
+            }
+        });
+
+        refreshPrice.run();
 
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Edit line")
@@ -334,8 +385,10 @@ public class SellFragment extends Fragment {
                 .setPositiveButton("Save", (dialog, which) -> {
                     item.isWholesale = wholesaleBtn.isChecked();
                     item.qty = Math.max(0.001, NumberUtil.parse(qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
-                    item.unitPrice = NumberUtil.parse(priceInput.getText() == null ? "" : priceInput.getText().toString(), item.unitPrice);
                     if (product != null) {
+                        double price = item.isWholesale ? product.wholesalePrice : product.retailPrice;
+                        if (price <= 0) price = item.isWholesale ? product.retailPrice : product.wholesalePrice;
+                        item.unitPrice = price;
                         item.unitLabel = item.isWholesale ? product.wholesaleUnit : product.retailUnit;
                     }
                     int factor = item.isWholesale && product != null ? Math.max(1, product.wholesaleFactor) : 1;
@@ -357,9 +410,16 @@ public class SellFragment extends Fragment {
     private void afterCartChange() {
         cartAdapter.submit(cart);
         itemCountView.setText(cart.size() + " item" + (cart.size() == 1 ? "" : "s"));
+        updateTransNo();
         updateTotals();
         scheduleDraftSave();
         autoManagePreview();
+    }
+
+    private void updateTransNo() {
+        if (transNoView == null) return;
+        String no = currentSale != null && currentSale.saleNo != null ? currentSale.saleNo : "";
+        transNoView.setText(no.isEmpty() ? "" : "Trans #" + no);
     }
 
     private void updateTotals() {
@@ -419,11 +479,15 @@ public class SellFragment extends Fragment {
     private final Runnable draftSave = () -> {
         if (cart.isEmpty()) return;
         final Sale existing = currentSale;
+        if (existing != null && "COMPLETE".equals(existing.status)) return;
         final List<SaleItem> items = new ArrayList<>(cart);
         repo.run(() -> {
             final Sale sale = existing != null ? existing : buildSale("DRAFT");
             repo.saveDraft(sale, items);
-            if (existing == null) handler.post(() -> currentSale = sale);
+            if (existing == null) handler.post(() -> {
+                currentSale = sale;
+                updateTransNo();
+            });
         });
     };
 
@@ -446,19 +510,23 @@ public class SellFragment extends Fragment {
             Toast.makeText(requireContext(), "Cart is empty", Toast.LENGTH_SHORT).show();
             return;
         }
-        final Sale existing = currentSale;
-        final List<SaleItem> items = new ArrayList<>(cart);
-        repo.run(() -> {
-            final Sale sale = existing != null ? existing : buildSale("HELD");
-            sale.status = "HELD";
-            repo.holdSale(sale, items);
-            if (existing == null) handler.post(() -> currentSale = sale);
-            handler.post(() -> {
-                clearCart();
-                Toast.makeText(requireContext(), "Sale held. You can recall it anytime.",
-                        Toast.LENGTH_SHORT).show();
-            });
-        });
+        DialogUtil.inputText(requireContext(), "Hold transaction", "Add a note (optional)", "",
+                "Hold", note -> {
+                    final Sale existing = currentSale;
+                    final List<SaleItem> items = new ArrayList<>(cart);
+                    repo.run(() -> {
+                        final Sale sale = existing != null ? existing : buildSale("HELD");
+                        sale.status = "HELD";
+                        sale.notes = note.trim();
+                        repo.holdSale(sale, items);
+                        if (existing == null) handler.post(() -> currentSale = sale);
+                        handler.post(() -> {
+                            clearCart();
+                            Toast.makeText(requireContext(), "Sale held. You can recall it anytime.",
+                                    Toast.LENGTH_SHORT).show();
+                        });
+                    });
+                });
     }
 
     private void clearCart() {
@@ -466,6 +534,7 @@ public class SellFragment extends Fragment {
         currentSale = null;
         cartAdapter.submit(cart);
         itemCountView.setText("0 items");
+        updateTransNo();
         updateTotals();
         autoManagePreview();
     }
@@ -491,6 +560,10 @@ public class SellFragment extends Fragment {
         repo.run(() -> {
             final String blocked = checkStock(snapshot);
             final List<Customer> customers = repo.suppliers.getCustomers();
+            final Map<String, Double> debts = new HashMap<>();
+            for (com.patechltd.salexfypos.db.DebtorBalanceRow d : repo.suppliers.getDebtorBalances()) {
+                debts.put(d.customerId, d.outstanding);
+            }
             handler.post(() -> {
                 if (blocked != null) {
                     new MaterialAlertDialogBuilder(requireContext())
@@ -500,7 +573,7 @@ public class SellFragment extends Fragment {
                             .show();
                     return;
                 }
-                new CheckoutDialog(requireContext(), fTotal, 0, customers, "",
+                new CheckoutDialog(requireContext(), fTotal, 0, customers, debts, "",
                         (method, customer, customerId, paid, pointsUsed, notes) ->
                                 completeSale(method, customer, customerId, paid, pointsUsed, notes,
                                         fSubtotal, tax))
@@ -664,18 +737,34 @@ public class SellFragment extends Fragment {
                 handler.post(() -> Toast.makeText(requireContext(), "No held transactions", Toast.LENGTH_SHORT).show());
                 return;
             }
-            String[] options = new String[held.size()];
-            for (int i = 0; i < held.size(); i++) {
-                Sale s = held.get(i);
-                int count = repo.sales.getItems(s.id).size();
-                String note = (s.notes == null || s.notes.isEmpty()) ? "" : " • " + s.notes;
-                options[i] = s.saleNo + " • " + count + " item" + (count == 1 ? "" : "s")
-                        + " • " + NumberUtil.money(s.total) + " • "
-                        + com.patechltd.salexfypos.util.DateUtil.formatDate(s.createdAt)
-                        + " " + com.patechltd.salexfypos.util.DateUtil.formatTime(s.createdAt) + note;
+            List<com.patechltd.salexfypos.db.SaleWithItems> rows = new ArrayList<>();
+            for (Sale s : held) {
+                com.patechltd.salexfypos.db.SaleWithItems sw = repo.sales.getSaleWithItems(s.id);
+                if (sw != null) rows.add(sw);
             }
-            handler.post(() -> DialogUtil.pick(requireContext(), "Held transactions", options, -1,
-                    which -> recallHeld(held.get(which))));
+            handler.post(() -> new HeldListDialog(requireContext(), rows,
+                    new HeldListDialog.Callback() {
+                        @Override
+                        public void onRecall(Sale sale) {
+                            recallHeld(sale);
+                        }
+
+                        @Override
+                        public void onDelete(Sale sale) {
+                            deleteHeld(sale);
+                        }
+                    }).show());
+        });
+    }
+
+    private void deleteHeld(Sale sale) {
+        repo.run(() -> {
+            repo.sales.deleteItemsForSale(sale.id);
+            repo.sales.deleteSale(sale.id);
+            handler.post(() -> {
+                showHeldList();
+                Toast.makeText(requireContext(), "Held transaction deleted", Toast.LENGTH_SHORT).show();
+            });
         });
     }
 
@@ -690,6 +779,7 @@ public class SellFragment extends Fragment {
                 held.status = "DRAFT";
                 cartAdapter.submit(cart);
                 itemCountView.setText(cart.size() + " items");
+                updateTransNo();
                 updateTotals();
                 autoManagePreview();
                 Toast.makeText(requireContext(), "Transaction " + held.saleNo + " recalled",
@@ -699,12 +789,11 @@ public class SellFragment extends Fragment {
     }
 
     private void openProductSearch() {
-        List<String> names = new ArrayList<>();
-        for (Product p : products) names.add(p.name);
-        DialogUtil.pick(requireContext(), "Search product", names.toArray(new String[0]), -1,
-                which -> {
-                    Product p = products.get(which);
-                    addToCart(p);
-                });
+        repo.run(() -> {
+            final List<Category> cats = repo.directory.getCategories();
+            final List<Product> snapshot = new ArrayList<>(products);
+            handler.post(() -> new ProductSearchDialog(requireContext(), snapshot, cats, wholesaleMode,
+                    product -> addToCart(product)).show());
+        });
     }
 }

@@ -98,9 +98,9 @@ public class ScannerView extends FrameLayout {
         torchButton.setPadding(dp(12), dp(12), dp(12), dp(12));
         torchButton.setOnClickListener(v -> toggleTorch());
         LayoutParams torchParams = new LayoutParams(dp(48), dp(48));
-        torchParams.gravity = Gravity.TOP | Gravity.END;
-        torchParams.topMargin = dp(12);
-        torchParams.rightMargin = dp(12);
+        torchParams.gravity = Gravity.BOTTOM | Gravity.END;
+        torchParams.bottomMargin = dp(16);
+        torchParams.rightMargin = dp(16);
         addView(torchButton, torchParams);
         updateTorchIcon();
     }

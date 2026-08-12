@@ -48,6 +48,8 @@ public class ReportsFragment extends Fragment {
         view.findViewById(R.id.btn_excel_quick).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), ReportsActivity.class)
                         .putExtra("exportToday", true)));
+        view.findViewById(R.id.btn_sales_history).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), com.patechltd.salexfypos.ui.sell.SalesHistoryActivity.class)));
 
         load();
     }

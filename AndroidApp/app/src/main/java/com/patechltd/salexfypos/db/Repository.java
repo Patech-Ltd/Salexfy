@@ -7,12 +7,14 @@ import androidx.room.Transaction;
 import com.patechltd.salexfypos.db.dao.AdminDao;
 import com.patechltd.salexfypos.db.dao.CrashDao;
 import com.patechltd.salexfypos.db.dao.DirectoryDao;
+import com.patechltd.salexfypos.db.dao.ExpenseDao;
 import com.patechltd.salexfypos.db.dao.ProductDao;
 import com.patechltd.salexfypos.db.dao.PurchaseDao;
 import com.patechltd.salexfypos.db.dao.SaleDao;
 import com.patechltd.salexfypos.db.dao.StockDao;
 import com.patechltd.salexfypos.db.dao.SupplierDao;
 import com.patechltd.salexfypos.db.entity.DebtPayment;
+import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
@@ -22,6 +24,7 @@ import com.patechltd.salexfypos.db.entity.StockMovement;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.StockTakeItem;
 import com.patechltd.salexfypos.model.MovementType;
+import com.patechltd.salexfypos.util.NumberUtil;
 
 import java.util.List;
 import java.util.UUID;
@@ -52,6 +55,7 @@ public class Repository {
     public final StockDao stock;
     public final AdminDao admin;
     public final CrashDao crash;
+    public final ExpenseDao expenses;
 
     private Repository(Context context) {
         db = AppDatabase.getInstance(context);
@@ -63,6 +67,7 @@ public class Repository {
         stock = db.stockDao();
         admin = db.adminDao();
         crash = db.crashDao();
+        expenses = db.expenseDao();
     }
 
     public static Repository get(Context context) {
@@ -149,8 +154,16 @@ public class Repository {
 
     @Transaction
     public void completeSale(Sale sale, List<SaleItem> items) {
+        if (sale.id == null) sale.id = UUID.randomUUID().toString();
+        if (sales.getSale(sale.id) != null) {
+            sales.updateSale(sale);
+        } else {
+            sales.insertSale(sale);
+        }
+        sales.deleteItemsForSale(sale.id);
         for (SaleItem item : items) {
             if (item.id == null) item.id = UUID.randomUUID().toString();
+            item.saleId = sale.id;
             sales.insertSaleItem(item);
             adjustStock(sale.id, item.productId, -item.stockQty, MovementType.SALE, item.unitLabel,
                     sale.cashierId, null, sale.saleDate);
@@ -161,15 +174,16 @@ public class Repository {
 
     @Transaction
     public void saveDraft(Sale sale, List<SaleItem> items) {
-        if (sale.id == null) {
-            sale.id = UUID.randomUUID().toString();
-            sales.insertSale(sale);
-        } else {
+        if (sale.id == null) sale.id = UUID.randomUUID().toString();
+        if (sales.getSale(sale.id) != null) {
             sales.updateSale(sale);
+        } else {
+            sales.insertSale(sale);
         }
         sales.deleteItemsForSale(sale.id);
         for (SaleItem item : items) {
             if (item.id == null) item.id = UUID.randomUUID().toString();
+            item.saleId = sale.id;
             sales.insertSaleItem(item);
         }
     }
@@ -184,7 +198,7 @@ public class Repository {
     public void voidSale(Sale sale) {
         List<SaleItem> items = sales.getItems(sale.id);
         for (SaleItem item : items) {
-            adjustStock(sale.id, item.productId, item.qty, MovementType.SALE_VOID, item.unitLabel,
+            adjustStock(sale.id, item.productId, item.stockQty, MovementType.SALE_VOID, item.unitLabel,
                     sale.cashierId, "Voided sale " + sale.saleNo, System.currentTimeMillis());
         }
         sale.status = "VOID";
@@ -275,6 +289,19 @@ public class Repository {
         if (payment.id == null) payment.id = UUID.randomUUID().toString();
         if (payment.createdAt == 0) payment.createdAt = System.currentTimeMillis();
         suppliers.insertDebtPayment(payment);
+    }
+
+    @Transaction
+    public void addExpense(String description, String category, double amount, long date) {
+        if (amount <= 0) return;
+        Expense e = new Expense();
+        e.id = UUID.randomUUID().toString();
+        e.description = description == null ? "" : description.trim();
+        e.category = category == null ? null : category.trim();
+        e.amount = NumberUtil.round2(amount);
+        e.expenseDate = date;
+        e.createdAt = System.currentTimeMillis();
+        expenses.insert(e);
     }
 
     @Transaction

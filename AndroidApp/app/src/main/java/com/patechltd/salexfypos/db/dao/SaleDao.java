@@ -32,6 +32,9 @@ public interface SaleDao {
     @Query("DELETE FROM sale_items WHERE saleId = :saleId")
     void deleteItemsForSale(String saleId);
 
+    @Query("DELETE FROM sales WHERE id = :id")
+    void deleteSale(String id);
+
     @Query("SELECT * FROM sales WHERE id = :id")
     Sale getSale(String id);
 
@@ -111,6 +114,10 @@ public interface SaleDao {
     @Query("SELECT COALESCE(SUM(total), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD'")
     double salesTotal(long from, long to);
+
+    @Query("SELECT COALESCE(SUM(taxAmount), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
+            + "AND status != 'DRAFT' AND status != 'HELD'")
+    double taxTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(total - paidAmount), 0) FROM sales WHERE customerId = :customerId "
             + "AND status = 'COMPLETE'")
