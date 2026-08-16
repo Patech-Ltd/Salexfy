@@ -31,6 +31,7 @@ import com.patechltd.salexfypos.db.entity.Category;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.model.Authority;
 import com.patechltd.salexfypos.security.PermissionChecker;
+import com.patechltd.salexfypos.sync.SyncEvents;
 import com.patechltd.salexfypos.util.AppLogger;
 
 import java.util.ArrayList;
@@ -41,9 +42,11 @@ import java.util.Map;
 public class ProductsFragment extends Fragment {
 
     private static final int REQ_SCAN = 4001;
+    private static final int PAGE_SIZE = 50;
     private Repository repo;
     private ProductAdapter adapter;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable syncListener = () -> handler.post(this::reload);
     private String currentQuery = "";
     private String currentCategoryId = null;
     private Map<String, String> categoryNames = new HashMap<>();
@@ -51,6 +54,11 @@ public class ProductsFragment extends Fragment {
     private List<Category> categories = new ArrayList<>();
     private final List<Product> suggestionProducts = new ArrayList<>();
     private SuggestionsAdapter suggestionAdapter;
+    private final List<ProductStock> allRows = new ArrayList<>();
+    private int page;
+    private boolean loading;
+    private boolean endReached;
+    private int generation;
 
     @Nullable
     @Override
@@ -77,7 +85,7 @@ public class ProductsFragment extends Fragment {
             Product p = suggestionProducts.get(position);
             search.setText(p.name == null ? "" : p.name);
             search.setSelection(search.getText().length());
-            openProductById(p.id);
+            openProductById(p.uid);
         });
 
         view.findViewById(R.id.btn_scan_products).setOnClickListener(v ->
@@ -86,8 +94,18 @@ public class ProductsFragment extends Fragment {
                         REQ_SCAN));
 
         adapter = new ProductAdapter(this::openProduct);
-        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        LinearLayoutManager layoutManager = new LinearLayoutManager(requireContext());
+        list.setLayoutManager(layoutManager);
         list.setAdapter(adapter);
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy <= 0) return;
+                int total = layoutManager.getItemCount();
+                int last = layoutManager.findLastVisibleItemPosition();
+                if (total > 0 && last >= total - 5) loadNextPage();
+            }
+        });
 
         boolean canEdit = PermissionChecker.has(requireContext(), Authority.PRODUCT_EDIT);
         btnAdd.setVisibility(canEdit ? View.VISIBLE : View.GONE);
@@ -121,15 +139,21 @@ public class ProductsFragment extends Fragment {
         });
 
         loadReferences();
-        setupProductsObserver();
         reload();
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        SyncEvents.addListener(syncListener);
         loadReferences();
         reload();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        SyncEvents.removeListener(syncListener);
     }
 
     @Override
@@ -151,9 +175,9 @@ public class ProductsFragment extends Fragment {
             handler.post(() -> {
                 categories = cats;
                 categoryNames.clear();
-                for (Category c : cats) categoryNames.put(c.id, c.name);
+                for (Category c : cats) categoryNames.put(c.uid, c.name);
                 brandNames.clear();
-                for (Brand b : brands) brandNames.put(b.id, b.name);
+                for (Brand b : brands) brandNames.put(b.uid, b.name);
                 buildCategoryChips();
             });
         });
@@ -166,7 +190,7 @@ public class ProductsFragment extends Fragment {
         chips.removeAllViews();
         addChip(chips, "All", null, true);
         for (Category c : categories) {
-            addChip(chips, c.name, c.id, false);
+            addChip(chips, c.name, c.uid, false);
         }
     }
 
@@ -190,7 +214,50 @@ public class ProductsFragment extends Fragment {
     }
 
     private void reload() {
-        query.setValue(new Query(currentQuery, currentCategoryId));
+        generation++;
+        page = 0;
+        endReached = false;
+        loading = false;
+        allRows.clear();
+        adapter.submit(new ArrayList<>());
+        loadNextPage();
+    }
+
+    private void loadNextPage() {
+        if (loading || endReached) return;
+        loading = true;
+        final int gen = generation;
+        final int offset = page * PAGE_SIZE;
+        final String q = currentQuery;
+        final String cat = currentCategoryId;
+        repo.thenOnMain(repo.io(() -> {
+            List<Product> list = repo.products.searchPage(q, cat, PAGE_SIZE, offset);
+            List<String> ids = new ArrayList<>();
+            for (Product p : list) ids.add(p.uid);
+            Map<String, Double> qtys = new HashMap<>();
+            for (com.patechltd.salexfypos.db.ProductQty pq : repo.products.getQtys(ids)) {
+                qtys.put(pq.productId, pq.qty);
+            }
+            List<ProductStock> rows = new ArrayList<>();
+            for (Product p : list) {
+                ProductStock ps = new ProductStock();
+                ps.product = p;
+                Double v = qtys.get(p.uid);
+                ps.currentQty = v == null ? 0 : v;
+                ps.categoryName = categoryNames.get(p.categoryId);
+                ps.brandName = brandNames.get(p.brandId);
+                rows.add(ps);
+            }
+            return rows;
+        }), rows -> {
+            if (gen != generation) return;
+            loading = false;
+            if (rows.size() < PAGE_SIZE) endReached = true;
+            if (page == 0) allRows.clear();
+            allRows.addAll(rows);
+            page++;
+            adapter.submit(new ArrayList<>(allRows));
+        });
     }
 
     private final Runnable suggestionRunnable = new Runnable() {
@@ -203,7 +270,7 @@ public class ProductsFragment extends Fragment {
                 suggestionAdapter.setItems(new ArrayList<>());
                 return;
             }
-            repo.io(() -> {
+        repo.io(() -> {
                 List<Product> matches = repo.products.searchTop(currentQuery, currentCategoryId, 8);
                 handler.post(() -> {
                     suggestionProducts.clear();
@@ -229,43 +296,8 @@ public class ProductsFragment extends Fragment {
         handler.postDelayed(suggestionRunnable, 250);
     }
 
-    private void setupProductsObserver() {
-        androidx.lifecycle.LiveData<List<Product>> products =
-                androidx.lifecycle.Transformations.switchMap(query,
-                        q -> repo.products.search(q.text, q.categoryId));
-        products.observe(getViewLifecycleOwner(), list -> {
-            if (list == null) return;
-            java.util.concurrent.CompletableFuture<List<ProductStock>> future = repo.io(() -> {
-                List<ProductStock> rows = new ArrayList<>();
-                for (Product p : list) {
-                    ProductStock ps = new ProductStock();
-                    ps.product = p;
-                    ps.currentQty = repo.products.getCurrentQty(p.id);
-                    ps.categoryName = categoryNames.get(p.categoryId);
-                    ps.brandName = brandNames.get(p.brandId);
-                    rows.add(ps);
-                }
-                return rows;
-            });
-            repo.thenOnMain(future, rows -> adapter.submit(rows));
-        });
-    }
-
-    static class Query {
-        final String text;
-        final String categoryId;
-
-        Query(String text, String categoryId) {
-            this.text = text;
-            this.categoryId = categoryId;
-        }
-    }
-
-    private final androidx.lifecycle.MutableLiveData<Query> query =
-            new androidx.lifecycle.MutableLiveData<>(new Query("", null));
-
     private void openProduct(ProductStock ps) {
-        openProductById(ps.product.id);
+        openProductById(ps.product.uid);
     }
 
     private void openProductById(String id) {

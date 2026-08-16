@@ -30,19 +30,30 @@ public class CustomerSearchDialog {
         void onCustomer(Customer customer);
     }
 
+    public interface OnAddNew {
+        void addNew();
+    }
+
     private final Context context;
     private final List<Customer> customers;
     private final Map<String, Double> debts;
     private final OnPick callback;
+    private final OnAddNew onAddNew;
 
     private String query = "";
 
     public CustomerSearchDialog(Context context, List<Customer> customers,
                                 Map<String, Double> debts, OnPick callback) {
+        this(context, customers, debts, callback, null);
+    }
+
+    public CustomerSearchDialog(Context context, List<Customer> customers,
+                                Map<String, Double> debts, OnPick callback, OnAddNew onAddNew) {
         this.context = context;
         this.customers = customers;
         this.debts = debts;
         this.callback = callback;
+        this.onAddNew = onAddNew;
     }
 
     public void show() {
@@ -77,16 +88,19 @@ public class CustomerSearchDialog {
             }
         });
 
-        new MaterialAlertDialogBuilder(context)
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context)
                 .setTitle("Select customer")
                 .setView(view)
-                .setNegativeButton("Close", null)
-                .show();
+                .setNegativeButton("Close", null);
+        if (onAddNew != null) {
+            builder.setPositiveButton("New customer", (d, w) -> onAddNew.addNew());
+        }
+        builder.show();
     }
 
     private double debtOf(Customer c) {
         if (c == null || debts == null) return 0;
-        Double d = debts.get(c.id);
+        Double d = debts.get(c.uid);
         return d == null ? 0 : Math.max(0, d);
     }
 

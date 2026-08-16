@@ -12,7 +12,7 @@ public class BackupLog {
     @PrimaryKey
     @NonNull
     @ColumnInfo(name = "id")
-    public String id;
+    public String uid;
 
     public long timestamp;
 

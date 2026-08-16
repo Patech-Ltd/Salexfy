@@ -2,6 +2,7 @@ package com.patechltd.salexfypos.print;
 
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.util.NumberUtil;
 import com.patechltd.salexfypos.util.Prefs;
 
@@ -21,6 +22,11 @@ public final class ReceiptPrinter {
     }
 
     public static byte[] buildReceiptBytes(Context context, Sale sale, List<SaleItem> items) {
+        return buildReceiptBytes(context, sale, items, null);
+    }
+
+    public static byte[] buildReceiptBytes(Context context, Sale sale, List<SaleItem> items,
+                                           List<SalePayment> payments) {
         int width = Prefs.getInt(context, Prefs.KEY_PRINTER_WIDTH, WIDTH_58);
         String shop = Prefs.getString(context, Prefs.KEY_SHOP_NAME, "My Shop");
         String phone = Prefs.getString(context, Prefs.KEY_SHOP_PHONE, "");
@@ -65,12 +71,7 @@ public final class ReceiptPrinter {
         p.line("TOTAL: " + NumberUtil.money(sale.total), EscPos.ALIGN_CENTER, true);
         p.divider('-', width);
 
-        if ("CREDIT".equals(sale.paymentMethod)) {
-            p.line("Payment: ON CREDIT");
-        } else {
-            p.line("Paid: " + NumberUtil.money(sale.paidAmount));
-            p.line("Change: " + NumberUtil.money(sale.changeAmount));
-        }
+        paymentBlock(p, width, sale, payments);
         p.blank();
 
         if (footer != null && !footer.isEmpty()) {
@@ -80,6 +81,29 @@ public final class ReceiptPrinter {
         p.feed(3);
         p.cut();
         return p.toByteArray();
+    }
+
+    private static void paymentBlock(EscPos p, int width, Sale sale, List<SalePayment> payments) {
+        if (payments != null && !payments.isEmpty()) {
+            for (SalePayment payment : payments) {
+                String label = com.patechltd.salexfypos.model.PaymentMethod.labelOf(payment.method);
+                if (payment.customerName != null && !payment.customerName.isEmpty()) {
+                    label += " (" + safe(payment.customerName) + ")";
+                }
+                String text = label + ": " + NumberUtil.money(payment.amount);
+                p.line(truncate(text, width));
+            }
+            if (sale.paidAmount > 0) p.line("Paid: " + NumberUtil.money(sale.paidAmount));
+            if (sale.changeAmount > 0) p.line("Change: " + NumberUtil.money(sale.changeAmount));
+            double balance = sale.total - sale.paidAmount;
+            if (balance > 0.001) p.line("Balance: " + NumberUtil.money(balance));
+        } else if ("CREDIT".equals(sale.paymentMethod)) {
+            p.line("Payment: ON CREDIT");
+        } else {
+            p.line("Payment: " + com.patechltd.salexfypos.model.PaymentMethod.labelOf(sale.paymentMethod));
+            p.line("Paid: " + NumberUtil.money(sale.paidAmount));
+            p.line("Change: " + NumberUtil.money(sale.changeAmount));
+        }
     }
 
     private static String safe(String s) {

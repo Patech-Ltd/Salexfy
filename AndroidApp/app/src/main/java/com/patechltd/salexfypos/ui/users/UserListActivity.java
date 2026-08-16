@@ -56,7 +56,7 @@ public class UserListActivity extends AppCompatActivity {
         adapter = new UserAdapter(position -> {
             if (position < 0 || position >= users.size()) return;
             Intent intent = new Intent(this, UserEditActivity.class);
-            intent.putExtra("userId", users.get(position).id);
+            intent.putExtra("userId", users.get(position).uid);
             intent.putExtra("viewOnly", true);
             startActivity(intent);
         });
@@ -82,7 +82,7 @@ public class UserListActivity extends AppCompatActivity {
         repo.run(() -> {
             users = repo.admin.getUsers();
             Map<String, String> roleMap = new HashMap<>();
-            for (Role r : repo.admin.getRoles()) roleMap.put(r.id, r.roleName);
+            for (Role r : repo.admin.getRoles()) roleMap.put(r.uid, r.roleName);
             List<UserAdapter.Row> rows = new ArrayList<>();
             for (User u : users) {
                 UserAdapter.Row row = new UserAdapter.Row();

@@ -27,6 +27,8 @@ public class SettingsActivity extends AppCompatActivity {
                 v -> startActivity(new Intent(this, LoyaltySettingsActivity.class)));
         findViewById(R.id.row_backup).setOnClickListener(
                 v -> startActivity(new Intent(this, BackupSettingsActivity.class)));
+        findViewById(R.id.row_sync).setOnClickListener(
+                v -> startActivity(new Intent(this, SyncSettingsActivity.class)));
         findViewById(R.id.row_debug).setOnClickListener(
                 v -> startActivity(new Intent(this, DebugActivity.class)));
 

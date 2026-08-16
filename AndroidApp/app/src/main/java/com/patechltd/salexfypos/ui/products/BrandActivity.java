@@ -32,7 +32,7 @@ public class BrandActivity extends DirectoryListActivity<Brand> {
 
     @Override
     protected void delete(Brand item) {
-        if (repo.products.getAll().stream().anyMatch(p -> item.id.equals(p.brandId))) {
+        if (repo.products.getAll().stream().anyMatch(p -> item.uid.equals(p.brandId))) {
             throw new IllegalStateException("brand in use");
         }
         repo.directory.deleteBrand(item);
@@ -41,7 +41,7 @@ public class BrandActivity extends DirectoryListActivity<Brand> {
     @Override
     protected Brand create(String name) {
         Brand b = new Brand();
-        b.id = UUID.randomUUID().toString();
+        b.uid = UUID.randomUUID().toString();
         b.name = name;
         b.createdAt = System.currentTimeMillis();
         return b;

@@ -76,7 +76,7 @@ public class RoleActivity extends AppCompatActivity {
         boolean isNew = position < 0 || position >= roles.size();
         if (isNew) {
             role = new Role();
-            role.id = UUID.randomUUID().toString();
+            role.uid = UUID.randomUUID().toString();
             role.createdAt = System.currentTimeMillis();
         } else {
             role = roles.get(position);
@@ -148,7 +148,7 @@ public class RoleActivity extends AppCompatActivity {
         DialogUtil.confirm(this, "Delete role " + role.roleName + "?",
                 "Users assigned this role will keep their access until reassigned.",
                 () -> repo.run(() -> {
-                    int inUse = repo.admin.userCountByRole(role.id);
+                    int inUse = repo.admin.userCountByRole(role.uid);
                     if (inUse > 0) {
                         handler.post(() -> DialogUtil.toast(this,
                                 "Role is assigned to " + inUse + " user(s). Reassign them first."));

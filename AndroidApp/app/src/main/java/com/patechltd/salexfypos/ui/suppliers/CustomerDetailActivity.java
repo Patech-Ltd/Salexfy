@@ -106,7 +106,8 @@ public class CustomerDetailActivity extends AppCompatActivity {
                 for (Sale s : sales) {
                     sRows.add(new KeyValueAdapter.Row(
                             "#" + s.saleNo,
-                            DateUtil.formatDate(s.saleDate) + " · " + s.paymentMethod,
+                            DateUtil.formatDate(s.saleDate) + " · "
+                                    + com.patechltd.salexfypos.model.PaymentMethod.labelOf(s.paymentMethod),
                             currency + " " + NumberUtil.money(s.total),
                             0xFF1565C0));
                 }
@@ -136,7 +137,7 @@ public class CustomerDetailActivity extends AppCompatActivity {
             }
             repo.run(() -> {
                 DebtPayment p = new DebtPayment();
-                p.id = UUID.randomUUID().toString();
+                p.uid = UUID.randomUUID().toString();
                 p.customerId = customerId;
                 p.amount = amount;
                 p.paymentDate = System.currentTimeMillis();

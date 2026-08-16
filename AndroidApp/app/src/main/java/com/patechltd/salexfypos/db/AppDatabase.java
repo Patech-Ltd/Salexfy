@@ -19,6 +19,7 @@ import com.patechltd.salexfypos.db.dao.PurchaseDao;
 import com.patechltd.salexfypos.db.dao.SaleDao;
 import com.patechltd.salexfypos.db.dao.StockDao;
 import com.patechltd.salexfypos.db.dao.SupplierDao;
+import com.patechltd.salexfypos.db.dao.SyncDao;
 import com.patechltd.salexfypos.db.entity.AppSetting;
 import com.patechltd.salexfypos.db.entity.BackupLog;
 import com.patechltd.salexfypos.db.entity.Brand;
@@ -34,10 +35,13 @@ import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Role;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.db.entity.StockMovement;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.StockTakeItem;
 import com.patechltd.salexfypos.db.entity.Supplier;
+import com.patechltd.salexfypos.db.entity.SyncChange;
+import com.patechltd.salexfypos.db.entity.SyncLog;
 import com.patechltd.salexfypos.db.entity.Unit;
 import com.patechltd.salexfypos.db.entity.User;
 
@@ -46,13 +50,14 @@ import com.patechltd.salexfypos.db.entity.User;
                 Product.class, ProductBarcode.class, Category.class, Brand.class, Unit.class,
                 Supplier.class, Customer.class, DebtPayment.class,
                 Purchase.class, PurchaseItem.class,
-                Sale.class, SaleItem.class,
+                Sale.class, SaleItem.class, SalePayment.class,
                 StockMovement.class, StockTake.class, StockTakeItem.class,
                 User.class, Role.class, AppSetting.class,
                 CrashLog.class, BackupLog.class,
-                Expense.class
+                Expense.class,
+                SyncChange.class, SyncLog.class
         },
-        version = 5,
+        version = 8,
         exportSchema = false
 )
 @TypeConverters({Converters.class})
@@ -80,13 +85,16 @@ public abstract class AppDatabase extends RoomDatabase {
 
     public abstract ExpenseDao expenseDao();
 
+    public abstract SyncDao syncDao();
+
     public static AppDatabase getInstance(Context context) {
         if (instance == null) {
             synchronized (AppDatabase.class) {
                 if (instance == null) {
                     instance = Room.databaseBuilder(context.getApplicationContext(),
                                     AppDatabase.class, DATABASE_NAME)
-                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                             .fallbackToDestructiveMigration()
                             .build();
                 }
@@ -139,6 +147,74 @@ public abstract class AppDatabase extends RoomDatabase {
         @Override
         public void migrate(@NonNull SupportSQLiteDatabase database) {
             database.execSQL("ALTER TABLE `products` ADD COLUMN `imagePath` TEXT");
+        }
+    };
+
+    static final Migration MIGRATION_5_6 = new Migration(5, 6) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `sale_payments` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`saleId` TEXT, "
+                    + "`method` TEXT, "
+                    + "`amount` REAL NOT NULL, "
+                    + "`customerId` TEXT, "
+                    + "`customerName` TEXT, "
+                    + "PRIMARY KEY(`id`), "
+                    + "FOREIGN KEY(`saleId`) REFERENCES `sales`(`id`) "
+                    + "ON UPDATE NO ACTION ON DELETE CASCADE)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_payments_saleId` "
+                    + "ON `sale_payments` (`saleId`)");
+        }
+    };
+
+    static final Migration MIGRATION_6_7 = new Migration(6, 7) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("DROP TABLE IF EXISTS `sale_payments`");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `sale_payments` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`saleId` TEXT, "
+                    + "`method` TEXT, "
+                    + "`amount` REAL NOT NULL, "
+                    + "`customerId` TEXT, "
+                    + "`customerName` TEXT, "
+                    + "PRIMARY KEY(`id`), "
+                    + "FOREIGN KEY(`saleId`) REFERENCES `sales`(`id`) "
+                    + "ON UPDATE NO ACTION ON DELETE CASCADE)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_sale_payments_saleId` "
+                    + "ON `sale_payments` (`saleId`)");
+        }
+    };
+
+    static final Migration MIGRATION_7_8 = new Migration(7, 8) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `sync_changes` ("
+                    + "`seq` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, "
+                    + "`entityType` TEXT NOT NULL, "
+                    + "`recordId` TEXT NOT NULL, "
+                    + "`operation` TEXT NOT NULL, "
+                    + "`payload` TEXT, "
+                    + "`synced` INTEGER NOT NULL DEFAULT 0, "
+                    + "`attempts` INTEGER NOT NULL DEFAULT 0, "
+                    + "`lastError` TEXT, "
+                    + "`createdAt` INTEGER NOT NULL DEFAULT 0, "
+                    + "`updatedAt` INTEGER NOT NULL DEFAULT 0)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_changes_synced` "
+                    + "ON `sync_changes` (`synced`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_changes_entityType` "
+                    + "ON `sync_changes` (`entityType`)");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `sync_logs` ("
+                    + "`uid` TEXT NOT NULL, "
+                    + "`timestamp` INTEGER NOT NULL DEFAULT 0, "
+                    + "`type` TEXT, "
+                    + "`status` TEXT, "
+                    + "`message` TEXT, "
+                    + "`details` TEXT, "
+                    + "PRIMARY KEY(`uid`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_logs_timestamp` "
+                    + "ON `sync_logs` (`timestamp`)");
         }
     };
 

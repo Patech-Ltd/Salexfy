@@ -17,12 +17,16 @@
         android:orientation="horizontal"
         android:padding="14dp">
 
-        <ImageView
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+        <TextView
+            android:id="@+id/partner_avatar"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:background="@drawable/circle_brand_light"
-            android:padding="8dp"
-            android:src="@drawable/ic_truck" />
+            android:gravity="center"
+            android:text="A"
+            android:textColor="@color/brand_primary_dark"
+            android:textSize="15sp"
+            android:textStyle="bold" />
 
         <LinearLayout
             android:layout_width="0dp"
@@ -40,6 +44,15 @@
                 android:textStyle="bold" />
 
             <TextView
+                android:id="@+id/partner_phone"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/partner_subtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -48,9 +61,27 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_chevron_right" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:gravity="center_vertical|end"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/partner_amount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/brand_primary_dark"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginTop="2dp"
+                android:src="@drawable/ic_chevron_right" />
+        </LinearLayout>
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

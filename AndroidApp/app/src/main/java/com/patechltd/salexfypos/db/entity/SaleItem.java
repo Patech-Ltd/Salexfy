@@ -18,7 +18,7 @@ public class SaleItem {
     @PrimaryKey
     @NonNull
     @ColumnInfo(name = "id")
-    public String id;
+    public String uid;
 
     public String saleId;
 

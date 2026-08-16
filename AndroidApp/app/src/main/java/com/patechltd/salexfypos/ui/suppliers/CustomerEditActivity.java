@@ -81,7 +81,7 @@ public class CustomerEditActivity extends AppCompatActivity {
         repo.run(() -> {
             if (customer == null) {
                 customer = new Customer();
-                customer.id = UUID.randomUUID().toString();
+                customer.uid = UUID.randomUUID().toString();
                 customer.createdAt = System.currentTimeMillis();
             }
             customer.name = n;

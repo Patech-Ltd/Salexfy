@@ -14,9 +14,9 @@ public class Session {
     }
 
     public static void start(Context context, User user) {
-        currentUserId = user.id;
+        currentUserId = user.uid;
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        prefs.edit().putString("userId", user.id).apply();
+        prefs.edit().putString("userId", user.uid).apply();
     }
 
     public static String userId(Context context) {

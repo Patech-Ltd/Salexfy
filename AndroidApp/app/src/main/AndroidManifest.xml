@@ -72,6 +72,12 @@
             android:name=".ui.sell.SalesHistoryActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.sell.PaymentActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.sell.ManualSaleActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.stock.PurchaseEditActivity"
             android:exported="false" />
         <activity
@@ -123,6 +129,12 @@
             android:name=".ui.settings.BackupSettingsActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.settings.SyncSettingsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.settings.SyncLogActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.settings.DebugActivity"
             android:exported="false" />
         <activity
@@ -136,6 +148,16 @@
             android:name=".ui.crash.CrashRecoveryActivity"
             android:exported="false"
             android:excludeFromRecents="true" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

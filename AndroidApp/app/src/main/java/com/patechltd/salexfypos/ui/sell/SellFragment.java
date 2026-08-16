@@ -29,16 +29,17 @@ import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.CartAdapter;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Category;
-import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.db.entity.User;
 import com.patechltd.salexfypos.model.PaymentMethod;
 import com.patechltd.salexfypos.scanner.ScannerView;
 import com.patechltd.salexfypos.security.PermissionChecker;
 import com.patechltd.salexfypos.security.Session;
+import com.patechltd.salexfypos.sync.SyncEvents;
 import com.patechltd.salexfypos.ui.products.ProductEditActivity;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.DialogUtil;
@@ -66,9 +67,13 @@ public class SellFragment extends Fragment {
     private MaterialButton btnHold, btnCheckout, btnPause, btnTogglePreview, btnSearch;
     private View previewContainer;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable syncListener = () -> handler.post(this::loadProducts);
     private boolean previewVisible = true;
     private boolean scanningPaused = false;
     private boolean productsLoaded;
+    private static final int REQ_PAYMENT = 4101;
+    private double checkoutSubtotal;
+    private double checkoutTax;
 
     @Nullable
     @Override
@@ -149,6 +154,7 @@ public class SellFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        SyncEvents.addListener(syncListener);
         ensurePermissionAndStart();
         loadProducts();
     }
@@ -156,6 +162,7 @@ public class SellFragment extends Fragment {
     @Override
     public void onPause() {
         super.onPause();
+        SyncEvents.removeListener(syncListener);
         scanner.stop();
     }
 
@@ -194,7 +201,7 @@ public class SellFragment extends Fragment {
                 byBarcode.clear();
                 Map<String, Product> byId = new HashMap<>();
                 for (Product p : all) {
-                    byId.put(p.id, p);
+                    byId.put(p.uid, p);
                     if (p.barcode != null && !p.barcode.isEmpty()) {
                         byBarcode.put(p.barcode.trim(), p);
                     }
@@ -243,7 +250,7 @@ public class SellFragment extends Fragment {
         double stockQty = qty * factor;
 
         for (SaleItem item : cart) {
-            if (item.productId.equals(product.id) && item.isWholesale == wholesaleMode) {
+            if (item.productId.equals(product.uid) && item.isWholesale == wholesaleMode) {
                 item.qty += qty;
                 item.stockQty += stockQty;
                 item.lineTotal = item.qty * item.unitPrice;
@@ -255,7 +262,7 @@ public class SellFragment extends Fragment {
         }
 
         SaleItem item = new SaleItem();
-        item.productId = product.id;
+        item.productId = product.uid;
         item.productName = product.name;
         item.barcode = product.barcode;
         item.qty = qty;
@@ -286,7 +293,7 @@ public class SellFragment extends Fragment {
 
     private int factorFor(String productId) {
         for (Product p : products) {
-            if (p.id.equals(productId)) return Math.max(1, p.wholesaleFactor);
+            if (p.uid.equals(productId)) return Math.max(1, p.wholesaleFactor);
         }
         return 1;
     }
@@ -402,7 +409,7 @@ public class SellFragment extends Fragment {
 
     private Product findProduct(String id) {
         for (Product p : products) {
-            if (p.id.equals(id)) return p;
+            if (p.uid.equals(id)) return p;
         }
         return null;
     }
@@ -493,11 +500,11 @@ public class SellFragment extends Fragment {
 
     private Sale buildSale(String status) {
         Sale sale = new Sale();
-        sale.id = UUID.randomUUID().toString();
+        sale.uid = UUID.randomUUID().toString();
         sale.saleNo = repo.nextSaleNo();
         sale.saleDate = System.currentTimeMillis();
         User user = repo.admin.getUser(Session.userId(requireContext()));
-        sale.cashierId = user != null ? user.id : null;
+        sale.cashierId = user != null ? user.uid : null;
         sale.cashierName = user != null ? user.fullName : "";
         sale.status = status;
         sale.createdBy = sale.cashierId;
@@ -548,22 +555,16 @@ public class SellFragment extends Fragment {
             Toast.makeText(requireContext(), "You do not have permission to sell", Toast.LENGTH_SHORT).show();
             return;
         }
-        double subtotal = 0;
-        for (SaleItem item : cart) subtotal += item.lineTotal;
+        double subtotal = cart.stream().mapToDouble(item -> item.lineTotal).sum();
         double taxPercent = Prefs.taxPercent(requireContext());
         double tax = subtotal * taxPercent / 100.0;
         double total = subtotal + tax;
-        final double fSubtotal = subtotal;
-        final double fTotal = total;
+        checkoutSubtotal = subtotal;
+        checkoutTax = tax;
         final List<SaleItem> snapshot = new ArrayList<>(cart);
 
         repo.run(() -> {
             final String blocked = checkStock(snapshot);
-            final List<Customer> customers = repo.suppliers.getCustomers();
-            final Map<String, Double> debts = new HashMap<>();
-            for (com.patechltd.salexfypos.db.DebtorBalanceRow d : repo.suppliers.getDebtorBalances()) {
-                debts.put(d.customerId, d.outstanding);
-            }
             handler.post(() -> {
                 if (blocked != null) {
                     new MaterialAlertDialogBuilder(requireContext())
@@ -573,13 +574,32 @@ public class SellFragment extends Fragment {
                             .show();
                     return;
                 }
-                new CheckoutDialog(requireContext(), fTotal, 0, customers, debts, "",
-                        (method, customer, customerId, paid, pointsUsed, notes) ->
-                                completeSale(method, customer, customerId, paid, pointsUsed, notes,
-                                        fSubtotal, tax))
-                        .show();
+                Intent i = new Intent(requireContext(), PaymentActivity.class);
+                i.putExtra(PaymentActivity.EXTRA_TOTAL, total);
+                i.putExtra(PaymentActivity.EXTRA_SUBTOTAL, subtotal);
+                i.putExtra(PaymentActivity.EXTRA_TAX, tax);
+                startActivityForResult(i, REQ_PAYMENT);
             });
         });
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_PAYMENT) return;
+        if (resultCode == PaymentActivity.RESULT_HOLD) {
+            holdCurrent();
+            return;
+        }
+        if (resultCode != android.app.Activity.RESULT_OK || data == null) return;
+        String[] methods = data.getStringArrayExtra(PaymentActivity.EXTRA_METHODS);
+        double[] amounts = data.getDoubleArrayExtra(PaymentActivity.EXTRA_AMOUNTS);
+        String[] customerIds = data.getStringArrayExtra(PaymentActivity.EXTRA_CUSTOMER_IDS);
+        String[] customerNames = data.getStringArrayExtra(PaymentActivity.EXTRA_CUSTOMER_NAMES);
+        double pointsUsed = data.getDoubleExtra(PaymentActivity.EXTRA_POINTS_USED, 0);
+        String note = data.getStringExtra(PaymentActivity.EXTRA_NOTES);
+        completeSale(methods, amounts, customerIds, customerNames, pointsUsed, note,
+                checkoutSubtotal, checkoutTax);
     }
 
     private String checkStock(List<SaleItem> snapshot) {
@@ -595,17 +615,34 @@ public class SellFragment extends Fragment {
         return sb.length() == 0 ? null : sb.toString();
     }
 
-    private void completeSale(PaymentMethod method, String customer, String customerId, double paid,
-                              double pointsUsed, String notes, double subtotal, double tax) {
-        boolean onCredit = method == PaymentMethod.CREDIT;
-        if (onCredit && (customer == null || customer.isEmpty())) {
-            Toast.makeText(requireContext(), "Select a customer for credit sales", Toast.LENGTH_SHORT).show();
+    private void completeSale(String[] methods, double[] amounts, String[] customerIds,
+                              String[] customerNames, double pointsUsed, String notes,
+                              double subtotal, double tax) {
+        if (methods == null || methods.length == 0) {
+            Toast.makeText(requireContext(), "No payment method selected", Toast.LENGTH_SHORT).show();
             return;
         }
-        final boolean fOnCredit = onCredit;
-        final String fCustomer = customer;
-        final String fCustomerId = customerId;
-        final double fPaid = paid;
+        double paidTotal = 0;
+        double allocated = 0;
+        String custId = null;
+        String custName = null;
+        for (int i = 0; i < methods.length; i++) {
+            double amount = amounts[i];
+            allocated += amount;
+            if ("CREDIT".equals(methods[i])) {
+                if (custId == null) {
+                    custId = customerIds[i];
+                    custName = customerNames[i];
+                }
+            } else {
+                paidTotal += amount;
+            }
+        }
+        final boolean fOnCredit = custId != null;
+        final String fCustomer = custName;
+        final String fCustomerId = custId;
+        final double fPaid = paidTotal;
+        final double fAllocated = allocated;
         final double fPointsUsed = pointsUsed;
         final double fSubtotal = subtotal;
         final double fTax = tax;
@@ -613,6 +650,15 @@ public class SellFragment extends Fragment {
                 * Prefs.getDouble(requireContext(), Prefs.KEY_LOYALTY_POINT_VALUE, 0.5);
         final Sale existing = currentSale;
         final List<SaleItem> items = new ArrayList<>(cart);
+        final List<SalePayment> payments = new ArrayList<>();
+        for (int i = 0; i < methods.length; i++) {
+            SalePayment p = new SalePayment();
+            p.method = methods[i];
+            p.amount = amounts[i];
+            p.customerId = customerIds[i];
+            p.customerName = customerNames[i];
+            payments.add(p);
+        }
         repo.run(() -> {
             final Sale sale = existing != null ? existing : buildSale("COMPLETE");
             sale.status = "COMPLETE";
@@ -620,42 +666,43 @@ public class SellFragment extends Fragment {
             sale.discount = NumberUtil.round2(fPointsValue);
             sale.taxAmount = NumberUtil.round2(fTax);
             sale.total = NumberUtil.round2(fSubtotal + fTax - fPointsValue);
-            sale.paymentMethod = method.name();
+            sale.paymentMethod = methods[0];
             sale.pointsRedeemed = fPointsUsed;
             sale.notes = notes;
             sale.saleDate = System.currentTimeMillis();
 
             String resolvedCustomerId = fCustomerId;
             if (fCustomer != null && !fCustomer.isEmpty()) {
-                com.patechltd.salexfypos.db.entity.Customer existingCust = repo.suppliers.findCustomerByName(fCustomer);
-                if (existingCust == null) {
+                com.patechltd.salexfypos.db.entity.Customer existingCust =
+                        repo.suppliers.findCustomerByName(fCustomer);
+                if (existingCust == null && fCustomerId == null) {
                     com.patechltd.salexfypos.db.entity.Customer c = new com.patechltd.salexfypos.db.entity.Customer();
-                    c.id = UUID.randomUUID().toString();
+                    c.uid = UUID.randomUUID().toString();
                     c.name = fCustomer;
                     c.createdAt = System.currentTimeMillis();
                     repo.suppliers.insertCustomer(c);
-                    sale.customerId = c.id;
+                    sale.customerId = c.uid;
                     sale.customerName = fCustomer;
-                    resolvedCustomerId = c.id;
-                } else {
-                    sale.customerId = existingCust.id;
+                    resolvedCustomerId = c.uid;
+                } else if (existingCust != null) {
+                    sale.customerId = existingCust.uid;
                     sale.customerName = existingCust.name;
-                    resolvedCustomerId = existingCust.id;
+                    resolvedCustomerId = existingCust.uid;
+                } else {
+                    sale.customerId = fCustomerId;
+                    sale.customerName = fCustomer;
                 }
             }
-            if (fOnCredit) {
-                sale.paidAmount = NumberUtil.round2(fPaid);
-                sale.changeAmount = 0;
-            } else {
-                sale.paidAmount = NumberUtil.round2(fPaid);
-                sale.changeAmount = Math.max(0, fPaid - sale.total);
-            }
+            sale.paidAmount = NumberUtil.round2(fPaid);
+            sale.changeAmount = fOnCredit
+                    ? 0
+                    : NumberUtil.round2(Math.max(0, fAllocated - sale.total));
             final double fEarned = NumberUtil.round2(sale.total
                     * Prefs.getDouble(requireContext(), Prefs.KEY_LOYALTY_POINTS_PER_MONEY, 1.0));
             sale.pointsEarned = fEarned;
 
             try {
-                repo.completeSale(sale, items);
+                repo.completeSale(sale, items, payments);
                 applyLoyalty(resolvedCustomerId, fEarned, fPointsUsed);
                 if (existing == null) handler.post(() -> currentSale = sale);
                 handler.post(() -> {
@@ -663,12 +710,17 @@ public class SellFragment extends Fragment {
                     AppLogger.i("Sale " + sale.saleNo + " completed, total " + sale.total);
                     new MaterialAlertDialogBuilder(requireContext())
                             .setTitle("Sale Complete")
-                            .setMessage(buildReceipt(sale, items))
+                            .setMessage(buildReceipt(sale, items, payments))
+                            .setNeutralButton("Details", (d, w) -> {
+                                Intent i = new Intent(requireContext(), SaleDetailActivity.class);
+                                i.putExtra("saleId", sale.uid);
+                                startActivity(i);
+                            })
                             .setPositiveButton("Done", null)
                             .show();
                     if (com.patechltd.salexfypos.print.PrinterManager.isPrintingEnabled(requireContext())) {
                         com.patechltd.salexfypos.print.PrinterManager.print(requireContext(), sale, items,
-                                (ok, msg) -> {
+                                payments, (ok, msg) -> {
                                     if (!ok) DialogUtil.toast(requireContext(), msg);
                                 });
                     }
@@ -694,7 +746,7 @@ public class SellFragment extends Fragment {
         repo.suppliers.insertCustomer(c);
     }
 
-    private String buildReceipt(Sale sale, List<SaleItem> items) {
+    private String buildReceipt(Sale sale, List<SaleItem> items, List<SalePayment> payments) {
         StringBuilder sb = new StringBuilder();
         String shop = Prefs.getString(requireContext(), Prefs.KEY_SHOP_NAME, "My Shop");
         sb.append(shop).append('\n');
@@ -713,12 +765,24 @@ public class SellFragment extends Fragment {
         if (sale.taxAmount > 0) sb.append("Tax: ").append(NumberUtil.money(sale.taxAmount)).append('\n');
         if (sale.discount > 0) sb.append("Points discount: -").append(NumberUtil.money(sale.discount)).append('\n');
         sb.append("TOTAL: ").append(NumberUtil.money(sale.total)).append('\n');
-        if ("CREDIT".equals(sale.paymentMethod)) {
+        if (payments != null && !payments.isEmpty()) {
+            sb.append("----------------------------\n");
+            for (SalePayment p : payments) {
+                sb.append(PaymentMethod.labelOf(p.method));
+                if (p.customerName != null) sb.append(" (").append(p.customerName).append(")");
+                sb.append(": ").append(NumberUtil.money(p.amount)).append('\n');
+            }
+            if (sale.paidAmount > 0) sb.append("Paid: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
+            if (sale.changeAmount > 0) sb.append("Change: ").append(NumberUtil.money(sale.changeAmount)).append('\n');
+            double balance = sale.total - sale.paidAmount;
+            if (balance > 0.001) sb.append("Balance: ").append(NumberUtil.money(balance)).append('\n');
+        } else if ("CREDIT".equals(sale.paymentMethod)) {
             sb.append("Payment: ON CREDIT\n");
             if (sale.customerName != null) sb.append("Customer: ").append(sale.customerName).append('\n');
             if (sale.paidAmount > 0) sb.append("Paid now: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
             sb.append("Balance: ").append(NumberUtil.money(sale.total - sale.paidAmount)).append('\n');
         } else {
+            sb.append("Payment: ").append(PaymentMethod.labelOf(sale.paymentMethod)).append('\n');
             sb.append("Paid: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
             sb.append("Change: ").append(NumberUtil.money(sale.changeAmount)).append('\n');
         }
@@ -739,7 +803,7 @@ public class SellFragment extends Fragment {
             }
             List<com.patechltd.salexfypos.db.SaleWithItems> rows = new ArrayList<>();
             for (Sale s : held) {
-                com.patechltd.salexfypos.db.SaleWithItems sw = repo.sales.getSaleWithItems(s.id);
+                com.patechltd.salexfypos.db.SaleWithItems sw = repo.sales.getSaleWithItems(s.uid);
                 if (sw != null) rows.add(sw);
             }
             handler.post(() -> new HeldListDialog(requireContext(), rows,
@@ -759,8 +823,8 @@ public class SellFragment extends Fragment {
 
     private void deleteHeld(Sale sale) {
         repo.run(() -> {
-            repo.sales.deleteItemsForSale(sale.id);
-            repo.sales.deleteSale(sale.id);
+            repo.sales.deleteItemsForSale(sale.uid);
+            repo.sales.deleteSale(sale.uid);
             handler.post(() -> {
                 showHeldList();
                 Toast.makeText(requireContext(), "Held transaction deleted", Toast.LENGTH_SHORT).show();
@@ -770,7 +834,7 @@ public class SellFragment extends Fragment {
 
     private void recallHeld(Sale held) {
         repo.run(() -> {
-            com.patechltd.salexfypos.db.SaleWithItems sw = repo.sales.getSaleWithItems(held.id);
+            com.patechltd.salexfypos.db.SaleWithItems sw = repo.sales.getSaleWithItems(held.uid);
             handler.post(() -> {
                 if (sw == null || sw.items == null) return;
                 cart.clear();

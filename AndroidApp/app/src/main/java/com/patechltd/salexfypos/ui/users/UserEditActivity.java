@@ -87,7 +87,7 @@ public class UserEditActivity extends AppCompatActivity {
                     active.setChecked(user.isActive);
                     deleteButton.setVisibility(android.view.View.VISIBLE);
                     for (Role r : roles) {
-                        if (r.id.equals(user.roleId)) {
+                        if (r.uid.equals(user.roleId)) {
                             selectedRole = r;
                             roleButton.setText(r.roleName);
                             break;
@@ -128,13 +128,13 @@ public class UserEditActivity extends AppCompatActivity {
         }
         repo.run(() -> {
             if (user != null) {
-                if (repo.admin.findByUsernameExcluding(u, user.id) != null) {
+                if (repo.admin.findByUsernameExcluding(u, user.uid) != null) {
                     runOnUiThread(() -> DialogUtil.toast(this, "Username already exists"));
                     return;
                 }
                 user.fullName = n;
                 user.username = u;
-                user.roleId = selectedRole.id;
+                user.roleId = selectedRole.uid;
                 user.isActive = active.isChecked();
                 if (!pw.isEmpty()) {
                     String salt = PasswordHasher.generateSalt();
@@ -149,10 +149,10 @@ public class UserEditActivity extends AppCompatActivity {
                     return;
                 }
                 User nu = new User();
-                nu.id = UUID.randomUUID().toString();
+                nu.uid = UUID.randomUUID().toString();
                 nu.fullName = n;
                 nu.username = u;
-                nu.roleId = selectedRole.id;
+                nu.roleId = selectedRole.uid;
                 nu.isActive = active.isChecked();
                 nu.createdBy = Session.userId(this);
                 nu.createdAt = System.currentTimeMillis();

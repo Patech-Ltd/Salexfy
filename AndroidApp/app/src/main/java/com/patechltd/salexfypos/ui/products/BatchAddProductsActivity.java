@@ -66,7 +66,7 @@ public class BatchAddProductsActivity extends AppCompatActivity {
             units = repo.directory.getUnits();
             handler.post(() -> {
                 if (!categories.isEmpty()) {
-                    defaultCategoryId = categories.get(0).id;
+                    defaultCategoryId = categories.get(0).uid;
                     categoryRow.setText("Default category: " + categories.get(0).name);
                 }
                 if (!units.isEmpty()) {
@@ -83,7 +83,7 @@ public class BatchAddProductsActivity extends AppCompatActivity {
         names.add("None");
         DialogUtil.pick(this, "Default category", names.toArray(new String[0]), -1, which -> {
             if (which < categories.size()) {
-                defaultCategoryId = categories.get(which).id;
+                defaultCategoryId = categories.get(which).uid;
                 categoryRow.setText("Default category: " + categories.get(which).name);
             } else {
                 defaultCategoryId = null;
@@ -142,7 +142,7 @@ public class BatchAddProductsActivity extends AppCompatActivity {
                     }
                 }
                 Product p = new Product();
-                p.id = UUID.randomUUID().toString();
+                p.uid = UUID.randomUUID().toString();
                 p.name = l.name;
                 p.barcode = l.barcode == null || l.barcode.trim().isEmpty() ? null : l.barcode.trim();
                 p.sku = null;
@@ -163,7 +163,7 @@ public class BatchAddProductsActivity extends AppCompatActivity {
                 p.updatedAt = now;
                 repo.products.insert(p);
                 if (l.qty > 0) {
-                    repo.recordOpeningStock(p.id, l.qty, defaultUnitName);
+                    repo.recordOpeningStock(p.uid, l.qty, defaultUnitName);
                 }
                 added++;
             }

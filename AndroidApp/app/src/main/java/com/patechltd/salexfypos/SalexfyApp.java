@@ -9,6 +9,7 @@ import androidx.work.WorkManager;
 
 import com.patechltd.salexfypos.backup.BackupWorker;
 import com.patechltd.salexfypos.db.Repository;
+import com.patechltd.salexfypos.sync.SyncWorker;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.CrashHandler;
 import com.patechltd.salexfypos.util.Prefs;
@@ -28,6 +29,7 @@ public class SalexfyApp extends Application {
         SoundUtil.init(context);
         seedIfNeeded(context);
         scheduleAutoBackup(context);
+        scheduleSync(context);
     }
 
     private void seedIfNeeded(Context context) {
@@ -50,6 +52,15 @@ public class SalexfyApp extends Application {
                 .build();
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 BackupWorker.UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);
+    }
+
+    private void scheduleSync(Context context) {
+        long minutes = Math.max(15, Prefs.getLong(context, Prefs.KEY_SYNC_INTERVAL_MINUTES, 30));
+        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(SyncWorker.class,
+                minutes, TimeUnit.MINUTES)
+                .build();
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                SyncWorker.UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);
     }
 
     @Override

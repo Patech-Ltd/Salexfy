@@ -43,7 +43,7 @@ public class ReportsActivity extends AppCompatActivity {
 
     private TextView rangeLabel, totalSales, totalCount, totalProfit, totalCost, creditSales, paymentsReceived, purchasesTotal, itemsSold;
     private TextView taxTotal, expensesTotal, netProfit, turnoverTotal;
-    private KeyValueAdapter dailyAdapter, cashierAdapter, topAdapter;
+    private KeyValueAdapter dailyAdapter, cashierAdapter, topAdapter, paymentsAdapter;
 
     private long from = DateUtil.startOfDay(System.currentTimeMillis());
     private long to = DateUtil.endOfDay(System.currentTimeMillis());
@@ -92,6 +92,7 @@ public class ReportsActivity extends AppCompatActivity {
         dailyAdapter = new KeyValueAdapter();
         cashierAdapter = new KeyValueAdapter();
         topAdapter = new KeyValueAdapter();
+        paymentsAdapter = new KeyValueAdapter();
 
         RecyclerView dailyList = findViewById(R.id.daily_list);
         dailyList.setLayoutManager(new LinearLayoutManager(this));
@@ -104,6 +105,10 @@ public class ReportsActivity extends AppCompatActivity {
         RecyclerView topList = findViewById(R.id.top_list);
         topList.setLayoutManager(new LinearLayoutManager(this));
         topList.setAdapter(topAdapter);
+
+        RecyclerView paymentsList = findViewById(R.id.payments_list);
+        paymentsList.setLayoutManager(new LinearLayoutManager(this));
+        paymentsList.setAdapter(paymentsAdapter);
 
         findViewById(R.id.btn_export).setOnClickListener(v -> exportNow());
         findViewById(R.id.btn_add_expense).setOnClickListener(v -> showAddExpenseDialog());
@@ -210,6 +215,8 @@ public class ReportsActivity extends AppCompatActivity {
             List<DayReportRow> days = repo.sales.getDailyReport(from, to);
             List<CashierReportRow> cashiers = repo.sales.getCashierReport(from, to);
             List<TopProductRow> tops = repo.sales.getTopProducts(from, to, 10);
+            List<com.patechltd.salexfypos.db.PaymentMethodTotalRow> pmts =
+                    repo.sales.paymentTotalsBetween(from, to);
             handler.post(() -> {
                 double profit = sales - cost;
                 totalSales.setText(currency + " " + NumberUtil.money(sales));
@@ -260,6 +267,19 @@ public class ReportsActivity extends AppCompatActivity {
                 }
                 if (topRows.isEmpty()) topRows.add(new KeyValueAdapter.Row("No products sold", "", "", 0));
                 topAdapter.submit(topRows);
+
+                List<KeyValueAdapter.Row> paymentRows = new ArrayList<>();
+                for (com.patechltd.salexfypos.db.PaymentMethodTotalRow pm : pmts) {
+                    paymentRows.add(new KeyValueAdapter.Row(
+                            com.patechltd.salexfypos.model.PaymentMethod.labelOf(pm.method),
+                            "",
+                            currency + " " + NumberUtil.money(pm.total),
+                            0xFF1565C0));
+                }
+                if (paymentRows.isEmpty()) {
+                    paymentRows.add(new KeyValueAdapter.Row("No payments", "in this period", "", 0));
+                }
+                paymentsAdapter.submit(paymentRows);
             });
         });
     }
@@ -312,6 +332,8 @@ public class ReportsActivity extends AppCompatActivity {
                 List<DayReportRow> days = repo.sales.getDailyReport(from, to);
                 List<CashierReportRow> cashiers = repo.sales.getCashierReport(from, to);
                 List<TopProductRow> tops = repo.sales.getTopProducts(from, to, 50);
+                List<com.patechltd.salexfypos.db.PaymentMethodTotalRow> pmts =
+                        repo.sales.paymentTotalsBetween(from, to);
                 List<com.patechltd.salexfypos.db.entity.Expense> expenses = repo.expenses.getBetween(from, to);
                 List<ExcelUtil.Section> sections = new ArrayList<>();
                 sections.add(new ExcelUtil.Section("Daily", days,
@@ -332,6 +354,17 @@ public class ReportsActivity extends AppCompatActivity {
                             @Override public Object[] row(Object item, int index) {
                                 CashierReportRow c = (CashierReportRow) item;
                                 return new Object[]{c.cashierName, c.saleCount, c.totalSales};
+                            }
+                        }));
+                sections.add(new ExcelUtil.Section("Payments", pmts,
+                        new ExcelUtil.RowWriter() {
+                            @Override public Object[] header() {
+                                return new Object[]{"Method", "Amount"};
+                            }
+                            @Override public Object[] row(Object item, int index) {
+                                com.patechltd.salexfypos.db.PaymentMethodTotalRow pm =
+                                        (com.patechltd.salexfypos.db.PaymentMethodTotalRow) item;
+                                return new Object[]{com.patechltd.salexfypos.model.PaymentMethod.labelOf(pm.method), pm.total};
                             }
                         }));
                 sections.add(new ExcelUtil.Section("Top Products", tops,

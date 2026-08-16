@@ -12,6 +12,7 @@ import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.SaleWithItems;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.security.PermissionChecker;
 import com.patechltd.salexfypos.model.Authority;
 import com.patechltd.salexfypos.util.DateUtil;
@@ -52,7 +53,7 @@ public class SaleDetailActivity extends AppCompatActivity {
         repo.run(() -> {
             SaleWithItems sw = cached != null ? cached : repo.sales.getSaleWithItems(saleId);
             if (sw == null || sw.sale == null) return;
-            com.patechltd.salexfypos.print.PrinterManager.print(this, sw.sale, sw.items,
+            com.patechltd.salexfypos.print.PrinterManager.print(this, sw.sale, sw.items, sw.payments,
                     (ok, msg) -> runOnUiThread(() -> DialogUtil.toast(this, msg)));
         });
     }
@@ -66,12 +67,12 @@ public class SaleDetailActivity extends AppCompatActivity {
                     finish();
                     return;
                 }
-                ((TextView) findViewById(R.id.receipt)).setText(buildReceipt(sw.sale, sw.items));
+                ((TextView) findViewById(R.id.receipt)).setText(buildReceipt(sw.sale, sw.items, sw.payments));
             });
         });
     }
 
-    private String buildReceipt(Sale sale, List<SaleItem> items) {
+    private String buildReceipt(Sale sale, List<SaleItem> items, List<SalePayment> payments) {
         StringBuilder sb = new StringBuilder();
         String shop = Prefs.getString(this, Prefs.KEY_SHOP_NAME, "My Shop");
         sb.append(shop).append('\n');
@@ -90,12 +91,23 @@ public class SaleDetailActivity extends AppCompatActivity {
         sb.append("Subtotal: ").append(NumberUtil.money(sale.subtotal)).append('\n');
         if (sale.taxAmount > 0) sb.append("Tax: ").append(NumberUtil.money(sale.taxAmount)).append('\n');
         sb.append("TOTAL: ").append(NumberUtil.money(sale.total)).append('\n');
-        if ("CREDIT".equals(sale.paymentMethod)) {
+        if (payments != null && !payments.isEmpty()) {
+            for (SalePayment p : payments) {
+                sb.append(com.patechltd.salexfypos.model.PaymentMethod.labelOf(p.method));
+                if (p.customerName != null) sb.append(" (").append(p.customerName).append(")");
+                sb.append(": ").append(NumberUtil.money(p.amount)).append('\n');
+            }
+            if (sale.paidAmount > 0) sb.append("Paid: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
+            if (sale.changeAmount > 0) sb.append("Change: ").append(NumberUtil.money(sale.changeAmount)).append('\n');
+            double balance = sale.total - sale.paidAmount;
+            if (balance > 0.001) sb.append("Balance: ").append(NumberUtil.money(balance)).append('\n');
+        } else if ("CREDIT".equals(sale.paymentMethod)) {
             sb.append("Payment: ON CREDIT\n");
             if (sale.customerName != null) sb.append("Customer: ").append(sale.customerName).append('\n');
             if (sale.paidAmount > 0) sb.append("Paid now: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
             sb.append("Balance: ").append(NumberUtil.money(sale.total - sale.paidAmount)).append('\n');
         } else {
+            sb.append("Payment: ").append(com.patechltd.salexfypos.model.PaymentMethod.labelOf(sale.paymentMethod)).append('\n');
             sb.append("Paid: ").append(NumberUtil.money(sale.paidAmount)).append('\n');
             sb.append("Change: ").append(NumberUtil.money(sale.changeAmount)).append('\n');
         }

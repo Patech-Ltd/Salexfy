@@ -32,7 +32,7 @@ public class CategoryActivity extends DirectoryListActivity<Category> {
 
     @Override
     protected void delete(Category item) {
-        if (repo.products.getAll().stream().anyMatch(p -> item.id.equals(p.categoryId))) {
+        if (repo.products.getAll().stream().anyMatch(p -> item.uid.equals(p.categoryId))) {
             throw new IllegalStateException("category in use");
         }
         repo.directory.deleteCategory(item);
@@ -41,7 +41,7 @@ public class CategoryActivity extends DirectoryListActivity<Category> {
     @Override
     protected Category create(String name) {
         Category c = new Category();
-        c.id = UUID.randomUUID().toString();
+        c.uid = UUID.randomUUID().toString();
         c.name = name;
         c.sortOrder = entities.size() + 1;
         c.createdAt = System.currentTimeMillis();

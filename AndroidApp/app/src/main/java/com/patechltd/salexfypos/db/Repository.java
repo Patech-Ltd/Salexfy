@@ -13,6 +13,7 @@ import com.patechltd.salexfypos.db.dao.PurchaseDao;
 import com.patechltd.salexfypos.db.dao.SaleDao;
 import com.patechltd.salexfypos.db.dao.StockDao;
 import com.patechltd.salexfypos.db.dao.SupplierDao;
+import com.patechltd.salexfypos.db.dao.SyncDao;
 import com.patechltd.salexfypos.db.entity.DebtPayment;
 import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.db.entity.Product;
@@ -20,10 +21,12 @@ import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.db.entity.StockMovement;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.StockTakeItem;
 import com.patechltd.salexfypos.model.MovementType;
+import com.patechltd.salexfypos.sync.SyncTracker;
 import com.patechltd.salexfypos.util.NumberUtil;
 
 import java.util.List;
@@ -56,6 +59,7 @@ public class Repository {
     public final AdminDao admin;
     public final CrashDao crash;
     public final ExpenseDao expenses;
+    public final SyncDao sync;
 
     private Repository(Context context) {
         db = AppDatabase.getInstance(context);
@@ -68,6 +72,8 @@ public class Repository {
         admin = db.adminDao();
         crash = db.crashDao();
         expenses = db.expenseDao();
+        sync = db.syncDao();
+        SyncTracker.attach(sync);
     }
 
     public static Repository get(Context context) {
@@ -154,18 +160,18 @@ public class Repository {
 
     @Transaction
     public void completeSale(Sale sale, List<SaleItem> items) {
-        if (sale.id == null) sale.id = UUID.randomUUID().toString();
-        if (sales.getSale(sale.id) != null) {
+        if (sale.uid == null) sale.uid = UUID.randomUUID().toString();
+        if (sales.getSale(sale.uid) != null) {
             sales.updateSale(sale);
         } else {
             sales.insertSale(sale);
         }
-        sales.deleteItemsForSale(sale.id);
+        sales.deleteItemsForSale(sale.uid);
         for (SaleItem item : items) {
-            if (item.id == null) item.id = UUID.randomUUID().toString();
-            item.saleId = sale.id;
+            if (item.uid == null) item.uid = UUID.randomUUID().toString();
+            item.saleId = sale.uid;
             sales.insertSaleItem(item);
-            adjustStock(sale.id, item.productId, -item.stockQty, MovementType.SALE, item.unitLabel,
+            adjustStock(sale.uid, item.productId, -item.stockQty, MovementType.SALE, item.unitLabel,
                     sale.cashierId, null, sale.saleDate);
         }
         sale.status = "COMPLETE";
@@ -173,17 +179,29 @@ public class Repository {
     }
 
     @Transaction
+    public void completeSale(Sale sale, List<SaleItem> items, List<SalePayment> payments) {
+        completeSale(sale, items);
+        sales.deletePaymentsForSale(sale.uid);
+        if (payments == null) return;
+        for (SalePayment payment : payments) {
+            if (payment.uid == null) payment.uid = UUID.randomUUID().toString();
+            payment.saleId = sale.uid;
+            sales.insertPayment(payment);
+        }
+    }
+
+    @Transaction
     public void saveDraft(Sale sale, List<SaleItem> items) {
-        if (sale.id == null) sale.id = UUID.randomUUID().toString();
-        if (sales.getSale(sale.id) != null) {
+        if (sale.uid == null) sale.uid = UUID.randomUUID().toString();
+        if (sales.getSale(sale.uid) != null) {
             sales.updateSale(sale);
         } else {
             sales.insertSale(sale);
         }
-        sales.deleteItemsForSale(sale.id);
+        sales.deleteItemsForSale(sale.uid);
         for (SaleItem item : items) {
-            if (item.id == null) item.id = UUID.randomUUID().toString();
-            item.saleId = sale.id;
+            if (item.uid == null) item.uid = UUID.randomUUID().toString();
+            item.saleId = sale.uid;
             sales.insertSaleItem(item);
         }
     }
@@ -196,9 +214,9 @@ public class Repository {
 
     @Transaction
     public void voidSale(Sale sale) {
-        List<SaleItem> items = sales.getItems(sale.id);
+        List<SaleItem> items = sales.getItems(sale.uid);
         for (SaleItem item : items) {
-            adjustStock(sale.id, item.productId, item.stockQty, MovementType.SALE_VOID, item.unitLabel,
+            adjustStock(sale.uid, item.productId, item.stockQty, MovementType.SALE_VOID, item.unitLabel,
                     sale.cashierId, "Voided sale " + sale.saleNo, System.currentTimeMillis());
         }
         sale.status = "VOID";
@@ -209,22 +227,22 @@ public class Repository {
     public void deleteDraft(Sale sale) {
         sale.status = "VOID";
         sales.updateSale(sale);
-        sales.deleteItemsForSale(sale.id);
+        sales.deleteItemsForSale(sale.uid);
     }
 
     @Transaction
     public void savePurchase(Purchase purchase, List<PurchaseItem> items, boolean updateCost) {
-        if (purchase.id == null) {
-            purchase.id = UUID.randomUUID().toString();
+        if (purchase.uid == null) {
+            purchase.uid = UUID.randomUUID().toString();
             purchases.insertPurchase(purchase);
         } else {
             purchases.updatePurchase(purchase);
         }
-        purchases.deleteItemsForPurchase(purchase.id);
+        purchases.deleteItemsForPurchase(purchase.uid);
         for (PurchaseItem item : items) {
-            if (item.id == null) item.id = UUID.randomUUID().toString();
+            if (item.uid == null) item.uid = UUID.randomUUID().toString();
             purchases.insertPurchaseItem(item);
-            adjustStock(purchase.id, item.productId, item.stockQty, MovementType.PURCHASE, item.unitLabel,
+            adjustStock(purchase.uid, item.productId, item.stockQty, MovementType.PURCHASE, item.unitLabel,
                     purchase.createdBy, "Purchase " + purchase.invoiceNo, purchase.purchaseDate);
             if (updateCost) {
                 Product p = products.getById(item.productId);
@@ -250,7 +268,7 @@ public class Repository {
 
     @Transaction
     public void deletePurchase(Purchase purchase) {
-        stock.deleteMovementsForRef(purchase.id, MovementType.PURCHASE.name());
+        stock.deleteMovementsForRef(purchase.uid, MovementType.PURCHASE.name());
         purchases.deletePurchase(purchase);
     }
 
@@ -265,17 +283,17 @@ public class Repository {
 
     @Transaction
     public void applyStockTake(StockTake stockTake, List<StockTakeItem> items) {
-        if (stockTake.id == null) {
-            stockTake.id = UUID.randomUUID().toString();
+        if (stockTake.uid == null) {
+            stockTake.uid = UUID.randomUUID().toString();
             stock.insertStockTake(stockTake);
         } else {
             stock.updateStockTake(stockTake);
         }
         for (StockTakeItem item : items) {
-            if (item.id == null) item.id = UUID.randomUUID().toString();
+            if (item.uid == null) item.uid = UUID.randomUUID().toString();
             stock.insertStockTakeItem(item);
             if (item.diffQty != 0) {
-                adjustStock(stockTake.id, item.productId, item.diffQty, MovementType.STOCK_TAKE,
+                adjustStock(stockTake.uid, item.productId, item.diffQty, MovementType.STOCK_TAKE,
                         products.getById(item.productId) != null ? products.getById(item.productId).retailUnit : "",
                         stockTake.createdBy, "Stock take " + stockTake.name, stockTake.stockTakeDate);
             }
@@ -286,7 +304,7 @@ public class Repository {
 
     @Transaction
     public void recordPayment(DebtPayment payment) {
-        if (payment.id == null) payment.id = UUID.randomUUID().toString();
+        if (payment.uid == null) payment.uid = UUID.randomUUID().toString();
         if (payment.createdAt == 0) payment.createdAt = System.currentTimeMillis();
         suppliers.insertDebtPayment(payment);
     }
@@ -295,7 +313,7 @@ public class Repository {
     public void addExpense(String description, String category, double amount, long date) {
         if (amount <= 0) return;
         Expense e = new Expense();
-        e.id = UUID.randomUUID().toString();
+        e.uid = UUID.randomUUID().toString();
         e.description = description == null ? "" : description.trim();
         e.category = category == null ? null : category.trim();
         e.amount = NumberUtil.round2(amount);
@@ -310,7 +328,7 @@ public class Repository {
         Product p = products.getById(productId);
         if (p == null) return;
         StockMovement m = new StockMovement();
-        m.id = UUID.randomUUID().toString();
+        m.uid = UUID.randomUUID().toString();
         m.productId = productId;
         m.movementType = MovementType.OPENING_STOCK.name();
         m.qty = qty;
@@ -326,7 +344,7 @@ public class Repository {
     private void adjustStock(String refId, String productId, double qty, MovementType type,
                              String unitLabel, String userId, String note, long time) {
         StockMovement m = new StockMovement();
-        m.id = UUID.randomUUID().toString();
+        m.uid = UUID.randomUUID().toString();
         m.productId = productId;
         m.movementType = type.name();
         m.qty = qty;

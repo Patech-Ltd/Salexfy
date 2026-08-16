@@ -11,63 +11,140 @@ import androidx.room.Update;
 import com.patechltd.salexfypos.db.entity.Brand;
 import com.patechltd.salexfypos.db.entity.Category;
 import com.patechltd.salexfypos.db.entity.Unit;
+import com.patechltd.salexfypos.sync.SyncSerializer;
+import com.patechltd.salexfypos.sync.SyncTracker;
 
 import java.util.List;
 
 @Dao
-public interface DirectoryDao {
+public abstract class DirectoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    long insertCategory(Category category);
+    abstract long insertCategoryRaw(Category category);
 
     @Update
-    int updateCategory(Category category);
+    abstract int updateCategoryRaw(Category category);
 
     @Delete
-    int deleteCategory(Category category);
+    abstract int deleteCategoryRaw(Category category);
+
+    public long insertCategory(Category category) {
+        long id = insertCategoryRaw(category);
+        SyncTracker.track(SyncTracker.CATEGORY, category.uid, "INSERT", SyncSerializer.toJson(category));
+        return id;
+    }
+
+    public int updateCategory(Category category) {
+        int rows = updateCategoryRaw(category);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.CATEGORY, category.uid, "UPDATE", SyncSerializer.toJson(category));
+        }
+        return rows;
+    }
+
+    public int deleteCategory(Category category) {
+        int rows = deleteCategoryRaw(category);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.CATEGORY, category.uid, "DELETE", "");
+        }
+        return rows;
+    }
+
+    @Query("DELETE FROM categories WHERE id = :id")
+    public abstract void rawDeleteCategory(String id);
 
     @Query("SELECT * FROM categories ORDER BY sortOrder ASC, name ASC")
-    LiveData<List<Category>> observeCategories();
+    public abstract LiveData<List<Category>> observeCategories();
 
     @Query("SELECT * FROM categories ORDER BY sortOrder ASC, name ASC")
-    List<Category> getCategories();
+    public abstract List<Category> getCategories();
 
     @Query("SELECT COUNT(*) FROM categories")
-    int categoryCount();
+    public abstract int categoryCount();
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    long insertBrand(Brand brand);
+    abstract long insertBrandRaw(Brand brand);
 
     @Update
-    int updateBrand(Brand brand);
+    abstract int updateBrandRaw(Brand brand);
 
     @Delete
-    int deleteBrand(Brand brand);
+    abstract int deleteBrandRaw(Brand brand);
+
+    public long insertBrand(Brand brand) {
+        long id = insertBrandRaw(brand);
+        SyncTracker.track(SyncTracker.BRAND, brand.uid, "INSERT", SyncSerializer.toJson(brand));
+        return id;
+    }
+
+    public int updateBrand(Brand brand) {
+        int rows = updateBrandRaw(brand);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.BRAND, brand.uid, "UPDATE", SyncSerializer.toJson(brand));
+        }
+        return rows;
+    }
+
+    public int deleteBrand(Brand brand) {
+        int rows = deleteBrandRaw(brand);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.BRAND, brand.uid, "DELETE", "");
+        }
+        return rows;
+    }
+
+    @Query("DELETE FROM brands WHERE id = :id")
+    public abstract void rawDeleteBrand(String id);
 
     @Query("SELECT * FROM brands ORDER BY name ASC")
-    LiveData<List<Brand>> observeBrands();
+    public abstract LiveData<List<Brand>> observeBrands();
 
     @Query("SELECT * FROM brands ORDER BY name ASC")
-    List<Brand> getBrands();
+    public abstract List<Brand> getBrands();
 
     @Query("SELECT COUNT(*) FROM brands")
-    int brandCount();
+    public abstract int brandCount();
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    long insertUnit(Unit unit);
+    abstract long insertUnitRaw(Unit unit);
 
     @Update
-    int updateUnit(Unit unit);
+    abstract int updateUnitRaw(Unit unit);
 
     @Delete
-    int deleteUnit(Unit unit);
+    abstract int deleteUnitRaw(Unit unit);
+
+    public long insertUnit(Unit unit) {
+        long id = insertUnitRaw(unit);
+        SyncTracker.track(SyncTracker.UNIT, unit.uid, "INSERT", SyncSerializer.toJson(unit));
+        return id;
+    }
+
+    public int updateUnit(Unit unit) {
+        int rows = updateUnitRaw(unit);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.UNIT, unit.uid, "UPDATE", SyncSerializer.toJson(unit));
+        }
+        return rows;
+    }
+
+    public int deleteUnit(Unit unit) {
+        int rows = deleteUnitRaw(unit);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.UNIT, unit.uid, "DELETE", "");
+        }
+        return rows;
+    }
+
+    @Query("DELETE FROM units WHERE id = :id")
+    public abstract void rawDeleteUnit(String id);
 
     @Query("SELECT * FROM units ORDER BY name ASC")
-    LiveData<List<Unit>> observeUnits();
+    public abstract LiveData<List<Unit>> observeUnits();
 
     @Query("SELECT * FROM units ORDER BY name ASC")
-    List<Unit> getUnits();
+    public abstract List<Unit> getUnits();
 
     @Query("SELECT COUNT(*) FROM units")
-    int unitCount();
+    public abstract int unitCount();
 }

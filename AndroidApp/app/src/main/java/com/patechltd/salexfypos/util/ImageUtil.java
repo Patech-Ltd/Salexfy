@@ -25,7 +25,9 @@ public final class ImageUtil {
     }
 
     public static File productImageDir(Context context) {
-        File dir = new File(context.getExternalFilesDir(null), "product_images");
+        java.io.File base = context.getExternalFilesDir(null);
+        if (base == null) base = context.getFilesDir();
+        File dir = new File(base, "product_images");
         if (!dir.exists()) {
             //noinspection ResultOfMethodCallIgnored
             dir.mkdirs();
@@ -65,13 +67,17 @@ public final class ImageUtil {
 
     public static void load(ImageView view, String path, int targetPx) {
         if (path == null || path.isEmpty()) {
+            view.setTag(null);
             view.setImageResource(com.patechltd.salexfypos.R.drawable.ic_image);
             return;
+        }
+        if (view.getTag() == null || !path.equals(view.getTag())) {
+            view.setImageResource(com.patechltd.salexfypos.R.drawable.ic_image);
         }
         IO.execute(() -> {
             Bitmap bmp = decode(path, targetPx);
             MAIN.post(() -> {
-                if (view.getTag() instanceof String && !path.equals(view.getTag())) {
+                if (view.getTag() == null || !path.equals(view.getTag())) {
                     return;
                 }
                 if (bmp != null) {

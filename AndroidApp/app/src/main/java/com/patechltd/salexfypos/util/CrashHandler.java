@@ -97,7 +97,7 @@ public class CrashHandler implements Thread.UncaughtExceptionHandler {
 
     private static CrashLog build(Context context, Thread thread, Throwable throwable, boolean fatal) {
         CrashLog log = new CrashLog();
-        log.id = UUID.randomUUID().toString();
+        log.uid = UUID.randomUUID().toString();
         log.timestamp = System.currentTimeMillis();
         log.threadName = thread != null ? thread.getName() : "unknown";
         Throwable t = throwable != null ? throwable : new Throwable("unknown");

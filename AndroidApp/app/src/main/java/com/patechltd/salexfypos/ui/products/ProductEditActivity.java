@@ -13,6 +13,7 @@ import android.widget.Toast;
 
 import com.patechltd.salexfypos.util.ImageUtil;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
@@ -32,6 +33,7 @@ import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -55,6 +57,7 @@ public class ProductEditActivity extends AppCompatActivity {
     private MaterialButton btnAddBarcode;
     private ImageView imagePreview;
     private String imagePath;
+    private java.util.concurrent.CompletableFuture<String> pendingImage;
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -156,16 +159,54 @@ public class ProductEditActivity extends AppCompatActivity {
     private static final int REQ_SCAN = 5001;
     private static final int REQ_SCAN_EXTRA = 5002;
     private static final int REQ_IMAGE = 5003;
+    private static final int REQ_CAMERA_IMAGE = 5004;
+    private static final int REQ_CAMERA_PERMISSION = 5005;
 
     private void pickImage() {
         if (viewOnly) return;
         if (!PermissionChecker.has(this, Authority.PRODUCT_EDIT)) return;
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Product photo")
+                .setItems(new String[]{"Take a photo", "Choose from gallery"}, (dialog, which) -> {
+                    if (which == 0) captureImage();
+                    else chooseFromGallery();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void chooseFromGallery() {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         intent.setType("image/*");
         try {
             startActivityForResult(Intent.createChooser(intent, "Select product image"), REQ_IMAGE);
         } catch (Exception e) {
             Toast.makeText(this, "No image picker available", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void captureImage() {
+        if (android.content.pm.PackageManager.PERMISSION_GRANTED
+                != androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.CAMERA)) {
+            androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[]{android.Manifest.permission.CAMERA}, REQ_CAMERA_PERMISSION);
+            return;
+        }
+        launchCamera();
+    }
+
+    private void launchCamera() {
+        try {
+            File out = new File(ImageUtil.productImageDir(this),
+                    "cam_" + System.currentTimeMillis() + ".jpg");
+            Uri uri = androidx.core.content.FileProvider.getUriForFile(this,
+                    getPackageName() + ".fileprovider", out);
+            Intent intent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+            intent.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, uri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivityForResult(intent, REQ_CAMERA_IMAGE);
+        } catch (Exception e) {
+            Toast.makeText(this, "Camera unavailable: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -302,12 +343,19 @@ public class ProductEditActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode == RESULT_OK && data != null) {
+        if (resultCode == RESULT_OK) {
             if (requestCode == REQ_IMAGE) {
-                Uri uri = data.getData();
+                Uri uri = data == null ? null : data.getData();
                 if (uri != null) copyImageToStorage(uri);
                 return;
             }
+            if (requestCode == REQ_CAMERA_IMAGE) {
+                if (data != null && data.getData() != null) {
+                    copyImageToStorage(data.getData());
+                }
+                return;
+            }
+            if (data == null) return;
             String code = data.getStringExtra(com.patechltd.salexfypos.ui.scan.ScanActivity.EXTRA_CODE);
             if (code == null) return;
             if (requestCode == REQ_SCAN) {
@@ -318,18 +366,31 @@ public class ProductEditActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_CAMERA_PERMISSION && grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            launchCamera();
+        }
+    }
+
     private void copyImageToStorage(Uri uri) {
-        repo.io(() -> {
-            String tmp = ImageUtil.copyImage(this, uri, UUID.randomUUID().toString());
+        final String stamp = UUID.randomUUID().toString();
+        pendingImage = repo.io(() -> {
+            String tmp = ImageUtil.copyImage(this, uri, stamp);
             if (tmp == null) {
                 handler.post(() -> Toast.makeText(this, "Could not load image", Toast.LENGTH_SHORT).show());
-                return;
+                return null;
             }
+            imagePath = tmp;
+            final String path = tmp;
             handler.post(() -> {
-                imagePath = tmp;
-                imagePreview.setTag(imagePath);
-                ImageUtil.load(imagePreview, imagePath, 256);
+                imagePreview.setTag(path);
+                ImageUtil.load(imagePreview, path, 256);
             });
+            return tmp;
         });
     }
 
@@ -363,8 +424,8 @@ public class ProductEditActivity extends AppCompatActivity {
                 });
             } else {
                 handler.post(() -> {
-                    categoryId = categories.isEmpty() ? null : categories.get(0).id;
-                    retailUnitId = units.isEmpty() ? null : units.get(0).id;
+                    categoryId = categories.isEmpty() ? null : categories.get(0).uid;
+                    retailUnitId = units.isEmpty() ? null : units.get(0).uid;
                     factorInput.setText("1");
                 });
             }
@@ -398,7 +459,7 @@ public class ProductEditActivity extends AppCompatActivity {
     private String unitIdByName(String name) {
         if (name == null) return null;
         for (Unit u : units) {
-            if (name.equals(u.name)) return u.id;
+            if (name.equals(u.name)) return u.uid;
         }
         return null;
     }
@@ -410,13 +471,13 @@ public class ProductEditActivity extends AppCompatActivity {
         names.add("+ New category");
         DialogUtil.pick(this, "Category", names.toArray(new String[0]), -1, which -> {
             if (which < categories.size()) {
-                categoryId = categories.get(which).id;
+                categoryId = categories.get(which).uid;
                 updateRows();
             } else {
                 DialogUtil.inputText(this, "New category", "Category name", "", "Add", value -> {
                     if (value.trim().isEmpty()) return;
                     Category c = new Category();
-                    c.id = UUID.randomUUID().toString();
+                    c.uid = UUID.randomUUID().toString();
                     c.name = value.trim();
                     c.sortOrder = categories.size() + 1;
                     c.createdAt = System.currentTimeMillis();
@@ -436,13 +497,13 @@ public class ProductEditActivity extends AppCompatActivity {
         names.add("+ New brand");
         DialogUtil.pick(this, "Brand", names.toArray(new String[0]), -1, which -> {
             if (which < brands.size()) {
-                brandId = brands.get(which).id;
+                brandId = brands.get(which).uid;
                 updateRows();
             } else {
                 DialogUtil.inputText(this, "New brand", "Brand name", "", "Add", value -> {
                     if (value.trim().isEmpty()) return;
                     Brand b = new Brand();
-                    b.id = UUID.randomUUID().toString();
+                    b.uid = UUID.randomUUID().toString();
                     b.name = value.trim();
                     b.createdAt = System.currentTimeMillis();
                     repo.run(() -> {
@@ -461,13 +522,13 @@ public class ProductEditActivity extends AppCompatActivity {
         names.add("+ New unit");
         DialogUtil.pick(this, "Retail unit", names.toArray(new String[0]), -1, which -> {
             if (which < units.size()) {
-                retailUnitId = units.get(which).id;
+                retailUnitId = units.get(which).uid;
                 updateRows();
             } else {
                 DialogUtil.inputText(this, "New unit", "Unit name (e.g. Piece)", "", "Add", value -> {
                     if (value.trim().isEmpty()) return;
                     Unit u = new Unit();
-                    u.id = UUID.randomUUID().toString();
+                    u.uid = UUID.randomUUID().toString();
                     u.name = value.trim();
                     u.isWholesale = false;
                     u.createdAt = System.currentTimeMillis();
@@ -487,7 +548,7 @@ public class ProductEditActivity extends AppCompatActivity {
         names.add("None");
         DialogUtil.pick(this, "Wholesale unit", names.toArray(new String[0]), -1, which -> {
             if (which < units.size()) {
-                wholesaleUnitId = units.get(which).id;
+                wholesaleUnitId = units.get(which).uid;
             } else {
                 wholesaleUnitId = null;
             }
@@ -497,22 +558,22 @@ public class ProductEditActivity extends AppCompatActivity {
 
     private void updateRows() {
         for (Category c : categories) {
-            if (c.id.equals(categoryId)) {
+            if (c.uid.equals(categoryId)) {
                 categoryRow.setText("Category: " + c.name);
                 break;
             }
         }
         for (Brand b : brands) {
-            if (b.id.equals(brandId)) {
+            if (b.uid.equals(brandId)) {
                 brandRow.setText("Brand: " + b.name);
                 break;
             }
         }
         for (Unit u : units) {
-            if (u.id.equals(retailUnitId)) {
+            if (u.uid.equals(retailUnitId)) {
                 retailUnitRow.setText("Retail: " + u.name);
             }
-            if (u.id.equals(wholesaleUnitId)) {
+            if (u.uid.equals(wholesaleUnitId)) {
                 wholesaleUnitRow.setText("Wholesale: " + u.name);
             }
         }
@@ -543,9 +604,16 @@ public class ProductEditActivity extends AppCompatActivity {
         String wholesaleUnitName = unitName(wholesaleUnitId);
 
         repo.run(() -> {
+            if (pendingImage != null) {
+                try {
+                    String copied = pendingImage.get(10, java.util.concurrent.TimeUnit.SECONDS);
+                    if (copied != null) imagePath = copied;
+                } catch (Exception ignored) {
+                }
+            }
             if (barcode != null && !barcode.isEmpty()) {
                 Product existing = repo.products.findByBarcode(barcode);
-                if (existing != null && !existing.id.equals(productId)) {
+                if (existing != null && !existing.uid.equals(productId)) {
                     handler.post(() -> Toast.makeText(this,
                             "Another product already uses this barcode", Toast.LENGTH_LONG).show());
                     return;
@@ -554,7 +622,7 @@ public class ProductEditActivity extends AppCompatActivity {
             for (String extraCode : extraBarcodes) {
                 if (!extraCode.equals(barcode)) {
                     Product existing = repo.products.findByBarcode(extraCode);
-                    if (existing != null && !existing.id.equals(productId)) {
+                    if (existing != null && !existing.uid.equals(productId)) {
                         handler.post(() -> Toast.makeText(this,
                                 "Barcode " + extraCode + " is used by another product", Toast.LENGTH_LONG).show());
                         return;
@@ -565,7 +633,7 @@ public class ProductEditActivity extends AppCompatActivity {
             boolean isNew = productId == null;
             if (isNew) {
                 p = new Product();
-                p.id = UUID.randomUUID().toString();
+                p.uid = UUID.randomUUID().toString();
                 p.createdAt = System.currentTimeMillis();
             } else {
                 p = repo.products.getById(productId);
@@ -594,17 +662,17 @@ public class ProductEditActivity extends AppCompatActivity {
             if (isNew) {
                 repo.products.insert(p);
                 if (openingStock > 0) {
-                    repo.recordOpeningStock(p.id, openingStock, retailUnitName);
+                    repo.recordOpeningStock(p.uid, openingStock, retailUnitName);
                 }
             } else {
                 repo.products.update(p);
             }
-            repo.products.deleteBarcodesForProduct(p.id);
+            repo.products.deleteBarcodesForProduct(p.uid);
             for (String extraCode : extraBarcodes) {
                 if (extraCode.isEmpty() || extraCode.equals(barcode)) continue;
                 ProductBarcode pb = new ProductBarcode();
-                pb.id = UUID.randomUUID().toString();
-                pb.productId = p.id;
+                pb.uid = UUID.randomUUID().toString();
+                pb.productId = p.uid;
                 pb.barcode = extraCode;
                 repo.products.insertBarcode(pb);
             }
@@ -619,7 +687,7 @@ public class ProductEditActivity extends AppCompatActivity {
 
     private String unitName(String id) {
         for (Unit u : units) {
-            if (u.id.equals(id)) return u.name;
+            if (u.uid.equals(id)) return u.name;
         }
         return "Pcs";
     }

@@ -38,7 +38,7 @@ public class UnitActivity extends DirectoryListActivity<Unit> {
     @Override
     protected Unit create(String name) {
         Unit u = new Unit();
-        u.id = UUID.randomUUID().toString();
+        u.uid = UUID.randomUUID().toString();
         u.name = name;
         u.isWholesale = false;
         u.createdAt = System.currentTimeMillis();

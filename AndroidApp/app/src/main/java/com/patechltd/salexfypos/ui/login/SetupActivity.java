@@ -83,19 +83,19 @@ public class SetupActivity extends AppCompatActivity {
                     repo.admin.insertRole(com.patechltd.salexfypos.helper.RoleHelper.adminRoleFor(repo));
                     String salt = PasswordHasher.generateSalt();
                     User user = new User();
-                    user.id = UUID.randomUUID().toString();
+                    user.uid = UUID.randomUUID().toString();
                     user.username = u;
                     user.fullName = fn;
                     user.salt = salt;
                     user.passwordHash = PasswordHasher.hash(p, salt);
-                    user.roleId = repo.admin.findRoleByName("Administrator").id;
+                    user.roleId = repo.admin.findRoleByName("Administrator").uid;
                     user.isActive = true;
                     user.createdAt = System.currentTimeMillis();
                     repo.admin.insertUser(user);
                     Prefs.putBoolean(this, Prefs.KEY_SEEDED, true);
                     handler.post(() -> {
                         Session.start(this, user);
-                        PermissionChecker.loadAsync(this, user.id);
+                        PermissionChecker.loadAsync(this, user.uid);
                         startActivity(new Intent(this, MainActivity.class));
                         finish();
                     });

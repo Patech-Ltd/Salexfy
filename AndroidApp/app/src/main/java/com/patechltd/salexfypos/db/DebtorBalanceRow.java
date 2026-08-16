@@ -6,5 +6,7 @@ public class DebtorBalanceRow {
 
     public String name;
 
+    public String phone;
+
     public double outstanding;
 }

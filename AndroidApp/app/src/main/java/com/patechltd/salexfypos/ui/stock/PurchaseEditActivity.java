@@ -181,7 +181,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
             List<Product> all = repo.products.getAllActive();
             List<ProductBarcode> extra = repo.products.getAllBarcodes();
             for (Product p : all) {
-                byId.put(p.id, p);
+                byId.put(p.uid, p);
                 if (p.barcode != null && !p.barcode.isEmpty()) {
                     byBarcode.put(p.barcode.trim(), p);
                 }
@@ -254,7 +254,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
 
     private void addPurchaseItem(Product p, double qty) {
         for (PurchaseItem item : items) {
-            if (item.productId.equals(p.id)) {
+            if (item.productId.equals(p.uid)) {
                 item.qty += qty;
                 int factor = item.isWholesale ? Math.max(1, p.wholesaleFactor) : 1;
                 item.stockQty = item.stockQty + qty * factor;
@@ -264,7 +264,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
             }
         }
         PurchaseItem item = new PurchaseItem();
-        item.productId = p.id;
+        item.productId = p.uid;
         item.productName = p.name;
         item.barcode = p.barcode;
         boolean useWholesale = p.wholesalePrice > 0;
@@ -286,7 +286,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
             return;
         }
         for (PurchaseItem item : items) {
-            if (item.productId.equals(p.id)) {
+            if (item.productId.equals(p.uid)) {
                 item.qty += 1;
                 item.stockQty = item.stockQty + (item.isWholesale ? Math.max(1, p.wholesaleFactor) : 1);
                 item.lineTotal = item.qty * item.unitPrice;
@@ -295,7 +295,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
             }
         }
         PurchaseItem item = new PurchaseItem();
-        item.productId = p.id;
+        item.productId = p.uid;
         item.productName = p.name;
         item.barcode = p.barcode;
         boolean useWholesale = p.wholesalePrice > 0;
@@ -360,19 +360,19 @@ public class PurchaseEditActivity extends AppCompatActivity {
             names.add("+ New supplier");
             handler.post(() -> DialogUtil.pick(this, "Supplier", names.toArray(new String[0]), -1, which -> {
                 if (which < suppliers.size()) {
-                    supplierId = suppliers.get(which).id;
+                    supplierId = suppliers.get(which).uid;
                     supplierRow.setText("Supplier: " + suppliers.get(which).name);
                 } else {
                     DialogUtil.inputText(this, "New supplier", "Supplier name", "", "Add", value -> {
                         if (value.trim().isEmpty()) return;
                         Supplier s = new Supplier();
-                        s.id = java.util.UUID.randomUUID().toString();
+                        s.uid = java.util.UUID.randomUUID().toString();
                         s.name = value.trim();
                         s.createdAt = System.currentTimeMillis();
                         repo.run(() -> {
                             repo.suppliers.insertSupplier(s);
                             handler.post(() -> {
-                                supplierId = s.id;
+                                supplierId = s.uid;
                                 supplierRow.setText("Supplier: " + s.name);
                             });
                         });

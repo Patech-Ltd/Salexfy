@@ -79,7 +79,7 @@ public class SupplierEditActivity extends AppCompatActivity {
         repo.run(() -> {
             if (supplier == null) {
                 supplier = new Supplier();
-                supplier.id = UUID.randomUUID().toString();
+                supplier.uid = UUID.randomUUID().toString();
                 supplier.createdAt = System.currentTimeMillis();
             }
             supplier.name = n;

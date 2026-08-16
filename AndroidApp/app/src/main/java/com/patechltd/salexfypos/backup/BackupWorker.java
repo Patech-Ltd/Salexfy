@@ -40,7 +40,13 @@ public class BackupWorker extends Worker {
                     }
                 }
             }
-            return ok ? Result.success() : Result.retry();
+            boolean driveOk = true;
+            String driveUri = Prefs.getString(getApplicationContext(), Prefs.KEY_BACKUP_DRIVE_URI, null);
+            if (Prefs.getBoolean(getApplicationContext(), Prefs.KEY_BACKUP_DRIVE_ENABLED, false)
+                    && driveUri != null && !driveUri.isEmpty()) {
+                driveOk = BackupManager.backupToDrive(getApplicationContext());
+            }
+            return (ok && driveOk) ? Result.success() : Result.retry();
         } catch (Exception e) {
             AppLogger.e("Auto backup worker failed", e);
             return Result.retry();

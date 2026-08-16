@@ -20,7 +20,7 @@ public class RoleHelper {
         List<Authority> auths = new ArrayList<>();
         for (Authority a : Authority.values()) auths.add(a);
         Role role = new Role();
-        role.id = UUID.randomUUID().toString();
+        role.uid = UUID.randomUUID().toString();
         role.roleName = "Administrator";
         role.authoritiesJson = RoleAuthorities.toJson(auths);
         role.isDefault = true;

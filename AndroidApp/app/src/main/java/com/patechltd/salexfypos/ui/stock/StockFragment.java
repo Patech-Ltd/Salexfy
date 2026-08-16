@@ -144,7 +144,7 @@ public class StockFragment extends Fragment {
     private void reloadPurchases() {
         repo.run(() -> {
             java.util.Map<String, String> names = new java.util.HashMap<>();
-            for (Supplier s : repo.suppliers.getSuppliers()) names.put(s.id, s.name);
+            for (Supplier s : repo.suppliers.getSuppliers()) names.put(s.uid, s.name);
             handler.post(() -> purchaseAdapter.setSupplierNames(names));
         });
         repo.purchases.observePurchases().observe(getViewLifecycleOwner(), purchaseAdapter::submit);
@@ -156,7 +156,7 @@ public class StockFragment extends Fragment {
 
     private void openTake(StockTake t) {
         Intent i = new Intent(requireContext(), StockTakeActivity.class);
-        i.putExtra("id", t.id);
+        i.putExtra("id", t.uid);
         startActivity(i);
     }
 

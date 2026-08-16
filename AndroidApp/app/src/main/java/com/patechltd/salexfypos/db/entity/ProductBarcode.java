@@ -16,7 +16,7 @@ public class ProductBarcode {
     @PrimaryKey
     @NonNull
     @ColumnInfo(name = "id")
-    public String id;
+    public String uid;
 
     @ColumnInfo(name = "productId")
     public String productId;

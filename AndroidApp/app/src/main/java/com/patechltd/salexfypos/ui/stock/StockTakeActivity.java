@@ -149,8 +149,8 @@ public class StockTakeActivity extends AppCompatActivity {
             List<ProductBarcode> extra = repo.products.getAllBarcodes();
             Map<String, Product> byId = new HashMap<>();
             for (Product p : all) {
-                byId.put(p.id, p);
-                qtyByProductId.put(p.id, repo.products.getCurrentQty(p.id));
+                byId.put(p.uid, p);
+                qtyByProductId.put(p.uid, repo.products.getCurrentQty(p.uid));
                 if (p.barcode != null && !p.barcode.isEmpty()) {
                     byBarcode.put(p.barcode.trim(), p);
                 }
@@ -171,7 +171,7 @@ public class StockTakeActivity extends AppCompatActivity {
             return;
         }
         for (StockTakeLineAdapter.Line line : lines) {
-            if (line.productId.equals(p.id)) {
+            if (line.productId.equals(p.uid)) {
                 line.countedQty += 1;
                 adapter.submit(lines);
                 SoundUtil.beep();
@@ -179,10 +179,10 @@ public class StockTakeActivity extends AppCompatActivity {
             }
         }
         StockTakeLineAdapter.Line line = new StockTakeLineAdapter.Line();
-        line.productId = p.id;
+        line.productId = p.uid;
         line.name = p.name;
         line.unit = p.retailUnit;
-        Double qty = qtyByProductId.get(p.id);
+        Double qty = qtyByProductId.get(p.uid);
         line.systemQty = qty != null ? qty : 0;
         line.countedQty = line.systemQty + 1;
         lines.add(line);

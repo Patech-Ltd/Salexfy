@@ -72,7 +72,7 @@ public class ProductSearchDialog {
 
         addChip(chips, "All", null, true, adapter);
         if (categories != null) {
-            for (Category c : categories) addChip(chips, c.name, c.id, false, adapter);
+            for (Category c : categories) addChip(chips, c.name, c.uid, false, adapter);
         }
 
         input.addTextChangedListener(new TextWatcher() {

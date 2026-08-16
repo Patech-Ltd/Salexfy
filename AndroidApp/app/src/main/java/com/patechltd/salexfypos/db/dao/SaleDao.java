@@ -10,77 +10,122 @@ import androidx.room.Update;
 
 import com.patechltd.salexfypos.db.CashierReportRow;
 import com.patechltd.salexfypos.db.DayReportRow;
+import com.patechltd.salexfypos.db.PaymentMethodTotalRow;
 import com.patechltd.salexfypos.db.SaleWithItems;
 import com.patechltd.salexfypos.db.TopProductRow;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
+import com.patechltd.salexfypos.sync.SyncSerializer;
+import com.patechltd.salexfypos.sync.SyncTracker;
 
 import java.util.List;
 
 @Dao
-public interface SaleDao {
+public abstract class SaleDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    long insertSale(Sale sale);
+    abstract long insertSaleRaw(Sale sale);
 
     @Update
-    int updateSale(Sale sale);
+    abstract int updateSaleRaw(Sale sale);
+
+    public long insertSale(Sale sale) {
+        long id = insertSaleRaw(sale);
+        SyncTracker.track(SyncTracker.SALE, sale.uid, "INSERT", SyncSerializer.toJson(sale));
+        return id;
+    }
+
+    public int updateSale(Sale sale) {
+        int rows = updateSaleRaw(sale);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.SALE, sale.uid, "UPDATE", SyncSerializer.toJson(sale));
+        }
+        return rows;
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    long insertSaleItem(SaleItem item);
+    abstract long insertSaleItemRaw(SaleItem item);
+
+    public long insertSaleItem(SaleItem item) {
+        long id = insertSaleItemRaw(item);
+        SyncTracker.track(SyncTracker.SALE_ITEM, item.uid, "INSERT", SyncSerializer.toJson(item));
+        return id;
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract long insertPaymentRaw(SalePayment payment);
+
+    public long insertPayment(SalePayment payment) {
+        long id = insertPaymentRaw(payment);
+        SyncTracker.track(SyncTracker.SALE_PAYMENT, payment.uid, "INSERT", SyncSerializer.toJson(payment));
+        return id;
+    }
+
+    @Query("DELETE FROM sale_payments WHERE saleId = :saleId")
+    public abstract void deletePaymentsForSale(String saleId);
+
+    @Query("DELETE FROM sale_payments WHERE id = :id")
+    public abstract void rawDeletePayment(String id);
+
+    @Query("SELECT * FROM sale_payments WHERE saleId = :saleId ORDER BY amount DESC")
+    public abstract List<SalePayment> getPayments(String saleId);
 
     @Query("DELETE FROM sale_items WHERE saleId = :saleId")
-    void deleteItemsForSale(String saleId);
+    public abstract void deleteItemsForSale(String saleId);
+
+    @Query("DELETE FROM sale_items WHERE id = :id")
+    public abstract void rawDeleteItem(String id);
 
     @Query("DELETE FROM sales WHERE id = :id")
-    void deleteSale(String id);
+    public abstract void deleteSale(String id);
 
     @Query("SELECT * FROM sales WHERE id = :id")
-    Sale getSale(String id);
+    public abstract Sale getSale(String id);
 
     @Query("SELECT * FROM sale_items WHERE saleId = :saleId")
-    List<SaleItem> getItems(String saleId);
+    public abstract List<SaleItem> getItems(String saleId);
 
     @Transaction
     @Query("SELECT * FROM sales WHERE id = :id")
-    SaleWithItems getSaleWithItems(String id);
+    public abstract SaleWithItems getSaleWithItems(String id);
 
     @Query("SELECT * FROM sales WHERE status = :status ORDER BY saleDate DESC")
-    LiveData<List<Sale>> observeByStatus(String status);
+    public abstract LiveData<List<Sale>> observeByStatus(String status);
 
     @Query("SELECT * FROM sales WHERE customerId = :customerId AND status != 'DRAFT' ORDER BY saleDate DESC")
-    List<Sale> getSalesForCustomer(String customerId);
+    public abstract List<Sale> getSalesForCustomer(String customerId);
 
     @Query("SELECT * FROM sales WHERE saleDate >= :from AND saleDate <= :to ORDER BY saleDate DESC")
-    LiveData<List<Sale>> observeBetween(long from, long to);
+    public abstract LiveData<List<Sale>> observeBetween(long from, long to);
 
     @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
             + "AND saleDate >= :from AND saleDate <= :to ORDER BY saleDate DESC")
-    LiveData<List<Sale>> observeCompleteBetween(long from, long to);
+    public abstract LiveData<List<Sale>> observeCompleteBetween(long from, long to);
 
     @Transaction
     @Query("SELECT * FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD' ORDER BY saleDate DESC")
-    List<SaleWithItems> getCompleteWithItemsBetween(long from, long to);
+    public abstract List<SaleWithItems> getCompleteWithItemsBetween(long from, long to);
 
     @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
             + "AND saleDate >= :from AND saleDate <= :to AND cashierId = :cashierId ORDER BY saleDate DESC")
-    List<Sale> getCompleteBetween(long from, long to, String cashierId);
+    public abstract List<Sale> getCompleteBetween(long from, long to, String cashierId);
 
     @Query("SELECT * FROM sales WHERE status = 'HELD' ORDER BY createdAt ASC")
-    List<Sale> getHeld();
+    public abstract List<Sale> getHeld();
 
     @Query("SELECT * FROM sales WHERE status = 'HELD' ORDER BY createdAt ASC")
-    LiveData<List<Sale>> observeHeld();
+    public abstract LiveData<List<Sale>> observeHeld();
 
     @Query("SELECT * FROM sales WHERE status = 'DRAFT' ORDER BY createdAt ASC")
-    LiveData<List<Sale>> observeDrafts();
+    public abstract LiveData<List<Sale>> observeDrafts();
 
     @Query("SELECT COUNT(*) FROM sales WHERE status != 'DRAFT' AND status != 'HELD'")
-    int countComplete();
+    public abstract int countComplete();
 
     @Query("SELECT MAX(saleNo) FROM sales")
-    String maxSaleNo();
+    public abstract String maxSaleNo();
 
     @Query("SELECT (saleDate / 86400000) AS dayStart, "
             + "COUNT(*) AS saleCount, "
@@ -92,7 +137,7 @@ public interface SaleDao {
             + "FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD' "
             + "GROUP BY (saleDate / 86400000) ORDER BY dayStart DESC")
-    List<DayReportRow> getDailyReport(long from, long to);
+    public abstract List<DayReportRow> getDailyReport(long from, long to);
 
     @Query("SELECT cashierId, cashierName, COUNT(*) AS saleCount, "
             + "COALESCE(SUM(total), 0) AS totalSales, "
@@ -101,7 +146,7 @@ public interface SaleDao {
             + "FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD' "
             + "GROUP BY cashierId ORDER BY totalSales DESC")
-    List<CashierReportRow> getCashierReport(long from, long to);
+    public abstract List<CashierReportRow> getCashierReport(long from, long to);
 
     @Query("SELECT item.productId, COALESCE((SELECT p.name FROM products p WHERE p.id = item.productId), item.productName) AS name, "
             + "SUM(item.qty) AS totalQty, SUM(item.lineTotal) AS totalSales "
@@ -109,31 +154,50 @@ public interface SaleDao {
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
             + "AND s.status != 'DRAFT' AND s.status != 'HELD' "
             + "GROUP BY item.productId ORDER BY totalQty DESC LIMIT :limit")
-    List<TopProductRow> getTopProducts(long from, long to, int limit);
+    public abstract List<TopProductRow> getTopProducts(long from, long to, int limit);
 
     @Query("SELECT COALESCE(SUM(total), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD'")
-    double salesTotal(long from, long to);
+    public abstract double salesTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(taxAmount), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD'")
-    double taxTotal(long from, long to);
+    public abstract double taxTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(total - paidAmount), 0) FROM sales WHERE customerId = :customerId "
             + "AND status = 'COMPLETE'")
-    double outstandingForCustomer(String customerId);
+    public abstract double outstandingForCustomer(String customerId);
 
     @Query("SELECT COUNT(*) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD'")
-    int saleCountBetween(long from, long to);
+    public abstract int saleCountBetween(long from, long to);
 
     @Query("SELECT COALESCE(SUM(item.qty * item.costPrice), 0) FROM sale_items item "
             + "JOIN sales s ON s.id = item.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
             + "AND s.status != 'DRAFT' AND s.status != 'HELD'")
-    double costOfSalesBetween(long from, long to);
+    public abstract double costOfSalesBetween(long from, long to);
 
-    @Query("SELECT COALESCE(SUM(total), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status = 'COMPLETE' AND paymentMethod = 'CREDIT'")
-    double creditSalesBetween(long from, long to);
+    @Query("SELECT COALESCE(SUM(total - paidAmount), 0) FROM sales "
+            + "WHERE status = 'COMPLETE' AND saleDate >= :from AND saleDate <= :to "
+            + "AND (paymentMethod = 'CREDIT' "
+            + "     OR id IN (SELECT saleId FROM sale_payments WHERE method = 'CREDIT'))")
+    public abstract double creditSalesBetween(long from, long to);
+
+    @Query("SELECT sp.method AS method, SUM(sp.amount) AS total "
+            + "FROM sale_payments sp JOIN sales s ON s.id = sp.saleId "
+            + "WHERE s.status = 'COMPLETE' AND s.saleDate >= :from AND s.saleDate <= :to "
+            + "GROUP BY sp.method ORDER BY total DESC")
+    public abstract List<PaymentMethodTotalRow> paymentTotalsBetween(long from, long to);
+
+    @Transaction
+    @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
+            + "AND saleDate >= :from AND saleDate <= :to "
+            + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
+            + "     OR customerName LIKE '%' || :q || '%' "
+            + "     OR id IN (SELECT saleId FROM sale_items "
+            + "               WHERE productName LIKE '%' || :q || '%' "
+            + "               OR barcode LIKE '%' || :q || '%')) "
+            + "ORDER BY saleDate DESC LIMIT :limit OFFSET :offset")
+    public abstract List<SaleWithItems> searchCompletePage(String q, long from, long to, int limit, int offset);
 }

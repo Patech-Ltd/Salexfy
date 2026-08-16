@@ -40,7 +40,7 @@ public class SeedData {
         cashierAuths.add(Authority.COMMISSION_VIEW);
 
         Role adminRole = new Role();
-        adminRole.id = UUID.randomUUID().toString();
+        adminRole.uid = UUID.randomUUID().toString();
         adminRole.roleName = "Administrator";
         adminRole.authoritiesJson = RoleAuthorities.toJson(adminAuths);
         adminRole.commissionPercent = 0;
@@ -49,7 +49,7 @@ public class SeedData {
         repo.admin.insertRole(adminRole);
 
         Role cashierRole = new Role();
-        cashierRole.id = UUID.randomUUID().toString();
+        cashierRole.uid = UUID.randomUUID().toString();
         cashierRole.roleName = "Cashier";
         cashierRole.authoritiesJson = RoleAuthorities.toJson(cashierAuths);
         cashierRole.commissionPercent = 1;
@@ -58,7 +58,7 @@ public class SeedData {
         repo.admin.insertRole(cashierRole);
 
         Role managerRole = new Role();
-        managerRole.id = UUID.randomUUID().toString();
+        managerRole.uid = UUID.randomUUID().toString();
         List<Authority> managerAuths = new ArrayList<>(cashierAuths);
         managerAuths.add(Authority.PRODUCT_EDIT);
         managerAuths.add(Authority.PURCHASE_VIEW);
@@ -76,12 +76,12 @@ public class SeedData {
 
         String salt = PasswordHasher.generateSalt();
         User admin = new User();
-        admin.id = UUID.randomUUID().toString();
+        admin.uid = UUID.randomUUID().toString();
         admin.username = "admin";
         admin.passwordHash = PasswordHasher.hash("admin123", salt);
         admin.salt = salt;
         admin.fullName = "Administrator";
-        admin.roleId = adminRole.id;
+        admin.roleId = adminRole.uid;
         admin.isActive = true;
         admin.createdAt = now;
         repo.admin.insertUser(admin);
@@ -104,7 +104,7 @@ public class SeedData {
         Repository repo = Repository.get(context);
         if (repo.directory.categoryCount() > 0) return;
         Category c = new Category();
-        c.id = UUID.randomUUID().toString();
+        c.uid = UUID.randomUUID().toString();
         c.name = name;
         c.sortOrder = order;
         c.createdAt = now;
@@ -115,7 +115,7 @@ public class SeedData {
         Repository repo = Repository.get(context);
         if (repo.directory.brandCount() > 0) return;
         Brand b = new Brand();
-        b.id = UUID.randomUUID().toString();
+        b.uid = UUID.randomUUID().toString();
         b.name = name;
         b.createdAt = now;
         repo.directory.insertBrand(b);
@@ -125,7 +125,7 @@ public class SeedData {
         Repository repo = Repository.get(context);
         if (repo.directory.unitCount() > 0) return;
         Unit u = new Unit();
-        u.id = UUID.randomUUID().toString();
+        u.uid = UUID.randomUUID().toString();
         u.name = name;
         u.isWholesale = wholesale;
         u.createdAt = now;

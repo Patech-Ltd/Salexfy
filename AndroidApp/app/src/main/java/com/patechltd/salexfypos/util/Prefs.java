@@ -33,6 +33,16 @@ public class Prefs {
     public static final String KEY_ZXING_TRY_HARDER = "zxing_try_harder";
     public static final String KEY_LOYALTY_POINTS_PER_MONEY = "loyalty_points_per_money";
     public static final String KEY_LOYALTY_POINT_VALUE = "loyalty_point_value";
+    public static final String KEY_BACKUP_DRIVE_URI = "backup_drive_uri";
+    public static final String KEY_BACKUP_DRIVE_ENABLED = "backup_drive_enabled";
+    public static final String KEY_LAST_DRIVE_BACKUP = "last_drive_backup_time";
+    public static final String KEY_SYNC_ENABLED = "sync_enabled";
+    public static final String KEY_SYNC_SERVER_URL = "sync_server_url";
+    public static final String KEY_SYNC_USERNAME = "sync_username";
+    public static final String KEY_SYNC_PASSWORD = "sync_password";
+    public static final String KEY_SYNC_INTERVAL_MINUTES = "sync_interval_minutes";
+    public static final String KEY_SYNC_LAST_SYNC = "last_sync_time";
+    public static final String KEY_DEVICE_ID = "device_id";
 
     private static final String PREFS = "salexfy_prefs";
 

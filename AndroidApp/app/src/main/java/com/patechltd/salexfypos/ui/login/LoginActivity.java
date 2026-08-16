@@ -86,7 +86,7 @@ public class LoginActivity extends AppCompatActivity {
                 }
                 handler.post(() -> {
                     Session.start(this, user);
-                    PermissionChecker.loadAsync(this, user.id);
+                    PermissionChecker.loadAsync(this, user.uid);
                     startActivity(new Intent(this, MainActivity.class));
                     finish();
                 });

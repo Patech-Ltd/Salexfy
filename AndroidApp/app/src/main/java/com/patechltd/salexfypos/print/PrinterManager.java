@@ -7,6 +7,7 @@ import android.os.Looper;
 
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
+import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.Prefs;
 
@@ -35,17 +36,27 @@ public final class PrinterManager {
     }
 
     public static void print(Context context, Sale sale, List<SaleItem> items) {
-        print(context, sale, items, null);
+        print(context, sale, items, null, null);
     }
 
     public static void print(Context context, Sale sale, List<SaleItem> items, PrintCallback callback) {
+        print(context, sale, items, null, callback);
+    }
+
+    public static void print(Context context, Sale sale, List<SaleItem> items,
+                             List<SalePayment> payments) {
+        print(context, sale, items, payments, null);
+    }
+
+    public static void print(Context context, Sale sale, List<SaleItem> items,
+                             List<SalePayment> payments, PrintCallback callback) {
         final Context app = context.getApplicationContext();
         new Thread(() -> {
             String type = Prefs.getString(app, Prefs.KEY_PRINTER_TYPE, TYPE_NONE);
             String message;
             boolean ok = false;
             try {
-                byte[] data = ReceiptPrinter.buildReceiptBytes(app, sale, items);
+                byte[] data = ReceiptPrinter.buildReceiptBytes(app, sale, items, payments);
                 if (TYPE_BLUETOOTH.equals(type)) {
                     String address = Prefs.getString(app, Prefs.KEY_PRINTER_BT_ADDRESS, "");
                     if (address.isEmpty()) throw new Exception("No Bluetooth printer selected");
