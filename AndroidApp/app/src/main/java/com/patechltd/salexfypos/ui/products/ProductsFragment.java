@@ -42,6 +42,7 @@ import java.util.Map;
 public class ProductsFragment extends Fragment {
 
     private static final int REQ_SCAN = 4001;
+    private static final int REQ_PICK_DIRECTORY = 4002;
     private static final int PAGE_SIZE = 50;
     private Repository repo;
     private ProductAdapter adapter;
@@ -51,6 +52,7 @@ public class ProductsFragment extends Fragment {
     private String currentCategoryId = null;
     private Map<String, String> categoryNames = new HashMap<>();
     private Map<String, String> brandNames = new HashMap<>();
+    private Map<String, String> unitNames = new HashMap<>();
     private List<Category> categories = new ArrayList<>();
     private final List<Product> suggestionProducts = new ArrayList<>();
     private SuggestionsAdapter suggestionAdapter;
@@ -114,6 +116,11 @@ public class ProductsFragment extends Fragment {
             startActivity(i);
         });
 
+        MaterialButton btnQuickAdd = view.findViewById(R.id.btn_quick_add);
+        btnQuickAdd.setVisibility(canEdit ? View.VISIBLE : View.GONE);
+        btnQuickAdd.setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), QuickAddProductActivity.class)));
+
         MaterialButton btnBatchAdd = view.findViewById(R.id.btn_batch_add_products);
         btnBatchAdd.setVisibility(canEdit ? View.VISIBLE : View.GONE);
         btnBatchAdd.setOnClickListener(v ->
@@ -165,6 +172,13 @@ public class ProductsFragment extends Fragment {
                 EditText search = getView() == null ? null : getView().findViewById(R.id.search_input);
                 if (search != null) search.setText(code.trim());
             }
+            return;
+        }
+        if (requestCode == REQ_PICK_DIRECTORY && resultCode == android.app.Activity.RESULT_OK && data != null) {
+            int index = data.getIntExtra(PickerActivity.EXTRA_INDEX, -1);
+            Class<?> cls = index == 0 ? CategoryActivity.class
+                    : index == 1 ? BrandActivity.class : UnitActivity.class;
+            startActivity(new Intent(requireContext(), cls));
         }
     }
 
@@ -172,12 +186,15 @@ public class ProductsFragment extends Fragment {
         repo.run(() -> {
             List<Category> cats = repo.directory.getCategories();
             List<Brand> brands = repo.directory.getBrands();
+            List<com.patechltd.salexfypos.db.entity.Unit> units = repo.directory.getUnits();
             handler.post(() -> {
                 categories = cats;
                 categoryNames.clear();
                 for (Category c : cats) categoryNames.put(c.uid, c.name);
                 brandNames.clear();
                 for (Brand b : brands) brandNames.put(b.uid, b.name);
+                unitNames.clear();
+                for (com.patechltd.salexfypos.db.entity.Unit u : units) unitNames.put(u.uid, u.name);
                 buildCategoryChips();
             });
         });
@@ -246,6 +263,9 @@ public class ProductsFragment extends Fragment {
                 ps.currentQty = v == null ? 0 : v;
                 ps.categoryName = categoryNames.get(p.categoryId);
                 ps.brandName = brandNames.get(p.brandId);
+                String label = unitNames.get(p.retailUnitId);
+                if (label == null || label.isEmpty()) label = p.retailUnit;
+                ps.unitLabel = label;
                 rows.add(ps);
             }
             return rows;
@@ -301,22 +321,20 @@ public class ProductsFragment extends Fragment {
     }
 
     private void openProductById(String id) {
-        Intent i = new Intent(requireContext(), ProductEditActivity.class);
+        Intent i = new Intent(requireContext(), ProductDetailActivity.class);
         i.putExtra("id", id);
-        i.putExtra("viewOnly", true);
         startActivity(i);
     }
 
     private void showCategories() {
-        String[] options = {"Categories", "Brands", "Units of measure"};
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
-                .setTitle("Manage directories")
-                .setItems(options, (dialog, which) -> {
-                    Class<?> cls = which == 0 ? CategoryActivity.class
-                            : which == 1 ? BrandActivity.class : UnitActivity.class;
-                    startActivity(new Intent(requireContext(), cls));
-                })
-                .show();
+        Intent i = new Intent(requireContext(), PickerActivity.class);
+        i.putExtra(PickerActivity.EXTRA_TITLE, "Manage directories");
+        ArrayList<String> options = new ArrayList<>();
+        options.add("Categories");
+        options.add("Brands");
+        options.add("Units of measure");
+        i.putExtra(PickerActivity.EXTRA_ITEMS, options);
+        startActivityForResult(i, REQ_PICK_DIRECTORY);
     }
 
     private int dp(int value) {

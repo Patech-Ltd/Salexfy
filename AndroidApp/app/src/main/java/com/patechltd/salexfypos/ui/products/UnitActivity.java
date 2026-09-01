@@ -10,6 +10,8 @@ import java.util.UUID;
 
 public class UnitActivity extends DirectoryListActivity<Unit> {
 
+    private String nameBeforeRename;
+
     @Override
     protected List<Unit> loadAll() {
         return repo.directory.getUnits();
@@ -27,11 +29,24 @@ public class UnitActivity extends DirectoryListActivity<Unit> {
 
     @Override
     protected void update(Unit item) {
+        String oldName = nameBeforeRename;
         repo.directory.updateUnit(item);
+        if (oldName != null && !oldName.equals(item.name)) {
+            repo.products.renameRetailUnitForProducts(item.uid, item.name);
+            repo.products.renameWholesaleUnitForProducts(item.uid, item.name);
+            repo.products.renameProductUnitsSnapshot(item.uid, item.name);
+            repo.products.renameLegacyRetailUnit(oldName, item.name);
+            repo.products.renameLegacyWholesaleUnit(oldName, item.name);
+        }
     }
 
     @Override
     protected void delete(Unit item) {
+        boolean inUse = repo.products.findAnyProductUnitByUnitId(item.uid) != null
+                || repo.products.countProductsUsingUnit(item.uid) > 0;
+        if (inUse) {
+            throw new IllegalStateException("Unit is used by products");
+        }
         repo.directory.deleteUnit(item);
     }
 
@@ -47,7 +62,8 @@ public class UnitActivity extends DirectoryListActivity<Unit> {
 
     @Override
     protected void deleteBlocked() {
-        Toast.makeText(this, "Could not delete unit", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "This unit is used by products. Change those products first.",
+                Toast.LENGTH_LONG).show();
     }
 
     @Override
@@ -62,6 +78,7 @@ public class UnitActivity extends DirectoryListActivity<Unit> {
 
     @Override
     protected void setName(Unit item, String name) {
+        nameBeforeRename = item.name;
         item.name = name;
     }
 }

@@ -193,22 +193,47 @@ public class PaymentActivity extends AppCompatActivity {
         });
     }
 
+    private static final int REQ_PICK_CUSTOMER = 4201;
+
     private void pickCustomer() {
         if (customers.isEmpty()) {
             addNewCustomer();
             return;
         }
-        new CustomerSearchDialog(this, customers, debts,
-                picked -> {
+        startActivityForResult(new Intent(this, CustomerSearchActivity.class), REQ_PICK_CUSTOMER);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PICK_CUSTOMER && resultCode == RESULT_OK && data != null) {
+            String customerId = data.getStringExtra(CustomerSearchActivity.EXTRA_CUSTOMER_ID);
+            if (customerId == null) return;
+            for (Customer c : customers) {
+                if (c.uid.equals(customerId)) {
                     if (method == PaymentMethod.CREDIT) {
-                        creditAccount = picked;
+                        creditAccount = c;
                     }
-                    selectedCustomer = picked;
+                    selectedCustomer = c;
                     refreshCustomerButton();
                     refreshPointsUI();
                     refreshDebtRow();
-                },
-                this::addNewCustomer).show();
+                    return;
+                }
+            }
+            repo.run(() -> {
+                Customer c = repo.suppliers.getCustomer(customerId);
+                if (c == null) return;
+                handler.post(() -> {
+                    customers.add(c);
+                    if (method == PaymentMethod.CREDIT) creditAccount = c;
+                    selectedCustomer = c;
+                    refreshCustomerButton();
+                    refreshPointsUI();
+                    refreshDebtRow();
+                });
+            });
+        }
     }
 
     private void addNewCustomer() {

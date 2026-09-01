@@ -11,8 +11,10 @@ import androidx.room.Update;
 import com.patechltd.salexfypos.db.ProductQty;
 import com.patechltd.salexfypos.db.ProductStock;
 import com.patechltd.salexfypos.db.StockRow;
+import com.patechltd.salexfypos.db.entity.PendingProduct;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
+import com.patechltd.salexfypos.db.entity.ProductUnit;
 import com.patechltd.salexfypos.sync.SyncSerializer;
 import com.patechltd.salexfypos.sync.SyncTracker;
 
@@ -83,8 +85,92 @@ public abstract class ProductDao {
     @Query("SELECT * FROM product_barcodes")
     public abstract List<ProductBarcode> getAllBarcodes();
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract long insertProductUnitRaw(ProductUnit unit);
+
+    @Update
+    abstract int updateProductUnitRaw(ProductUnit unit);
+
+    @Delete
+    abstract int deleteProductUnitRaw(ProductUnit unit);
+
+    public long insertProductUnit(ProductUnit unit) {
+        long id = insertProductUnitRaw(unit);
+        SyncTracker.track(SyncTracker.PRODUCT_UNIT, unit.uid, "INSERT", SyncSerializer.toJson(unit));
+        return id;
+    }
+
+    public int updateProductUnit(ProductUnit unit) {
+        int rows = updateProductUnitRaw(unit);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.PRODUCT_UNIT, unit.uid, "UPDATE", SyncSerializer.toJson(unit));
+        }
+        return rows;
+    }
+
+    public int deleteProductUnit(ProductUnit unit) {
+        int rows = deleteProductUnitRaw(unit);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.PRODUCT_UNIT, unit.uid, "DELETE", "");
+        }
+        return rows;
+    }
+
+    @Query("DELETE FROM product_units WHERE id = :id")
+    public abstract void rawDeleteProductUnit(String id);
+
+    @Query("DELETE FROM product_units WHERE productId = :productId")
+    public abstract void deleteUnitsForProduct(String productId);
+
+    @Query("SELECT * FROM product_units WHERE productId = :productId ORDER BY sortOrder ASC")
+    public abstract List<ProductUnit> getUnitsByProduct(String productId);
+
+    @Query("SELECT * FROM product_units ORDER BY productId ASC, sortOrder ASC")
+    public abstract List<ProductUnit> getAllProductUnits();
+
+    @Query("SELECT * FROM product_units WHERE unitId = :unitId")
+    public abstract List<ProductUnit> getProductUnitsByUnitId(String unitId);
+
+    @Query("UPDATE products SET retailUnit = :newName WHERE retailUnitId = :unitId")
+    public abstract void renameRetailUnitForProducts(String unitId, String newName);
+
+    @Query("UPDATE products SET wholesaleUnit = :newName WHERE wholesaleUnitId = :unitId")
+    public abstract void renameWholesaleUnitForProducts(String unitId, String newName);
+
+    @Query("UPDATE product_units SET unitName = :newName WHERE unitId = :unitId")
+    public abstract void renameProductUnitsSnapshot(String unitId, String newName);
+
+    @Query("SELECT * FROM product_units WHERE unitId = :unitId LIMIT 1")
+    public abstract ProductUnit findAnyProductUnitByUnitId(String unitId);
+
+    @Query("SELECT COUNT(*) FROM products WHERE retailUnitId = :unitId OR wholesaleUnitId = :unitId")
+    public abstract int countProductsUsingUnit(String unitId);
+
+    @Query("UPDATE products SET retailUnit = :newName WHERE retailUnitId IS NULL AND retailUnit = :oldName")
+    public abstract void renameLegacyRetailUnit(String oldName, String newName);
+
+    @Query("UPDATE products SET wholesaleUnit = :newName WHERE wholesaleUnitId IS NULL AND wholesaleUnit = :oldName")
+    public abstract void renameLegacyWholesaleUnit(String oldName, String newName);
+
     @Query("SELECT * FROM products WHERE id = :id")
     public abstract Product getById(String id);
+
+    // ---------- pending batch rows (temporary until committed) ----------
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    public abstract long insertPending(PendingProduct pending);
+
+    @Query("DELETE FROM pending_products WHERE id = :id")
+    public abstract void deletePending(String id);
+
+    @Query("DELETE FROM pending_products")
+    public abstract void clearPending();
+
+    @Query("SELECT * FROM pending_products ORDER BY createdAt ASC")
+    public abstract List<PendingProduct> getPending();
+
+    @Query("SELECT COUNT(*) FROM pending_products")
+    public abstract int pendingCount();
 
     @Query("SELECT * FROM products WHERE barcode = :barcode "
             + "OR id IN (SELECT productId FROM product_barcodes WHERE barcode = :barcode) LIMIT 1")

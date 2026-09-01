@@ -109,22 +109,31 @@
         android:orientation="horizontal">
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_add_product"
+            android:id="@+id/btn_quick_add"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="0dp"
             android:layout_height="54dp"
             android:layout_weight="1"
-            android:text="Add Product"
+            android:text="Quick Add"
             app:icon="@drawable/ic_add" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_batch_add_products"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:id="@+id/btn_add_product"
             android:layout_width="0dp"
             android:layout_height="54dp"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
-            android:text="Batch Add"
+            android:text="Add Product"
             app:icon="@drawable/ic_list" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_batch_add_products"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="54dp"
+            android:layout_marginStart="8dp"
+            android:text="Batch"
+            app:icon="@drawable/ic_excel" />
     </LinearLayout>
 
 </LinearLayout>

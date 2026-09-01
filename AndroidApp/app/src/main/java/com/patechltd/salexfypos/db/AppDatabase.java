@@ -28,8 +28,10 @@ import com.patechltd.salexfypos.db.entity.CrashLog;
 import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.DebtPayment;
 import com.patechltd.salexfypos.db.entity.Expense;
+import com.patechltd.salexfypos.db.entity.PendingProduct;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
+import com.patechltd.salexfypos.db.entity.ProductUnit;
 import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Role;
@@ -47,7 +49,8 @@ import com.patechltd.salexfypos.db.entity.User;
 
 @Database(
         entities = {
-                Product.class, ProductBarcode.class, Category.class, Brand.class, Unit.class,
+                Product.class, ProductBarcode.class, ProductUnit.class, PendingProduct.class,
+                Category.class, Brand.class, Unit.class,
                 Supplier.class, Customer.class, DebtPayment.class,
                 Purchase.class, PurchaseItem.class,
                 Sale.class, SaleItem.class, SalePayment.class,
@@ -57,7 +60,7 @@ import com.patechltd.salexfypos.db.entity.User;
                 Expense.class,
                 SyncChange.class, SyncLog.class
         },
-        version = 8,
+        version = 10,
         exportSchema = false
 )
 @TypeConverters({Converters.class})
@@ -94,7 +97,8 @@ public abstract class AppDatabase extends RoomDatabase {
                     instance = Room.databaseBuilder(context.getApplicationContext(),
                                     AppDatabase.class, DATABASE_NAME)
                             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
-                                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                                    MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+                                    MIGRATION_9_10)
                             .fallbackToDestructiveMigration()
                             .build();
                 }
@@ -215,6 +219,60 @@ public abstract class AppDatabase extends RoomDatabase {
                     + "PRIMARY KEY(`uid`))");
             database.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_logs_timestamp` "
                     + "ON `sync_logs` (`timestamp`)");
+        }
+    };
+
+    static final Migration MIGRATION_8_9 = new Migration(8, 9) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `products` ADD COLUMN `retailUnitId` TEXT");
+            database.execSQL("ALTER TABLE `products` ADD COLUMN `wholesaleUnitId` TEXT");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `product_units` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`productId` TEXT, "
+                    + "`unitId` TEXT, "
+                    + "`unitName` TEXT, "
+                    + "`factor` REAL NOT NULL DEFAULT 1, "
+                    + "`price` REAL NOT NULL DEFAULT 0, "
+                    + "`barcode` TEXT, "
+                    + "`isBase` INTEGER NOT NULL DEFAULT 0, "
+                    + "`sortOrder` INTEGER NOT NULL DEFAULT 0, "
+                    + "PRIMARY KEY(`id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_product_units_productId` "
+                    + "ON `product_units` (`productId`)");
+            database.execSQL("INSERT INTO product_units "
+                    + "(id, productId, unitId, unitName, factor, price, barcode, isBase, sortOrder) "
+                    + "SELECT lower(hex(randomblob(16))), id, NULL, "
+                    + "CASE WHEN retailUnit IS NULL OR retailUnit = '' THEN 'Pcs' ELSE retailUnit END, "
+                    + "1, retailPrice, barcode, 1, 0 FROM products");
+            database.execSQL("INSERT INTO product_units "
+                    + "(id, productId, unitId, unitName, factor, price, barcode, isBase, sortOrder) "
+                    + "SELECT lower(hex(randomblob(16))), id, NULL, wholesaleUnit, "
+                    + "CASE WHEN wholesaleFactor < 1 THEN 1 ELSE wholesaleFactor END, "
+                    + "wholesalePrice, NULL, 0, 1 FROM products "
+                    + "WHERE wholesaleUnit IS NOT NULL AND wholesaleUnit != '' "
+                    + "AND (wholesalePrice > 0 OR wholesaleFactor > 1)");
+            database.execSQL("ALTER TABLE `sale_items` ADD COLUMN `factor` REAL NOT NULL DEFAULT 1");
+        }
+    };
+
+    static final Migration MIGRATION_9_10 = new Migration(9, 10) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `pending_products` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`name` TEXT, "
+                    + "`barcode` TEXT, "
+                    + "`cost` REAL NOT NULL DEFAULT 0, "
+                    + "`price` REAL NOT NULL DEFAULT 0, "
+                    + "`qty` REAL NOT NULL DEFAULT 1, "
+                    + "`categoryId` TEXT, "
+                    + "`unitId` TEXT, "
+                    + "`unitName` TEXT, "
+                    + "`createdAt` INTEGER NOT NULL DEFAULT 0, "
+                    + "PRIMARY KEY(`id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_pending_products_barcode` "
+                    + "ON `pending_products` (`barcode`)");
         }
     };
 

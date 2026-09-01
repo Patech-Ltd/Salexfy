@@ -56,7 +56,7 @@ public class CartAdapter extends RecyclerView.Adapter<CartAdapter.VH> {
     public void onBindViewHolder(@NonNull VH holder, int position) {
         SaleItem item = items.get(position);
         holder.name.setText(item.productName);
-        String unit = item.isWholesale ? "(Wholesale)" : "(Retail)";
+        String unit = item.unitLabel == null || item.unitLabel.isEmpty() ? "" : " • " + item.unitLabel;
         String barcode = item.barcode == null || item.barcode.isEmpty() ? "" : " • " + item.barcode;
         holder.sub.setText(unit + barcode);
         holder.qty.setText(NumberUtil.qty(item.qty));

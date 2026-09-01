@@ -13,4 +13,7 @@ public class ProductStock {
     public String categoryName;
 
     public String brandName;
+
+    /** Resolved display label of the base (retail) unit. */
+    public String unitLabel;
 }

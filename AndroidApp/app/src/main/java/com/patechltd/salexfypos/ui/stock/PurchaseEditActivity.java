@@ -320,6 +320,10 @@ public class PurchaseEditActivity extends AppCompatActivity {
         TextInputEditText qtyInput = view.findViewById(R.id.line_qty);
         TextInputEditText priceInput = view.findViewById(R.id.line_price);
 
+        view.findViewById(R.id.line_unit_chips).setVisibility(View.GONE);
+        view.findViewById(R.id.line_unit_label).setVisibility(View.GONE);
+        view.findViewById(R.id.line_total).setVisibility(View.GONE);
+
         title.setText(item.productName);
         qtyInput.setText(String.valueOf(item.qty));
         priceInput.setText(String.valueOf(item.unitPrice));

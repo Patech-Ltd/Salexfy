@@ -1,6 +1,7 @@
 package com.patechltd.salexfypos.ui.sell;
 
 import android.app.DatePickerDialog;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -20,7 +21,6 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.db.Repository;
-import com.patechltd.salexfypos.db.entity.Category;
 import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.Sale;
@@ -139,19 +139,24 @@ public class ManualSaleActivity extends AppCompatActivity {
         recalc();
     }
 
+    private static final int REQ_PRODUCT_SEARCH = 4301;
+
     private void pickProduct() {
-        repo.thenOnMain(repo.io(() -> {
-            Object[] result = new Object[2];
-            result[0] = repo.products.getAllActive();
-            result[1] = repo.directory.getCategories();
-            return result;
-        }), result -> {
-            @SuppressWarnings("unchecked")
-            List<Product> products = (List<Product>) result[0];
-            @SuppressWarnings("unchecked")
-            List<Category> categories = (List<Category>) result[1];
-            new ProductSearchDialog(this, products, categories, false, this::addLine).show();
-        });
+        Intent i = new Intent(this, ProductSearchActivity.class);
+        i.putExtra(ProductSearchActivity.EXTRA_WHOLESALE, false);
+        startActivityForResult(i, REQ_PRODUCT_SEARCH);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PRODUCT_SEARCH && resultCode == RESULT_OK && data != null) {
+            String productId = data.getStringExtra(ProductSearchActivity.EXTRA_PRODUCT_ID);
+            if (productId == null) return;
+            repo.thenOnMain(repo.io(() -> repo.products.getById(productId)), product -> {
+                if (product != null && product.isActive) addLine(product);
+            });
+        }
     }
 
     private void addLine(Product product) {

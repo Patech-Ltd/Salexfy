@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:background="@color/brand_primary_dark"
+            app:navigationIcon="@drawable/ic_arrow_back"
+            app:title="Quick add"
+            app:titleTextColor="@color/white" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Just the essentials. You can add the rest later."
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="1dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Product name *"
+                    app:boxBackgroundMode="outline">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:maxLines="2" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="Selling price"
+                    app:boxBackgroundMode="outline">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/price"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberDecimal" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/unit_row"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_search"
+                        android:padding="14dp"
+                        android:text="Unit: Piece"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp" />
+
+                    <TextView
+                        android:id="@+id/category_row"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_search"
+                        android:padding="14dp"
+                        android:text="Category: Not set"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:hint="Barcode (optional)"
+                    app:boxBackgroundMode="outline"
+                    app:endIconDrawable="@drawable/ic_camera"
+                    app:endIconMode="custom">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/barcode"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:maxLines="1" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/feedback"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center"
+                    android:textColor="@color/success"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_save_more"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="16dp"
+            android:text="Save &amp; add another"
+            app:icon="@drawable/ic_add" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_save_close"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="8dp"
+            android:text="Save &amp; finish"
+            app:icon="@drawable/ic_check" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="80dp" />
+    </LinearLayout>
+</ScrollView>

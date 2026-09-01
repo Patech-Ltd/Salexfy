@@ -8,6 +8,7 @@ import com.patechltd.salexfypos.db.entity.DebtPayment;
 import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
+import com.patechltd.salexfypos.db.entity.ProductUnit;
 import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Role;
@@ -56,6 +57,9 @@ public final class SyncApplier {
                 return true;
             case SyncTracker.PRODUCT_BARCODE:
                 repo.products.insertBarcode(SyncSerializer.<ProductBarcode>fromJson(change.payload, ProductBarcode.class));
+                return true;
+            case SyncTracker.PRODUCT_UNIT:
+                repo.products.insertProductUnit(SyncSerializer.<ProductUnit>fromJson(change.payload, ProductUnit.class));
                 return true;
             case SyncTracker.CATEGORY:
                 repo.directory.insertCategory(SyncSerializer.<Category>fromJson(change.payload, Category.class));
@@ -119,6 +123,9 @@ public final class SyncApplier {
             }
             case SyncTracker.PRODUCT_BARCODE:
                 repo.products.rawDeleteBarcode(change.recordId);
+                return true;
+            case SyncTracker.PRODUCT_UNIT:
+                repo.products.rawDeleteProductUnit(change.recordId);
                 return true;
             case SyncTracker.CATEGORY:
                 repo.directory.rawDeleteCategory(change.recordId);

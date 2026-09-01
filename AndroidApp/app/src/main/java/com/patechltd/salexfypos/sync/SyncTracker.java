@@ -7,6 +7,7 @@ public final class SyncTracker {
 
     public static final String PRODUCT = "PRODUCT";
     public static final String PRODUCT_BARCODE = "PRODUCT_BARCODE";
+    public static final String PRODUCT_UNIT = "PRODUCT_UNIT";
     public static final String CATEGORY = "CATEGORY";
     public static final String BRAND = "BRAND";
     public static final String UNIT = "UNIT";

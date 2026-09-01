@@ -34,7 +34,11 @@ public class Product {
 
     public String retailUnit = "Pcs";
 
+    public String retailUnitId;
+
     public String wholesaleUnit = "Carton";
+
+    public String wholesaleUnitId;
 
     public int wholesaleFactor = 1;
 

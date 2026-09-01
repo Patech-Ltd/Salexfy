@@ -18,7 +18,6 @@ public class BarcodeAnalyzer implements ImageAnalysis.Analyzer {
     private final long lockoutMs;
     private final Object lock = new Object();
     private long lastDecodeAt = 0;
-    private volatile String lastResult = null;
 
     public BarcodeAnalyzer(OnResultListener listener, long lockoutMs, DecodeEngine engine) {
         this.listener = listener;
@@ -54,11 +53,6 @@ public class BarcodeAnalyzer implements ImageAnalysis.Analyzer {
                 String format = result.format;
                 synchronized (lock) {
                     lastDecodeAt = System.currentTimeMillis();
-                    if (text.equals(lastResult)) {
-                        image.close();
-                        return;
-                    }
-                    lastResult = text;
                 }
                 if (listener != null) listener.onDecoded(text, format);
             }
@@ -71,7 +65,6 @@ public class BarcodeAnalyzer implements ImageAnalysis.Analyzer {
     public void resetLock() {
         synchronized (lock) {
             lastDecodeAt = 0;
-            lastResult = null;
         }
     }
 }

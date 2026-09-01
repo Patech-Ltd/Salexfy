@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.switchmaterial.SwitchMaterial;
+import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.scanner.ScannerEngines;
 import com.patechltd.salexfypos.util.DialogUtil;
@@ -20,6 +21,7 @@ public class ScannerSettingsActivity extends AppCompatActivity {
     private MaterialButtonToggleGroup zxingSensitivityGroup;
     private SwitchMaterial zxingTryHarder;
     private SwitchMaterial beep, torch, autoSuspend;
+    private TextInputEditText repeatDelayInput;
     private View zxingSection;
 
     @Override
@@ -36,6 +38,7 @@ public class ScannerSettingsActivity extends AppCompatActivity {
         beep = findViewById(R.id.switch_beep);
         torch = findViewById(R.id.switch_torch);
         autoSuspend = findViewById(R.id.switch_auto_suspend);
+        repeatDelayInput = findViewById(R.id.repeat_delay);
 
         scannerEngineGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked) return;
@@ -65,6 +68,7 @@ public class ScannerSettingsActivity extends AppCompatActivity {
         zxingSensitivityGroup.check(sensitivity <= 1 ? R.id.btn_zxing_low
                 : sensitivity >= 3 ? R.id.btn_zxing_high : R.id.btn_zxing_medium);
         zxingTryHarder.setChecked(Prefs.getBoolean(this, Prefs.KEY_ZXING_TRY_HARDER, true));
+        repeatDelayInput.setText(String.valueOf(Prefs.getLong(this, Prefs.KEY_SCAN_REPEAT_DELAY_MS, 1000)));
         updateZxingVisibility();
     }
 
@@ -91,6 +95,14 @@ public class ScannerSettingsActivity extends AppCompatActivity {
         Prefs.putInt(this, Prefs.KEY_ZXING_SENSITIVITY,
                 sensId == R.id.btn_zxing_low ? 1 : sensId == R.id.btn_zxing_high ? 3 : 2);
         Prefs.putBoolean(this, Prefs.KEY_ZXING_TRY_HARDER, zxingTryHarder.isChecked());
+        long delay = 1000;
+        try {
+            delay = Long.parseLong(repeatDelayInput.getText() == null ? ""
+                    : repeatDelayInput.getText().toString().trim());
+        } catch (NumberFormatException ignored) {
+        }
+        if (delay < 0) delay = 0;
+        Prefs.putLong(this, Prefs.KEY_SCAN_REPEAT_DELAY_MS, delay);
         DialogUtil.toast(this, "Settings saved");
         finish();
     }

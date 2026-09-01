@@ -112,11 +112,13 @@ public class ScannerView extends FrameLayout {
     public void start(LifecycleOwner owner) {
         this.lifecycleOwner = owner;
         analysisExecutor = Executors.newSingleThreadExecutor();
+        long repeatDelay = com.patechltd.salexfypos.util.Prefs.getLong(
+                getContext(), com.patechltd.salexfypos.util.Prefs.KEY_SCAN_REPEAT_DELAY_MS, 1000);
         analyzer = new BarcodeAnalyzer((text, format) -> {
             if (listener != null && !suspend) {
                 new Handler(Looper.getMainLooper()).post(() -> listener.onDecoded(text, format));
             }
-        }, 250, ScannerEngines.create(getContext()));
+        }, Math.max(0, repeatDelay), ScannerEngines.create(getContext()));
         bindUseCases();
     }
 

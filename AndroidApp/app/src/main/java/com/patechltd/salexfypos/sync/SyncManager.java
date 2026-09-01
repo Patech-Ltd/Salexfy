@@ -142,13 +142,17 @@ public final class SyncManager {
     }
 
     private static boolean pull(Context context, Repository repo, String base, String token) {
-        long since = repo.sync.lastSuccessfulPull();
+        // Cursor is the max updatedAt received from the server so far, so a
+        // skewed device clock can never cause records to be skipped.
+        long since = Prefs.getLong(context, Prefs.KEY_SYNC_PULL_CURSOR, 0);
+        if (since == 0) since = repo.sync.lastSuccessfulPull();
         try {
             String response = http("GET", base + "/api/sync/pull?since=" + since
                     + "&deviceId=" + deviceId(context), null, token);
             JSONObject result = new JSONObject(response);
             JSONArray changes = result.optJSONArray("changes");
             int applied = 0;
+            long cursor = since;
             if (changes != null && changes.length() > 0) {
                 List<RemoteChange> list = new ArrayList<>();
                 for (int i = 0; i < changes.length(); i++) {
@@ -160,8 +164,10 @@ public final class SyncManager {
                     rc.payload = c.optString("payload");
                     rc.updatedAt = c.optLong("updatedAt", 0);
                     list.add(rc);
+                    cursor = Math.max(cursor, rc.updatedAt);
                 }
                 applied = SyncApplier.apply(repo, list);
+                Prefs.putLong(context, Prefs.KEY_SYNC_PULL_CURSOR, cursor);
             }
             log(context, "PULL", "OK", "Applied " + applied + " changes from server", null);
             return true;

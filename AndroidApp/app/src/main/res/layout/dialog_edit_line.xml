@@ -39,6 +39,14 @@
             android:text="Wholesale" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/line_unit_chips"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        app:selectionRequired="true"
+        app:singleSelection="true" />
+
     <TextView
         android:id="@+id/line_unit_label"
         android:layout_width="match_parent"

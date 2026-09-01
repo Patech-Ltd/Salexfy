@@ -12,13 +12,12 @@
         android:layout_height="wrap_content"
         android:background="@color/brand_primary_dark"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:title="Batch Add Products"
+        app:title="Add many products"
         app:titleTextColor="@color/white" />
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
+        android:layout_height="wrap_content"
         android:fillViewport="true">
 
         <LinearLayout
@@ -30,67 +29,268 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:background="@drawable/bg_search"
-                android:padding="14dp"
-                android:text="One product per line.\nFormat: name, barcode, cost, retail, qty\n\nExample:\nCoca Cola 500ml, 8964001, 40, 55, 24\nFanta 300ml, 8964002, 35, 50\nSprite 1L, 8964003, 70, 90"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
+                android:text="Scan or type one product at a time. Rows are kept safely as you go - nothing is added to Products until you tap Commit."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
 
-            <TextView
-                android:id="@+id/category_row"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:background="@drawable/bg_search"
-                android:padding="14dp"
-                android:text="Default category: None"
-                android:textColor="@color/text_primary"
-                android:textSize="15sp" />
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp">
 
-            <TextView
-                android:id="@+id/unit_row"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="@drawable/bg_search"
-                android:padding="14dp"
-                android:text="Retail unit: Pcs"
-                android:textColor="@color/text_primary"
-                android:textSize="15sp" />
-
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:hint="Paste product list"
-                app:boxBackgroundMode="outline">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/batch_input"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="top"
-                    android:inputType="textMultiLine"
-                    android:minHeight="180dp"
-                    android:scrollbars="vertical" />
-            </com.google.android.material.textfield.TextInputLayout>
+                    android:orientation="vertical"
+                    android:padding="14dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_add"
-                android:layout_width="match_parent"
-                android:layout_height="54dp"
-                android:layout_marginTop="12dp"
-                android:text="Add Products"
-                app:icon="@drawable/ic_check" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Applies to every row"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
 
-            <TextView
-                android:id="@+id/summary"
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/category_row"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_search"
+                            android:padding="12dp"
+                            android:text="Category: None"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/unit_row"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1"
+                            android:background="@drawable/bg_search"
+                            android:padding="12dp"
+                            android:text="Unit: Piece"
+                            android:textColor="@color/text_primary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp"
-                android:visibility="gone" />
+                android:layout_marginTop="10dp"
+                app:cardBackgroundColor="@color/surface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <TextView
+                        android:id="@+id/editor_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="New row"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:hint="Product name *"
+                        app:boxBackgroundMode="outline">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/name"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                            android:maxLines="2" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:hint="Barcode (scan or type)"
+                        app:boxBackgroundMode="outline"
+                        app:endIconDrawable="@drawable/ic_camera"
+                        app:endIconMode="custom">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/barcode"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                            android:maxLines="1" />
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:hint="Cost price"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/cost"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="numberDecimal" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:hint="Selling price *"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/price"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="numberDecimal" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="0.7"
+                            android:hint="Qty"
+                            app:boxBackgroundMode="outline">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/qty"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:inputType="numberDecimal" />
+                        </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_scan"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_weight="1"
+                            android:text="Scan barcode"
+                            app:icon="@drawable/ic_camera" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_save_row"
+                            android:layout_width="0dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="8dp"
+                            android:layout_weight="1.4"
+                            android:text="Save row"
+                            app:icon="@drawable/ic_check" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Saved rows"
+                    android:textColor="@color/text_primary"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/row_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 rows"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rows_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:nestedScrollingEnabled="false" />
+
+            <TextView
+                android:id="@+id/empty_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/bg_search"
+                android:gravity="center"
+                android:padding="18dp"
+                android:text="No rows yet. Scan a barcode or type a product name, then tap Save row."
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp" />
         </LinearLayout>
     </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/surface"
+        android:orientation="vertical"
+        android:paddingHorizontal="14dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="14dp">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_commit"
+            android:layout_width="match_parent"
+            android:layout_height="54dp"
+            android:text="Commit to products"
+            app:icon="@drawable/ic_check" />
+
+        <TextView
+            android:id="@+id/summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:visibility="gone" />
+    </LinearLayout>
 </LinearLayout>

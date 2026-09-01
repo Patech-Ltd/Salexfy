@@ -120,14 +120,28 @@
             android:textStyle="bold" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/btn_sales"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:id="@+id/btn_manual_sale"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
             android:layout_marginStart="8dp"
-            android:contentDescription="Sales"
+            android:minWidth="0dp"
+            android:text="Manual"
+            android:textSize="12sp"
+            app:icon="@drawable/ic_note_add"
+            app:iconSize="18dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_sales"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:minWidth="0dp"
+            android:text="View Sales"
+            android:textSize="12sp"
             app:icon="@drawable/ic_receipt"
-            app:iconTint="@color/text_primary" />
+            app:iconSize="18dp" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView

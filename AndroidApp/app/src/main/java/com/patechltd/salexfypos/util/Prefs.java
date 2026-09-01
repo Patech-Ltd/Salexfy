@@ -17,6 +17,7 @@ public class Prefs {
     public static final String KEY_BACKUP_INTERVAL_HOURS = "auto_backup_interval";
     public static final String KEY_BACKUP_FOLDER = "backup_folder";
     public static final String KEY_DEBUG_MODE = "debug_mode";
+    public static final String KEY_APP_LOCK = "app_lock_enabled";
     public static final String KEY_LAST_BACKUP = "last_backup_time";
     public static final String KEY_SEEDED = "db_seeded";
     public static final String KEY_RECEIPT_FOOTER = "receipt_footer";
@@ -28,6 +29,7 @@ public class Prefs {
     public static final String KEY_PRINTER_USB_PRODUCT = "printer_usb_product";
     public static final String KEY_PRINTER_WIDTH = "printer_width";
     public static final String KEY_SCANNER_ENGINE = "scanner_engine";
+    public static final String KEY_SCAN_REPEAT_DELAY_MS = "scan_repeat_delay_ms";
     public static final String KEY_PENDING_CRASH = "pending_crash";
     public static final String KEY_ZXING_SENSITIVITY = "zxing_sensitivity";
     public static final String KEY_ZXING_TRY_HARDER = "zxing_try_harder";
@@ -42,6 +44,7 @@ public class Prefs {
     public static final String KEY_SYNC_PASSWORD = "sync_password";
     public static final String KEY_SYNC_INTERVAL_MINUTES = "sync_interval_minutes";
     public static final String KEY_SYNC_LAST_SYNC = "last_sync_time";
+    public static final String KEY_SYNC_PULL_CURSOR = "sync_pull_cursor";
     public static final String KEY_DEVICE_ID = "device_id";
 
     private static final String PREFS = "salexfy_prefs";

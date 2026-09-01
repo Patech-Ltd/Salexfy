@@ -60,8 +60,10 @@ public class ProductAdapter extends RecyclerView.Adapter<ProductAdapter.VH> {
                 ? "No barcode" : "Barcode: " + ps.product.barcode);
         holder.image.setTag(ps.product.imagePath);
         ImageUtil.load(holder.image, ps.product.imagePath, 128);
-        String unit = ps.product.retailUnit == null ? "" : " / " + ps.product.retailUnit;
-        holder.price.setText(NumberUtil.money(ps.product.retailPrice) + unit);
+        String unit = ps.unitLabel;
+        if (unit == null || unit.isEmpty()) unit = ps.product.retailUnit;
+        if (unit == null || unit.isEmpty()) unit = "Pcs";
+        holder.price.setText(NumberUtil.money(ps.product.retailPrice) + " / " + unit);
         holder.stock.setText("Stock: " + NumberUtil.qty(ps.currentQty));
         holder.lowStock.setVisibility(ps.currentQty <= ps.product.reorderLevel ? View.VISIBLE : View.GONE);
         holder.itemView.setOnClickListener(v -> listener.onClick(ps));

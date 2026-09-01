@@ -5,7 +5,9 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -26,6 +28,7 @@ import com.patechltd.salexfypos.db.entity.Brand;
 import com.patechltd.salexfypos.db.entity.Category;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
+import com.patechltd.salexfypos.db.entity.ProductUnit;
 import com.patechltd.salexfypos.db.entity.Unit;
 import com.patechltd.salexfypos.model.Authority;
 import com.patechltd.salexfypos.security.PermissionChecker;
@@ -40,25 +43,47 @@ import java.util.UUID;
 
 public class ProductEditActivity extends AppCompatActivity {
 
+    private static final int REQ_SCAN = 5001;
+    private static final int REQ_SCAN_EXTRA = 5002;
+    private static final int REQ_IMAGE = 5003;
+    private static final int REQ_CAMERA_IMAGE = 5004;
+    private static final int REQ_CAMERA_PERMISSION = 5005;
+    private static final int REQ_PICK_CATEGORY = 5006;
+    private static final int REQ_PICK_BRAND = 5007;
+    private static final int REQ_PICK_BASE_UNIT = 5008;
+    private static final int REQ_PICK_UNIT_ROW = 5009;
+
+    private static class UnitRow {
+        String unitId;
+        String unitName;
+        double factor;
+        double price;
+        boolean isBase;
+        int sortOrder;
+    }
+
     private Repository repo;
     private String productId;
-    private boolean viewOnly;
-    private List<Category> categories = new ArrayList<>();
-    private List<Brand> brands = new ArrayList<>();
-    private List<Unit> units = new ArrayList<>();
-    private String categoryId, brandId, retailUnitId, wholesaleUnitId;
     private boolean isNewProduct = true;
+    private final List<Category> categories = new ArrayList<>();
+    private final List<Brand> brands = new ArrayList<>();
+    private final List<Unit> units = new ArrayList<>();
+    private final List<UnitRow> unitRows = new ArrayList<>();
     private final List<String> extraBarcodes = new ArrayList<>();
-    private TextInputEditText nameInput, barcodeInput, skuInput, retailInput, wholesaleInput,
-            costInput, reorderInput, taxInput, factorInput, notesInput, openingStockInput;
-    private TextView categoryRow, brandRow, retailUnitRow, wholesaleUnitRow, currentStockRow;
+    private String categoryId;
+    private String brandId;
+    private TextInputEditText nameInput, barcodeInput, skuInput, costInput, taxInput, notesInput,
+            reorderInput, openingStockInput, retailInput;
+    private TextView retailUnitRow, categoryRow, brandRow, currentStockRow;
     private SwitchMaterial activeSwitch;
+    private LinearLayout unitsList;
     private LinearLayout extraBarcodesList;
-    private MaterialButton btnAddBarcode;
     private ImageView imagePreview;
     private String imagePath;
     private java.util.concurrent.CompletableFuture<String> pendingImage;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private int pickRowIndex = -1;
+    private boolean syncingPrice;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,7 +99,6 @@ public class ProductEditActivity extends AppCompatActivity {
 
         repo = Repository.get(this);
         productId = getIntent().getStringExtra("id");
-        viewOnly = getIntent().getBooleanExtra("viewOnly", false);
 
         bind();
         loadReferences();
@@ -84,86 +108,69 @@ public class ProductEditActivity extends AppCompatActivity {
         nameInput = findViewById(R.id.name);
         barcodeInput = findViewById(R.id.barcode);
         skuInput = findViewById(R.id.sku);
-        retailInput = findViewById(R.id.retail_price);
-        wholesaleInput = findViewById(R.id.wholesale_price);
         costInput = findViewById(R.id.cost_price);
-        reorderInput = findViewById(R.id.reorder_level);
         taxInput = findViewById(R.id.tax);
-        factorInput = findViewById(R.id.wholesale_factor);
         notesInput = findViewById(R.id.notes);
+        reorderInput = findViewById(R.id.reorder_level);
         openingStockInput = findViewById(R.id.opening_stock);
+        retailInput = findViewById(R.id.retail_price);
+        retailUnitRow = findViewById(R.id.retail_unit_row);
         categoryRow = findViewById(R.id.category_row);
         brandRow = findViewById(R.id.brand_row);
-        retailUnitRow = findViewById(R.id.retail_unit_row);
-        wholesaleUnitRow = findViewById(R.id.wholesale_unit_row);
         currentStockRow = findViewById(R.id.current_stock_row);
         activeSwitch = findViewById(R.id.active_switch);
+        unitsList = findViewById(R.id.units_list);
         extraBarcodesList = findViewById(R.id.extra_barcodes_list);
-        btnAddBarcode = findViewById(R.id.btn_add_barcode);
-        btnAddBarcode.setOnClickListener(v -> addExtraBarcode());
+        findViewById(R.id.btn_add_barcode).setOnClickListener(v -> addExtraBarcode());
+        findViewById(R.id.btn_add_unit).setOnClickListener(v -> addUnitRow());
         imagePreview = findViewById(R.id.image_preview);
         findViewById(R.id.btn_pick_image).setOnClickListener(v -> pickImage());
-        renderBarcodes();
+
         MaterialButton save = findViewById(R.id.btn_save);
-        MaterialButton delete = findViewById(R.id.btn_delete);
-        MaterialButton edit = findViewById(R.id.btn_edit);
-        edit.setVisibility(View.GONE);
-        edit.setOnClickListener(v -> {
-            Intent i = new Intent(this, ProductEditActivity.class);
-            i.putExtra("id", productId);
-            startActivity(i);
-            finish();
-        });
-
-        setupSection(R.id.header_pricing, R.id.body_pricing, R.id.chevron_pricing, false);
-        setupSection(R.id.header_units, R.id.body_units, R.id.chevron_units, false);
-        setupSection(R.id.header_stock, R.id.body_stock, R.id.chevron_stock, true);
-        setupSection(R.id.header_notes, R.id.body_notes, R.id.chevron_notes, false);
-
-        String barcode = getIntent().getStringExtra("barcode");
-        if (barcode != null) barcodeInput.setText(barcode);
-
-        categoryRow.setOnClickListener(v -> pickCategory());
-        brandRow.setOnClickListener(v -> pickBrand());
-        retailUnitRow.setOnClickListener(v -> pickRetailUnit());
-        wholesaleUnitRow.setOnClickListener(v -> pickWholesaleUnit());
-
-        barcodeInput.setOnClickListener(v -> openScanner());
-        com.google.android.material.textfield.TextInputLayout barcodeTil = findTextInputLayout(barcodeInput);
-        if (barcodeTil != null) barcodeTil.setEndIconOnClickListener(v -> openScanner());
-
-        delete.setOnClickListener(v -> {
-            if (productId == null) {
-                finish();
-                return;
-            }
-            DialogUtil.confirm(this, "Delete product",
-                    "Delete this product permanently? This cannot be undone.", () -> {
-                        repo.run(() -> {
-                            Product p = repo.products.getById(productId);
-                            if (p != null) repo.products.delete(p);
-                            handler.post(this::finish);
-                        });
-                    });
-        });
-        delete.setVisibility(productId == null ? View.GONE : View.VISIBLE);
-        if (viewOnly) enterViewMode();
-
+        save.setOnClickListener(v -> saveProduct());
         if (!PermissionChecker.has(this, Authority.PRODUCT_EDIT)) {
             save.setEnabled(false);
         }
 
-        save.setOnClickListener(v -> saveProduct());
+        setupSection(R.id.header_more, R.id.body_more, R.id.chevron_more);
+        setupSection(R.id.header_units, R.id.body_units, R.id.chevron_units);
+
+        String barcode = getIntent().getStringExtra("barcode");
+        if (barcode != null) barcodeInput.setText(barcode);
+
+        retailUnitRow.setOnClickListener(v -> pickBaseUnit());
+        categoryRow.setOnClickListener(v -> pickCategory());
+        brandRow.setOnClickListener(v -> pickBrand());
+
+        retailInput.addTextChangedListener(new SimpleTextWatcher() {
+            @Override
+            void onChanged() {
+                if (syncingPrice) return;
+                if (!unitRows.isEmpty()) {
+                    unitRows.get(0).price = NumberUtil.parse(text(retailInput), 0);
+                }
+            }
+        });
+
+        barcodeInput.setOnClickListener(v -> openScanner());
+        com.google.android.material.textfield.TextInputLayout barcodeTil = findTextInputLayout(barcodeInput);
+        if (barcodeTil != null) barcodeTil.setEndIconOnClickListener(v -> openScanner());
     }
 
-    private static final int REQ_SCAN = 5001;
-    private static final int REQ_SCAN_EXTRA = 5002;
-    private static final int REQ_IMAGE = 5003;
-    private static final int REQ_CAMERA_IMAGE = 5004;
-    private static final int REQ_CAMERA_PERMISSION = 5005;
+    private void setupSection(int headerId, int bodyId, int chevronId) {
+        View header = findViewById(headerId);
+        View body = findViewById(bodyId);
+        ImageView chevron = findViewById(chevronId);
+        body.setVisibility(View.GONE);
+        chevron.setRotation(0);
+        header.setOnClickListener(v -> {
+            boolean visible = body.getVisibility() == View.VISIBLE;
+            body.setVisibility(visible ? View.GONE : View.VISIBLE);
+            chevron.animate().rotation(visible ? 0 : 90).setDuration(150).start();
+        });
+    }
 
     private void pickImage() {
-        if (viewOnly) return;
         if (!PermissionChecker.has(this, Authority.PRODUCT_EDIT)) return;
         new androidx.appcompat.app.AlertDialog.Builder(this)
                 .setTitle("Product photo")
@@ -210,52 +217,11 @@ public class ProductEditActivity extends AppCompatActivity {
         }
     }
 
-    private void setupSection(int headerId, int bodyId, int chevronId, boolean defaultOpen) {
-        View header = findViewById(headerId);
-        View body = findViewById(bodyId);
-        ImageView chevron = findViewById(chevronId);
-        body.setVisibility(defaultOpen ? View.VISIBLE : View.GONE);
-        chevron.setRotation(defaultOpen ? 90 : 0);
-        header.setOnClickListener(v -> {
-            boolean visible = body.getVisibility() == View.VISIBLE;
-            body.setVisibility(visible ? View.GONE : View.VISIBLE);
-            chevron.animate().rotation(visible ? 0 : 90).setDuration(150).start();
-        });
-    }
-
-    private void enterViewMode() {
-        nameInput.setEnabled(false);
-        barcodeInput.setEnabled(false);
-        skuInput.setEnabled(false);
-        retailInput.setEnabled(false);
-        wholesaleInput.setEnabled(false);
-        costInput.setEnabled(false);
-        reorderInput.setEnabled(false);
-        taxInput.setEnabled(false);
-        factorInput.setEnabled(false);
-        notesInput.setEnabled(false);
-        openingStockInput.setEnabled(false);
-        activeSwitch.setEnabled(false);
-        findViewById(R.id.btn_save).setVisibility(View.GONE);
-        findViewById(R.id.btn_delete).setVisibility(View.GONE);
-        findViewById(R.id.btn_edit).setVisibility(View.VISIBLE);
-        btnAddBarcode.setVisibility(View.GONE);
-        expandSection(R.id.body_pricing, R.id.chevron_pricing);
-        expandSection(R.id.body_units, R.id.chevron_units);
-        expandSection(R.id.body_stock, R.id.chevron_stock);
-        expandSection(R.id.body_notes, R.id.chevron_notes);
-    }
-
-    private void expandSection(int bodyId, int chevronId) {
-        findViewById(bodyId).setVisibility(View.VISIBLE);
-        ((ImageView) findViewById(chevronId)).setRotation(90);
-    }
-
     private void openScanner() {
         startActivityForResult(new Intent(this, com.patechltd.salexfypos.ui.scan.ScanActivity.class), REQ_SCAN);
     }
 
-    private com.google.android.material.textfield.TextInputLayout findTextInputLayout(android.view.View child) {
+    private com.google.android.material.textfield.TextInputLayout findTextInputLayout(View child) {
         if (child instanceof com.google.android.material.textfield.TextInputLayout) {
             return (com.google.android.material.textfield.TextInputLayout) child;
         }
@@ -271,7 +237,6 @@ public class ProductEditActivity extends AppCompatActivity {
     }
 
     private void addExtraBarcode() {
-        if (viewOnly) return;
         DialogUtil.pick(this, "Add another barcode", new String[]{"Scan barcode", "Type barcode"}, -1, which -> {
             if (which == 0) {
                 startActivityForResult(new Intent(this, com.patechltd.salexfypos.ui.scan.ScanActivity.class),
@@ -305,7 +270,7 @@ public class ProductEditActivity extends AppCompatActivity {
         for (String code : extraBarcodes) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
             int pad = (int) (14 * getResources().getDisplayMetrics().density);
             row.setPadding(pad, pad, pad, pad);
             row.setBackgroundResource(R.drawable.bg_search);
@@ -321,27 +286,183 @@ public class ProductEditActivity extends AppCompatActivity {
             label.setTextColor(0xFF0F172A);
             label.setTextSize(14);
             label.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-
             row.addView(label);
 
-            if (!viewOnly) {
-                TextView remove = new TextView(this);
-                remove.setText("✕");
-                remove.setTextColor(0xFFDC2626);
-                remove.setTextSize(16);
-                remove.setPadding((int) (8 * getResources().getDisplayMetrics().density), 0, 0, 0);
-                remove.setOnClickListener(v -> {
-                    extraBarcodes.remove(code);
-                    renderBarcodes();
-                });
-                row.addView(remove);
-            }
+            TextView remove = new TextView(this);
+            remove.setText("✕");
+            remove.setTextColor(0xFFDC2626);
+            remove.setTextSize(16);
+            remove.setPadding((int) (8 * getResources().getDisplayMetrics().density), 0, 0, 0);
+            remove.setOnClickListener(v -> {
+                extraBarcodes.remove(code);
+                renderBarcodes();
+            });
+            row.addView(remove);
             extraBarcodesList.addView(row);
         }
     }
 
+    // ---------- unit rows ----------
+
+    private void addUnitRow() {
+        UnitRow row = new UnitRow();
+        row.isBase = unitRows.isEmpty();
+        row.factor = 1;
+        row.price = 0;
+        row.sortOrder = unitRows.size();
+        unitRows.add(row);
+        renderUnitRows();
+    }
+
+    private void pickBaseUnit() {
+        pickUnitForRow(0);
+    }
+
+    private void pickUnitForRow(int index) {
+        pickRowIndex = index;
+        ArrayList<String> names = new ArrayList<>();
+        for (Unit u : units) names.add(u.name);
+        Intent i = new Intent(this, PickerActivity.class);
+        i.putExtra(PickerActivity.EXTRA_TITLE, "Choose unit");
+        i.putExtra(PickerActivity.EXTRA_ITEMS, names);
+        i.putExtra(PickerActivity.EXTRA_ALLOW_NEW, true);
+        i.putExtra(PickerActivity.EXTRA_NEW_HINT, "unit (e.g. Piece)");
+        startActivityForResult(i, REQ_PICK_UNIT_ROW);
+    }
+
+    private void renderUnitRows() {
+        unitsList.removeAllViews();
+        for (int i = 0; i < unitRows.size(); i++) {
+            final int index = i;
+            final UnitRow row = unitRows.get(i);
+
+            LinearLayout container = new LinearLayout(this);
+            container.setOrientation(LinearLayout.HORIZONTAL);
+            container.setGravity(Gravity.CENTER_VERTICAL);
+            int pad = (int) (10 * getResources().getDisplayMetrics().density);
+            container.setPadding(pad, pad, pad, pad);
+            container.setBackgroundResource(R.drawable.bg_search);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (i > 0) lp.topMargin = (int) (8 * getResources().getDisplayMetrics().density);
+            container.setLayoutParams(lp);
+
+            TextView name = new TextView(this);
+            name.setText((row.isBase ? "Base: " : "") + (row.unitName == null ? "Pick unit" : row.unitName));
+            name.setTextColor(getResources().getColor(R.color.text_primary));
+            name.setTextSize(14);
+            name.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f));
+            name.setOnClickListener(v -> pickUnitForRow(index));
+            container.addView(name);
+
+            if (row.isBase) {
+                TextView hint = new TextView(this);
+                hint.setText("price above");
+                hint.setTextColor(getResources().getColor(R.color.text_secondary));
+                hint.setTextSize(12);
+                hint.setPadding(dp(8), 0, 0, 0);
+                container.addView(hint);
+            } else {
+                EditText priceInput = new EditText(this);
+                priceInput.setHint("price");
+                priceInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                        | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                priceInput.setText(NumberUtil.qty(row.price));
+                priceInput.setTextSize(13);
+                priceInput.setMinEms(4);
+                priceInput.setTag(row);
+                priceInput.addTextChangedListener(new SimpleTextWatcher() {
+                    @Override
+                    public void onChanged() {
+                        row.price = NumberUtil.parse(priceInput.getText().toString(), 0);
+                    }
+                });
+                container.addView(priceInput);
+
+                EditText factorInput = new EditText(this);
+                factorInput.setHint("in 1");
+                factorInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                        | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                factorInput.setText(NumberUtil.qty(row.factor));
+                factorInput.setTextSize(13);
+                factorInput.setMinEms(4);
+                factorInput.setTag(row);
+                factorInput.addTextChangedListener(new SimpleTextWatcher() {
+                    @Override
+                    public void onChanged() {
+                        row.factor = Math.max(1, NumberUtil.parse(factorInput.getText().toString(), 1));
+                    }
+                });
+                container.addView(factorInput);
+
+                TextView remove = new TextView(this);
+                remove.setText("✕");
+                remove.setTextColor(getResources().getColor(R.color.error));
+                remove.setTextSize(16);
+                remove.setPadding((int) (8 * getResources().getDisplayMetrics().density), 0, 0, 0);
+                remove.setOnClickListener(v -> {
+                    unitRows.remove(index);
+                    for (int j = 0; j < unitRows.size(); j++) {
+                        unitRows.get(j).isBase = j == 0;
+                        unitRows.get(j).sortOrder = j;
+                    }
+                    renderUnitRows();
+                });
+                container.addView(remove);
+            }
+            unitsList.addView(container);
+        }
+    }
+
+    private int dp(int value) {
+        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private abstract static class SimpleTextWatcher implements android.text.TextWatcher {
+        @Override
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+        }
+
+        @Override
+        public void onTextChanged(CharSequence s, int start, int before, int count) {
+        }
+
+        @Override
+        public void afterTextChanged(android.text.Editable s) {
+            onChanged();
+        }
+
+        abstract void onChanged();
+    }
+
+    // ---------- pickers ----------
+
+    private void pickCategory() {
+        ArrayList<String> names = new ArrayList<>();
+        for (Category c : categories) names.add(c.name);
+        names.add("None");
+        Intent i = new Intent(this, PickerActivity.class);
+        i.putExtra(PickerActivity.EXTRA_TITLE, "Choose category");
+        i.putExtra(PickerActivity.EXTRA_ITEMS, names);
+        i.putExtra(PickerActivity.EXTRA_ALLOW_NEW, true);
+        i.putExtra(PickerActivity.EXTRA_NEW_HINT, "category");
+        startActivityForResult(i, REQ_PICK_CATEGORY);
+    }
+
+    private void pickBrand() {
+        ArrayList<String> names = new ArrayList<>();
+        for (Brand b : brands) names.add(b.name);
+        names.add("None");
+        Intent i = new Intent(this, PickerActivity.class);
+        i.putExtra(PickerActivity.EXTRA_TITLE, "Choose brand");
+        i.putExtra(PickerActivity.EXTRA_ITEMS, names);
+        i.putExtra(PickerActivity.EXTRA_ALLOW_NEW, true);
+        i.putExtra(PickerActivity.EXTRA_NEW_HINT, "brand");
+        startActivityForResult(i, REQ_PICK_BRAND);
+    }
+
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == RESULT_OK) {
             if (requestCode == REQ_IMAGE) {
@@ -356,12 +477,91 @@ public class ProductEditActivity extends AppCompatActivity {
                 return;
             }
             if (data == null) return;
-            String code = data.getStringExtra(com.patechltd.salexfypos.ui.scan.ScanActivity.EXTRA_CODE);
-            if (code == null) return;
             if (requestCode == REQ_SCAN) {
-                barcodeInput.setText(code.trim());
-            } else if (requestCode == REQ_SCAN_EXTRA) {
-                addBarcodeToList(code.trim());
+                String code = data.getStringExtra(com.patechltd.salexfypos.ui.scan.ScanActivity.EXTRA_CODE);
+                if (code != null) barcodeInput.setText(code.trim());
+                return;
+            }
+            if (requestCode == REQ_SCAN_EXTRA) {
+                String code = data.getStringExtra(com.patechltd.salexfypos.ui.scan.ScanActivity.EXTRA_CODE);
+                if (code != null) addBarcodeToList(code.trim());
+                return;
+            }
+            if (requestCode == REQ_PICK_CATEGORY) {
+                String newName = data.getStringExtra(PickerActivity.EXTRA_NEW_NAME);
+                if (newName != null) {
+                    Category c = new Category();
+                    c.uid = UUID.randomUUID().toString();
+                    c.name = newName.trim();
+                    c.sortOrder = categories.size() + 1;
+                    c.createdAt = System.currentTimeMillis();
+                    repo.run(() -> {
+                        repo.directory.insertCategory(c);
+                        handler.post(() -> {
+                            categories.add(c);
+                            categoryId = c.uid;
+                            updateRows();
+                        });
+                    });
+                    return;
+                }
+                int index = data.getIntExtra(PickerActivity.EXTRA_INDEX, -1);
+                categoryId = index >= 0 && index < categories.size() ? categories.get(index).uid : null;
+                updateRows();
+                return;
+            }
+            if (requestCode == REQ_PICK_BRAND) {
+                String newName = data.getStringExtra(PickerActivity.EXTRA_NEW_NAME);
+                if (newName != null) {
+                    Brand b = new Brand();
+                    b.uid = UUID.randomUUID().toString();
+                    b.name = newName.trim();
+                    b.createdAt = System.currentTimeMillis();
+                    repo.run(() -> {
+                        repo.directory.insertBrand(b);
+                        handler.post(() -> {
+                            brands.add(b);
+                            brandId = b.uid;
+                            updateRows();
+                        });
+                    });
+                    return;
+                }
+                int index = data.getIntExtra(PickerActivity.EXTRA_INDEX, -1);
+                brandId = index >= 0 && index < brands.size() ? brands.get(index).uid : null;
+                updateRows();
+                return;
+            }
+            if (requestCode == REQ_PICK_UNIT_ROW || requestCode == REQ_PICK_BASE_UNIT) {
+                int index = pickRowIndex;
+                pickRowIndex = -1;
+                if (index < 0 || index >= unitRows.size()) return;
+                String newName = data.getStringExtra(PickerActivity.EXTRA_NEW_NAME);
+                if (newName != null) {
+                    Unit u = new Unit();
+                    u.uid = UUID.randomUUID().toString();
+                    u.name = newName.trim();
+                    u.isWholesale = !unitRows.get(index).isBase;
+                    u.createdAt = System.currentTimeMillis();
+                    repo.run(() -> {
+                        repo.directory.insertUnit(u);
+                        handler.post(() -> {
+                            units.add(u);
+                            unitRows.get(index).unitId = u.uid;
+                            unitRows.get(index).unitName = u.name;
+                            renderUnitRows();
+                            updateRows();
+                        });
+                    });
+                    return;
+                }
+                int unitIndex = data.getIntExtra(PickerActivity.EXTRA_INDEX, -1);
+                if (unitIndex >= 0 && unitIndex < units.size()) {
+                    unitRows.get(index).unitId = units.get(unitIndex).uid;
+                    unitRows.get(index).unitName = units.get(unitIndex).name;
+                    renderUnitRows();
+                    updateRows();
+                }
             }
         }
     }
@@ -396,9 +596,12 @@ public class ProductEditActivity extends AppCompatActivity {
 
     private void loadReferences() {
         repo.run(() -> {
-            categories = repo.directory.getCategories();
-            brands = repo.directory.getBrands();
-            units = repo.directory.getUnits();
+            categories.clear();
+            categories.addAll(repo.directory.getCategories());
+            brands.clear();
+            brands.addAll(repo.directory.getBrands());
+            units.clear();
+            units.addAll(repo.directory.getUnits());
             if (productId != null) {
                 isNewProduct = false;
                 Product p = repo.products.getById(productId);
@@ -407,10 +610,11 @@ public class ProductEditActivity extends AppCompatActivity {
                     return;
                 }
                 List<ProductBarcode> extras = repo.products.getBarcodesByProduct(productId);
-                double currentQty = viewOnly ? repo.products.getCurrentQty(productId) : 0;
+                List<ProductUnit> existingUnits = repo.products.getUnitsByProduct(productId);
+                double currentQty = repo.products.getCurrentQty(productId);
                 handler.post(() -> {
                     findViewById(R.id.til_opening_stock).setVisibility(View.GONE);
-                    fillProduct(p);
+                    fillProduct(p, existingUnits);
                     extraBarcodes.clear();
                     for (ProductBarcode pb : extras) {
                         if (pb.barcode != null && !pb.barcode.trim().isEmpty()) {
@@ -418,31 +622,38 @@ public class ProductEditActivity extends AppCompatActivity {
                         }
                     }
                     renderBarcodes();
-                    if (viewOnly) {
-                        currentStockRow.setText("Current stock: " + NumberUtil.qty(currentQty));
-                    }
+                    currentStockRow.setText("Current stock: " + NumberUtil.qty(currentQty));
                 });
             } else {
                 handler.post(() -> {
-                    categoryId = categories.isEmpty() ? null : categories.get(0).uid;
-                    retailUnitId = units.isEmpty() ? null : units.get(0).uid;
-                    factorInput.setText("1");
+                    if (!units.isEmpty()) {
+                        UnitRow base = new UnitRow();
+                        base.unitId = units.get(0).uid;
+                        base.unitName = units.get(0).name;
+                        base.factor = 1;
+                        base.price = 0;
+                        base.isBase = true;
+                        base.sortOrder = 0;
+                        unitRows.add(base);
+                    }
+                    if (categories.isEmpty()) categoryId = null;
+                    syncingPrice = true;
+                    retailInput.setText("0");
+                    syncingPrice = false;
+                    renderUnitRows();
+                    updateRows();
                 });
             }
-            handler.post(this::updateRows);
         });
     }
 
-    private void fillProduct(Product p) {
+    private void fillProduct(Product p, List<ProductUnit> existingUnits) {
         nameInput.setText(p.name);
         barcodeInput.setText(p.barcode);
         skuInput.setText(p.sku);
-        retailInput.setText(String.valueOf(p.retailPrice));
-        wholesaleInput.setText(String.valueOf(p.wholesalePrice));
         costInput.setText(String.valueOf(p.costPrice));
-        reorderInput.setText(String.valueOf(p.reorderLevel));
         taxInput.setText(String.valueOf(p.taxPercent));
-        factorInput.setText(String.valueOf(p.wholesaleFactor));
+        reorderInput.setText(String.valueOf(p.reorderLevel));
         notesInput.setText(p.notes);
         activeSwitch.setChecked(p.isActive);
         imagePath = p.imagePath;
@@ -452,132 +663,91 @@ public class ProductEditActivity extends AppCompatActivity {
         }
         categoryId = p.categoryId;
         brandId = p.brandId;
-        retailUnitId = unitIdByName(p.retailUnit);
-        wholesaleUnitId = unitIdByName(p.wholesaleUnit);
-    }
 
-    private String unitIdByName(String name) {
-        if (name == null) return null;
-        for (Unit u : units) {
-            if (name.equals(u.name)) return u.uid;
+        unitRows.clear();
+        if (existingUnits != null && !existingUnits.isEmpty()) {
+            for (ProductUnit pu : existingUnits) {
+                UnitRow row = new UnitRow();
+                row.unitId = pu.unitId;
+                row.unitName = resolveUnitName(pu.unitId, pu.unitName);
+                row.factor = pu.factor <= 0 ? 1 : pu.factor;
+                row.price = pu.price;
+                row.isBase = pu.isBase;
+                row.sortOrder = pu.sortOrder;
+                unitRows.add(row);
+            }
+            boolean hasBase = false;
+            for (UnitRow row : unitRows) {
+                if (row.isBase) {
+                    hasBase = true;
+                    break;
+                }
+            }
+            if (!hasBase && !unitRows.isEmpty()) {
+                unitRows.get(0).isBase = true;
+                unitRows.get(0).factor = 1;
+                unitRows.get(0).sortOrder = 0;
+            }
+        } else {
+            UnitRow base = new UnitRow();
+            base.unitId = p.retailUnitId;
+            base.unitName = resolveUnitName(p.retailUnitId, p.retailUnit);
+            base.factor = 1;
+            base.price = p.retailPrice;
+            base.isBase = true;
+            base.sortOrder = 0;
+            unitRows.add(base);
+
+            if (p.wholesaleUnit != null && !p.wholesaleUnit.isEmpty()
+                    && (p.wholesalePrice > 0 || p.wholesaleFactor > 1
+                    || !p.wholesaleUnit.equals(p.retailUnit))) {
+                UnitRow bulk = new UnitRow();
+                bulk.unitId = p.wholesaleUnitId;
+                bulk.unitName = resolveUnitName(p.wholesaleUnitId, p.wholesaleUnit);
+                bulk.factor = Math.max(1, p.wholesaleFactor);
+                bulk.price = p.wholesalePrice;
+                bulk.isBase = false;
+                bulk.sortOrder = 1;
+                unitRows.add(bulk);
+            }
         }
-        return null;
+        syncingPrice = true;
+        retailInput.setText(unitRows.isEmpty() ? "" : String.valueOf(unitRows.get(0).price));
+        syncingPrice = false;
+        renderUnitRows();
     }
 
-    private void pickCategory() {
-        if (viewOnly) return;
-        List<String> names = new ArrayList<>();
-        for (Category c : categories) names.add(c.name);
-        names.add("+ New category");
-        DialogUtil.pick(this, "Category", names.toArray(new String[0]), -1, which -> {
-            if (which < categories.size()) {
-                categoryId = categories.get(which).uid;
-                updateRows();
-            } else {
-                DialogUtil.inputText(this, "New category", "Category name", "", "Add", value -> {
-                    if (value.trim().isEmpty()) return;
-                    Category c = new Category();
-                    c.uid = UUID.randomUUID().toString();
-                    c.name = value.trim();
-                    c.sortOrder = categories.size() + 1;
-                    c.createdAt = System.currentTimeMillis();
-                    repo.run(() -> {
-                        repo.directory.insertCategory(c);
-                        handler.post(() -> loadReferences());
-                    });
-                });
+    private String resolveUnitName(String unitId, String fallback) {
+        if (unitId != null) {
+            for (Unit u : units) {
+                if (unitId.equals(u.uid)) return u.name;
             }
-        });
-    }
-
-    private void pickBrand() {
-        if (viewOnly) return;
-        List<String> names = new ArrayList<>();
-        for (Brand b : brands) names.add(b.name);
-        names.add("+ New brand");
-        DialogUtil.pick(this, "Brand", names.toArray(new String[0]), -1, which -> {
-            if (which < brands.size()) {
-                brandId = brands.get(which).uid;
-                updateRows();
-            } else {
-                DialogUtil.inputText(this, "New brand", "Brand name", "", "Add", value -> {
-                    if (value.trim().isEmpty()) return;
-                    Brand b = new Brand();
-                    b.uid = UUID.randomUUID().toString();
-                    b.name = value.trim();
-                    b.createdAt = System.currentTimeMillis();
-                    repo.run(() -> {
-                        repo.directory.insertBrand(b);
-                        handler.post(() -> loadReferences());
-                    });
-                });
-            }
-        });
-    }
-
-    private void pickRetailUnit() {
-        if (viewOnly) return;
-        List<String> names = new ArrayList<>();
-        for (Unit u : units) names.add(u.name + (u.isWholesale ? " (wholesale)" : ""));
-        names.add("+ New unit");
-        DialogUtil.pick(this, "Retail unit", names.toArray(new String[0]), -1, which -> {
-            if (which < units.size()) {
-                retailUnitId = units.get(which).uid;
-                updateRows();
-            } else {
-                DialogUtil.inputText(this, "New unit", "Unit name (e.g. Piece)", "", "Add", value -> {
-                    if (value.trim().isEmpty()) return;
-                    Unit u = new Unit();
-                    u.uid = UUID.randomUUID().toString();
-                    u.name = value.trim();
-                    u.isWholesale = false;
-                    u.createdAt = System.currentTimeMillis();
-                    repo.run(() -> {
-                        repo.directory.insertUnit(u);
-                        handler.post(() -> loadReferences());
-                    });
-                });
-            }
-        });
-    }
-
-    private void pickWholesaleUnit() {
-        if (viewOnly) return;
-        List<String> names = new ArrayList<>();
-        for (Unit u : units) names.add(u.name);
-        names.add("None");
-        DialogUtil.pick(this, "Wholesale unit", names.toArray(new String[0]), -1, which -> {
-            if (which < units.size()) {
-                wholesaleUnitId = units.get(which).uid;
-            } else {
-                wholesaleUnitId = null;
-            }
-            updateRows();
-        });
+        }
+        if (fallback != null && !fallback.isEmpty()) return fallback;
+        return units.isEmpty() ? "Pcs" : units.get(0).name;
     }
 
     private void updateRows() {
+        UnitRow base = unitRows.isEmpty() ? null : unitRows.get(0);
+        if (base != null && base.unitName != null) {
+            retailUnitRow.setText("Unit: " + base.unitName);
+        }
         for (Category c : categories) {
             if (c.uid.equals(categoryId)) {
                 categoryRow.setText("Category: " + c.name);
                 break;
             }
         }
+        if (categoryId == null) categoryRow.setText("Category: Not set");
+        boolean foundBrand = false;
         for (Brand b : brands) {
             if (b.uid.equals(brandId)) {
                 brandRow.setText("Brand: " + b.name);
+                foundBrand = true;
                 break;
             }
         }
-        for (Unit u : units) {
-            if (u.uid.equals(retailUnitId)) {
-                retailUnitRow.setText("Retail: " + u.name);
-            }
-            if (u.uid.equals(wholesaleUnitId)) {
-                wholesaleUnitRow.setText("Wholesale: " + u.name);
-            }
-        }
-        if (wholesaleUnitId == null) wholesaleUnitRow.setText("Wholesale: none");
+        if (!foundBrand) brandRow.setText("Brand: Not set");
     }
 
     private void saveProduct() {
@@ -586,22 +756,38 @@ public class ProductEditActivity extends AppCompatActivity {
             Toast.makeText(this, "Product name is required", Toast.LENGTH_SHORT).show();
             return;
         }
+        if (unitRows.isEmpty()) {
+            Toast.makeText(this, "Choose a unit for the product", Toast.LENGTH_SHORT).show();
+            return;
+        }
         String barcode = barcodeInput.getText() == null ? "" : barcodeInput.getText().toString().trim();
         String sku = skuInput.getText() == null ? "" : skuInput.getText().toString().trim();
-        double retail = NumberUtil.parse(edit(retailInput), 0);
-        double wholesale = NumberUtil.parse(edit(wholesaleInput), retail);
-        double cost = NumberUtil.parse(edit(costInput), 0);
-        double reorder = NumberUtil.parse(edit(reorderInput), 0);
-        double tax = NumberUtil.parse(edit(taxInput), 0);
-        int factor = (int) NumberUtil.parse(edit(factorInput), 1);
-        if (factor < 1) factor = 1;
-        final int fFactor = factor;
-        double openingStock = isNewProduct
-                ? NumberUtil.parse(edit(openingStockInput), 0) : 0;
+        double cost = NumberUtil.parse(text(costInput), 0);
+        double tax = NumberUtil.parse(text(taxInput), 0);
+        double reorder = NumberUtil.parse(text(reorderInput), 0);
         String notes = notesInput.getText() == null ? "" : notesInput.getText().toString().trim();
+        double openingStock = isNewProduct ? NumberUtil.parse(text(openingStockInput), 0) : 0;
 
-        String retailUnitName = unitName(retailUnitId);
-        String wholesaleUnitName = unitName(wholesaleUnitId);
+        for (UnitRow row : unitRows) {
+            if (row.unitName == null || row.unitName.isEmpty()) {
+                Toast.makeText(this, "Every unit needs a name - tap a unit row to pick one",
+                        Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+
+        UnitRow base = unitRows.get(0);
+        UnitRow bulk = unitRows.size() > 1 ? unitRows.get(1) : null;
+        base.price = NumberUtil.parse(text(retailInput), base.price);
+        final String fRetailUnit = base.unitName;
+        final String fRetailUnitId = base.unitId;
+        final double fRetailPrice = base.price;
+        final String fWholesaleUnit = bulk == null ? null : bulk.unitName;
+        final String fWholesaleUnitId = bulk == null ? null : bulk.unitId;
+        final int fWholesaleFactor = bulk == null ? 1 : (int) Math.max(1, bulk.factor);
+        final double fWholesalePrice = bulk == null ? 0 : bulk.price;
+
+        final List<UnitRow> rowsSnapshot = new ArrayList<>(unitRows);
 
         repo.run(() -> {
             if (pendingImage != null) {
@@ -611,7 +797,7 @@ public class ProductEditActivity extends AppCompatActivity {
                 } catch (Exception ignored) {
                 }
             }
-            if (barcode != null && !barcode.isEmpty()) {
+            if (!barcode.isEmpty()) {
                 Product existing = repo.products.findByBarcode(barcode);
                 if (existing != null && !existing.uid.equals(productId)) {
                     handler.post(() -> Toast.makeText(this,
@@ -647,11 +833,13 @@ public class ProductEditActivity extends AppCompatActivity {
             p.sku = sku.isEmpty() ? null : sku;
             p.categoryId = categoryId;
             p.brandId = brandId;
-            p.retailUnit = retailUnitName;
-            p.wholesaleUnit = wholesaleUnitName;
-            p.wholesaleFactor = fFactor;
-            p.retailPrice = retail;
-            p.wholesalePrice = wholesale;
+            p.retailUnit = fRetailUnit;
+            p.retailUnitId = fRetailUnitId;
+            p.wholesaleUnit = fWholesaleUnit;
+            p.wholesaleUnitId = fWholesaleUnitId;
+            p.wholesaleFactor = fWholesaleFactor;
+            p.retailPrice = fRetailPrice;
+            p.wholesalePrice = fWholesalePrice;
             p.costPrice = cost;
             p.reorderLevel = reorder;
             p.taxPercent = tax;
@@ -661,12 +849,25 @@ public class ProductEditActivity extends AppCompatActivity {
             p.updatedAt = System.currentTimeMillis();
             if (isNew) {
                 repo.products.insert(p);
-                if (openingStock > 0) {
-                    repo.recordOpeningStock(p.uid, openingStock, retailUnitName);
-                }
             } else {
                 repo.products.update(p);
             }
+
+            repo.products.deleteUnitsForProduct(p.uid);
+            int order = 0;
+            for (UnitRow row : rowsSnapshot) {
+                ProductUnit pu = new ProductUnit();
+                pu.uid = UUID.randomUUID().toString();
+                pu.productId = p.uid;
+                pu.unitId = row.unitId;
+                pu.unitName = row.unitName;
+                pu.factor = row.isBase ? 1 : Math.max(1, row.factor);
+                pu.price = row.price;
+                pu.isBase = row.isBase;
+                pu.sortOrder = order++;
+                repo.products.insertProductUnit(pu);
+            }
+
             repo.products.deleteBarcodesForProduct(p.uid);
             for (String extraCode : extraBarcodes) {
                 if (extraCode.isEmpty() || extraCode.equals(barcode)) continue;
@@ -676,20 +877,16 @@ public class ProductEditActivity extends AppCompatActivity {
                 pb.barcode = extraCode;
                 repo.products.insertBarcode(pb);
             }
+            if (isNew && openingStock > 0) {
+                repo.recordOpeningStock(p.uid, openingStock, fRetailUnit);
+            }
             AppLogger.i("Saved product " + name);
             handler.post(this::finish);
         });
     }
 
-    private String edit(TextInputEditText input) {
+    private String text(TextInputEditText input) {
         return input.getText() == null ? "" : input.getText().toString();
-    }
-
-    private String unitName(String id) {
-        for (Unit u : units) {
-            if (u.uid.equals(id)) return u.name;
-        }
-        return "Pcs";
     }
 
     @Override
