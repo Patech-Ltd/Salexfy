@@ -1,6 +1,8 @@
 package com.patechltd.salexfypos.ui.more;
 
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -79,8 +81,11 @@ public class MoreFragment extends Fragment {
     }
 
     private void loadHeader() {
-        TextView name = getView() == null ? null : getView().findViewById(R.id.header_name);
-        TextView role = getView() == null ? null : getView().findViewById(R.id.header_role);
+        View v = getView();
+        if (v == null) return;
+        TextView name = v.findViewById(R.id.header_name);
+        TextView role = v.findViewById(R.id.header_role);
+        TextView avatar = v.findViewById(R.id.header_avatar);
         if (name == null) return;
         String userId = Session.userId(requireContext());
         repo.run(() -> {
@@ -91,17 +96,42 @@ public class MoreFragment extends Fragment {
             requireActivity().runOnUiThread(() -> {
                 name.setText(userName);
                 role.setText(roleName);
+                if (avatar != null) {
+                    String initials = initials(userName);
+                    avatar.setText(initials);
+                    GradientDrawable circle = new GradientDrawable();
+                    circle.setShape(GradientDrawable.OVAL);
+                    circle.setColor(avatarColor(userName));
+                    avatar.setBackground(circle);
+                }
             });
         });
-        String v = getVersion();
-        TextView version = getView().findViewById(R.id.header_version);
-        if (version != null) version.setText(v);
+        String versionText = getVersion();
+        TextView version = v.findViewById(R.id.header_version);
+        if (version != null) version.setText(versionText);
 
-        TextView backupSub = getView().findViewById(R.id.backup_subtitle);
+        TextView backupSub = v.findViewById(R.id.backup_subtitle);
         if (backupSub != null) {
             long last = Prefs.getLong(requireContext(), Prefs.KEY_LAST_BACKUP, 0);
-            backupSub.setText(last == 0 ? "Never backed up" : "Last backup " + com.patechltd.salexfypos.util.DateUtil.formatDate(last));
+            backupSub.setText(last == 0 ? "Never backed up"
+                    : "Last backup " + com.patechltd.salexfypos.util.DateUtil.formatDate(last));
         }
+    }
+
+    private static String initials(String name) {
+        if (name == null || name.isEmpty()) return "?";
+        String[] parts = name.trim().split("\\s+");
+        if (parts.length == 1) return parts[0].substring(0, Math.min(2, parts[0].length())).toUpperCase();
+        return (parts[0].charAt(0) + "" + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    private static int avatarColor(String name) {
+        int[] palette = {
+            0xFF0E7490, 0xFF0F766E, 0xFF6D28D9, 0xFF9333EA,
+            0xFFB45309, 0xFF0369A1, 0xFF047857, 0xFFBE185D
+        };
+        int idx = Math.abs(name == null ? 0 : name.hashCode()) % palette.length;
+        return palette[idx];
     }
 
     private String getVersion() {

@@ -57,6 +57,7 @@ dependencies {
     implementation libs.poi
     implementation libs.work.runtime
     coreLibraryDesugaring libs.desugar.jdk.libs
+    implementation libs.biometric
 
     testImplementation libs.junit
     androidTestImplementation libs.espresso.core

@@ -19,7 +19,7 @@
         <item name="colorError">@color/error</item>
         <item name="colorErrorContainer">@color/error_container</item>
         <item name="android:statusBarColor">@color/brand_primary_dark</item>
-        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:navigationBarColor">@color/brand_primary_dark</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="materialAlertDialogTheme">@style/AppAlertDialog</item>
         <item name="materialButtonStyle">@style/Widget.App.Button</item>
@@ -102,9 +102,16 @@
     </style>
 
     <style name="BottomNavActive" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">@color/brand_primary</item>
-        <item name="android:height">36dp</item>
-        <item name="android:width">64dp</item>
+        <item name="android:color">@color/brand_secondary</item>
+        <item name="android:height">34dp</item>
+        <item name="android:width">60dp</item>
+    </style>
+
+    <!-- Item rows in sell page: taller touch target -->
+    <style name="Widget.App.CartButton" parent="Widget.App.QtyButton">
+        <item name="android:minHeight">36dp</item>
+        <item name="android:layout_height">36dp</item>
+        <item name="cornerRadius">10dp</item>
     </style>
 
 </resources>

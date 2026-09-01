@@ -18,6 +18,7 @@ public class Prefs {
     public static final String KEY_BACKUP_FOLDER = "backup_folder";
     public static final String KEY_DEBUG_MODE = "debug_mode";
     public static final String KEY_APP_LOCK = "app_lock_enabled";
+    public static final String KEY_APP_LOCK_USE_BIOMETRIC = "app_lock_use_biometric";
     public static final String KEY_LAST_BACKUP = "last_backup_time";
     public static final String KEY_SEEDED = "db_seeded";
     public static final String KEY_RECEIPT_FOOTER = "receipt_footer";

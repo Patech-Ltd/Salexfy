@@ -15,10 +15,11 @@
         android:id="@+id/bottom_nav"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/surface"
-        android:paddingTop="4dp"
-        android:paddingBottom="4dp"
+        android:background="@color/brand_primary_dark"
+        android:elevation="8dp"
         app:itemActiveIndicatorStyle="@style/BottomNavActive"
+        app:itemIconTint="@color/nav_item_color"
+        app:itemTextColor="@color/nav_item_color"
         app:labelVisibilityMode="labeled"
         app:menu="@menu/menu_bottom" />
 

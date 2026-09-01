@@ -47,6 +47,7 @@
                     android:padding="16dp">
 
                     <TextView
+                        android:id="@+id/header_avatar"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
                         android:background="@drawable/bg_primary_gradient"

@@ -12,6 +12,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.patechltd.salexfypos.security.Session;
 import com.patechltd.salexfypos.ui.crash.CrashRecoveryActivity;
 import com.patechltd.salexfypos.ui.help.HelpFragment;
+import com.patechltd.salexfypos.ui.login.AppLockActivity;
 import com.patechltd.salexfypos.ui.login.LoginActivity;
 import com.patechltd.salexfypos.ui.more.MoreFragment;
 import com.patechltd.salexfypos.ui.products.ProductsFragment;
@@ -28,6 +29,8 @@ public class MainActivity extends AppCompatActivity {
     private ReportsFragment reportsFragment;
     private MoreFragment moreFragment;
     private int currentTab = -1;
+    // True after onCreate completes so onResume doesn't double-lock on first launch
+    private boolean launchedFromCreate = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,6 +69,19 @@ public class MainActivity extends AppCompatActivity {
             return true;
         });
         selectTab(0);
+        launchedFromCreate = true;
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (launchedFromCreate) {
+            launchedFromCreate = false;
+            return;
+        }
+        if (Prefs.getBoolean(this, Prefs.KEY_APP_LOCK, false)) {
+            startActivity(new Intent(this, AppLockActivity.class));
+        }
     }
 
     private void selectTab(int tab) {

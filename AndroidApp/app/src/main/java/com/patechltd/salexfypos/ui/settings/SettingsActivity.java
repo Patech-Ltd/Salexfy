@@ -6,7 +6,9 @@ import android.os.Bundle;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.patechltd.salexfypos.R;
+import com.patechltd.salexfypos.util.Prefs;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -35,5 +37,10 @@ public class SettingsActivity extends AppCompatActivity {
         if (getIntent().getBooleanExtra("openBackup", false)) {
             startActivity(new Intent(this, BackupSettingsActivity.class));
         }
+
+        SwitchMaterial appLockSwitch = findViewById(R.id.switch_app_lock);
+        appLockSwitch.setChecked(Prefs.getBoolean(this, Prefs.KEY_APP_LOCK, false));
+        appLockSwitch.setOnCheckedChangeListener((btn, checked) ->
+                Prefs.putBoolean(this, Prefs.KEY_APP_LOCK, checked));
     }
 }
