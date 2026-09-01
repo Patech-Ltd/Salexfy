@@ -93,7 +93,12 @@ public final class SyncManager {
         if (token.isEmpty() && obj.has("data")) {
             token = obj.optJSONObject("data").optString("token");
         }
-        return token.isEmpty() ? null : token;
+        if (token.isEmpty()) return null;
+        String shopId = obj.optString("shopId");
+        if (!shopId.isEmpty()) {
+            Prefs.putString(context, Prefs.KEY_SHOP_ID, shopId);
+        }
+        return token;
     }
 
     private static boolean push(Context context, Repository repo, String base, String token) {
@@ -178,7 +183,7 @@ public final class SyncManager {
         }
     }
 
-    private static synchronized String deviceId(Context context) {
+    public static synchronized String deviceId(Context context) {
         String id = Prefs.getString(context, Prefs.KEY_DEVICE_ID, null);
         if (id == null || id.isEmpty()) {
             id = "android-" + UUID.randomUUID().toString();

@@ -39,7 +39,7 @@ public class QuickAddProductActivity extends AppCompatActivity {
     private static final int REQ_PICK_CATEGORY = 5103;
 
     private Repository repo;
-    private TextInputEditText nameInput, priceInput, barcodeInput;
+    private TextInputEditText nameInput, priceInput, buyingPriceInput, barcodeInput;
     private TextView unitRow, categoryRow, feedback;
     private final List<Unit> units = new ArrayList<>();
     private final List<Category> categories = new ArrayList<>();
@@ -63,6 +63,7 @@ public class QuickAddProductActivity extends AppCompatActivity {
         repo = Repository.get(this);
         nameInput = findViewById(R.id.name);
         priceInput = findViewById(R.id.price);
+        buyingPriceInput = findViewById(R.id.buying_price);
         barcodeInput = findViewById(R.id.barcode);
         unitRow = findViewById(R.id.unit_row);
         categoryRow = findViewById(R.id.category_row);
@@ -104,6 +105,18 @@ public class QuickAddProductActivity extends AppCompatActivity {
         return null;
     }
 
+    private static Unit preferPiece(List<Unit> list) {
+        Unit first = null;
+        for (Unit u : list) {
+            if (first == null) first = u;
+            String n = u.name == null ? "" : u.name.trim().toLowerCase(java.util.Locale.ROOT);
+            if (n.equals("pc") || n.equals("pcs") || n.equals("piece") || n.contains("piece")) {
+                return u;
+            }
+        }
+        return first;
+    }
+
     private void loadReferences() {
         repo.run(() -> {
             List<Unit> us = repo.directory.getUnits();
@@ -114,8 +127,9 @@ public class QuickAddProductActivity extends AppCompatActivity {
                 categories.clear();
                 categories.addAll(cs);
                 if (unitId == null && !units.isEmpty()) {
-                    unitId = units.get(0).uid;
-                    unitName = units.get(0).name;
+                    Unit preferred = preferPiece(units);
+                    unitId = preferred.uid;
+                    unitName = preferred.name;
                 }
                 if (categoryId == null && !categories.isEmpty()) {
                     categoryId = categories.get(0).uid;
@@ -238,6 +252,16 @@ public class QuickAddProductActivity extends AppCompatActivity {
         }
         double price = NumberUtil.parse(priceInput.getText() == null ? ""
                 : priceInput.getText().toString(), 0);
+        double buyingPrice = NumberUtil.parse(buyingPriceInput.getText() == null ? ""
+                : buyingPriceInput.getText().toString(), 0);
+        if (price <= 0) {
+            Toast.makeText(this, "Selling price is required", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (buyingPrice <= 0) {
+            Toast.makeText(this, "Buying price is required", Toast.LENGTH_SHORT).show();
+            return;
+        }
         String barcode = barcodeInput.getText() == null ? "" : barcodeInput.getText().toString().trim();
         final String fUnitId = unitId;
         final String fUnitName = unitName == null ? "Pcs" : unitName;
@@ -268,7 +292,7 @@ public class QuickAddProductActivity extends AppCompatActivity {
                 p.wholesaleFactor = 1;
                 p.retailPrice = price;
                 p.wholesalePrice = 0;
-                p.costPrice = 0;
+                p.costPrice = buyingPrice;
                 p.reorderLevel = 0;
                 p.taxPercent = 0;
                 p.isActive = true;
@@ -296,6 +320,7 @@ public class QuickAddProductActivity extends AppCompatActivity {
                     } else {
                         nameInput.getText().clear();
                         priceInput.getText().clear();
+                        buyingPriceInput.getText().clear();
                         barcodeInput.getText().clear();
                         nameInput.requestFocus();
                         handler.postDelayed(() -> feedback.setVisibility(View.GONE), 2500);

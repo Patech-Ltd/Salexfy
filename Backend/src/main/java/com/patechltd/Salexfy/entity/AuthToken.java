@@ -16,6 +16,10 @@ public class AuthToken {
     @Column(nullable = false)
     private String username;
 
+    /** Multi-tenancy: shop the token was issued for. Used to scope sync. */
+    @Column(nullable = false)
+    private String shopId = "default";
+
     private long createdAt;
 
     private long expiresAt;
@@ -34,6 +38,14 @@ public class AuthToken {
 
     public void setUsername(String username) {
         this.username = username;
+    }
+
+    public String getShopId() {
+        return shopId;
+    }
+
+    public void setShopId(String shopId) {
+        this.shopId = shopId;
     }
 
     public long getCreatedAt() {

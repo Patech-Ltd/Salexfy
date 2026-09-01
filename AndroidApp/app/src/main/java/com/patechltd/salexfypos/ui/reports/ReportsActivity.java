@@ -23,6 +23,7 @@ import com.patechltd.salexfypos.db.CashierReportRow;
 import com.patechltd.salexfypos.db.DayReportRow;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.TopProductRow;
+import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.ExcelUtil;
@@ -43,11 +44,12 @@ public class ReportsActivity extends AppCompatActivity {
 
     private TextView rangeLabel, totalSales, totalCount, totalProfit, totalCost, creditSales, paymentsReceived, purchasesTotal, itemsSold;
     private TextView taxTotal, expensesTotal, netProfit, turnoverTotal;
-    private KeyValueAdapter dailyAdapter, cashierAdapter, topAdapter, paymentsAdapter;
+    private KeyValueAdapter dailyAdapter, cashierAdapter, topAdapter, paymentsAdapter, expensesAdapter;
 
     private long from = DateUtil.startOfDay(System.currentTimeMillis());
     private long to = DateUtil.endOfDay(System.currentTimeMillis());
     private boolean exportToday;
+    private final List<Expense> currentExpenses = new ArrayList<>();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -57,7 +59,8 @@ public class ReportsActivity extends AppCompatActivity {
         repo = Repository.get(this);
         exportToday = getIntent().getBooleanExtra("exportToday", false);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         bind();
         buildRangeChips();
@@ -93,6 +96,7 @@ public class ReportsActivity extends AppCompatActivity {
         cashierAdapter = new KeyValueAdapter();
         topAdapter = new KeyValueAdapter();
         paymentsAdapter = new KeyValueAdapter();
+        expensesAdapter = new KeyValueAdapter();
 
         RecyclerView dailyList = findViewById(R.id.daily_list);
         dailyList.setLayoutManager(new LinearLayoutManager(this));
@@ -110,12 +114,26 @@ public class ReportsActivity extends AppCompatActivity {
         paymentsList.setLayoutManager(new LinearLayoutManager(this));
         paymentsList.setAdapter(paymentsAdapter);
 
+        RecyclerView expensesList = findViewById(R.id.expenses_list);
+        expensesList.setLayoutManager(new LinearLayoutManager(this));
+        expensesList.setAdapter(expensesAdapter);
+        expensesAdapter.setListener(this::onExpenseRowClicked);
+
         findViewById(R.id.btn_export).setOnClickListener(v -> exportNow());
         findViewById(R.id.btn_add_expense).setOnClickListener(v -> showAddExpenseDialog());
+        findViewById(R.id.btn_view_all_days).setOnClickListener(v -> {
+            Intent i = new Intent(this, TotDaysActivity.class);
+            i.putExtra(TotDaysActivity.EXTRA_FROM, from);
+            i.putExtra(TotDaysActivity.EXTRA_TO, to);
+            i.putExtra(TotDaysActivity.EXTRA_TITLE,
+                    DateUtil.formatDate(from) + " — " + DateUtil.formatDate(to)
+                            + " · TOT (1.5% of sales)");
+            startActivity(i);
+        });
     }
 
     private void buildRangeChips() {
-        String[] names = {"Today", "Yesterday", "7 Days", "This Month", "Custom"};
+        String[] names = {"Today", "Yesterday", "Last 7 Days", "Last 30 Days", "This Month", "Previous Month", "Custom"};
         android.widget.LinearLayout host = findViewById(R.id.range_chips);
         for (int i = 0; i < names.length; i++) {
             TextView chip = new TextView(this);
@@ -164,11 +182,28 @@ public class ReportsActivity extends AppCompatActivity {
                 rangeLabel.setText("Last 7 days");
                 break;
             case 3:
+                from = DateUtil.startOfDay(now - 29 * 86400000L);
+                to = DateUtil.endOfDay(now);
+                rangeLabel.setText("Last 30 days");
+                break;
+            case 4:
                 from = DateUtil.startOfMonth(now);
                 to = DateUtil.endOfDay(now);
                 rangeLabel.setText("This month");
                 break;
-            case 4:
+            case 5:
+                Calendar prev = Calendar.getInstance();
+                prev.set(Calendar.DAY_OF_MONTH, 1);
+                prev.add(Calendar.MONTH, -1);
+                from = DateUtil.startOfDay(prev.getTimeInMillis());
+                prev.set(Calendar.DAY_OF_MONTH, prev.getActualMaximum(Calendar.DAY_OF_MONTH));
+                prev.set(Calendar.HOUR_OF_DAY, 23);
+                prev.set(Calendar.MINUTE, 59);
+                prev.set(Calendar.SECOND, 59);
+                to = prev.getTimeInMillis();
+                rangeLabel.setText("Previous month");
+                break;
+            case 6:
                 pickCustomRange();
                 break;
         }
@@ -210,8 +245,12 @@ public class ReportsActivity extends AppCompatActivity {
             double credit = repo.sales.creditSalesBetween(from, to);
             double payments = repo.suppliers.paymentsBetween(from, to);
             double purchases = repo.purchases.purchasesTotal(from, to);
-            double tax = repo.sales.taxTotal(from, to);
+            double tax = com.patechltd.salexfypos.util.TaxUtil.tot(repo.sales.subtotalTotal(from, to));
             double expenses = repo.expenses.totalBetween(from, to);
+            List<Expense> expenseList =
+                    repo.expenses.getBetween(from, to);
+            currentExpenses.clear();
+            currentExpenses.addAll(expenseList);
             List<DayReportRow> days = repo.sales.getDailyReport(from, to);
             List<CashierReportRow> cashiers = repo.sales.getCashierReport(from, to);
             List<TopProductRow> tops = repo.sales.getTopProducts(from, to, 10);
@@ -237,7 +276,7 @@ public class ReportsActivity extends AppCompatActivity {
                 List<KeyValueAdapter.Row> dailyRows = new ArrayList<>();
                 for (DayReportRow d : days) {
                     dailyRows.add(new KeyValueAdapter.Row(
-                            DateUtil.formatDate(d.dayStart),
+                            DateUtil.formatDate(DateUtil.startOfDay(d.dayStart)),
                             d.saleCount + " sales • " + d.itemCount + " items • Profit "
                                     + currency + " " + NumberUtil.money(d.profit),
                             currency + " " + NumberUtil.money(d.totalSales),
@@ -280,6 +319,21 @@ public class ReportsActivity extends AppCompatActivity {
                     paymentRows.add(new KeyValueAdapter.Row("No payments", "in this period", "", 0));
                 }
                 paymentsAdapter.submit(paymentRows);
+
+                List<KeyValueAdapter.Row> expenseRows = new ArrayList<>();
+                for (com.patechltd.salexfypos.db.entity.Expense e : expenseList) {
+                    String sub = DateUtil.formatDate(e.expenseDate);
+                    if (e.category != null && !e.category.isEmpty()) sub += " • " + e.category;
+                    expenseRows.add(new KeyValueAdapter.Row(
+                            e.description == null || e.description.isEmpty() ? "Expense" : e.description,
+                            sub,
+                            currency + " " + NumberUtil.money(e.amount),
+                            0xFFB00020));
+                }
+                if (expenseRows.isEmpty()) {
+                    expenseRows.add(new KeyValueAdapter.Row("No expenses", "in this period", "", 0));
+                }
+                expensesAdapter.submit(expenseRows);
             });
         });
     }
@@ -323,6 +377,94 @@ public class ReportsActivity extends AppCompatActivity {
                 .show();
     }
 
+    private void onExpenseRowClicked(int position) {
+        if (position < 0 || position >= currentExpenses.size()) return;
+        Expense expense = currentExpenses.get(position);
+        String[] actions = {"Edit", "Delete"};
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(expense.description == null || expense.description.isEmpty() ? "Expense" : expense.description)
+                .setItems(actions, (dialog, which) -> {
+                    if (which == 0) showEditExpenseDialog(expense);
+                    else confirmDeleteExpense(expense);
+                })
+                .show();
+    }
+
+    private void showEditExpenseDialog(Expense expense) {
+        View view = getLayoutInflater().inflate(R.layout.dialog_edit_expense, null);
+        TextInputEditText dateInput = view.findViewById(R.id.expense_date);
+        TextInputEditText desc = view.findViewById(R.id.expense_desc);
+        TextInputEditText amount = view.findViewById(R.id.expense_amount);
+        TextInputEditText category = view.findViewById(R.id.expense_category);
+
+        final long[] expenseDate = {expense.expenseDate};
+        dateInput.setText(DateUtil.formatDate(expenseDate[0]));
+        desc.setText(expense.description);
+        amount.setText(NumberUtil.money(expense.amount));
+        category.setText(expense.category == null ? "" : expense.category);
+        dateInput.setOnClickListener(v -> {
+            Calendar cal = Calendar.getInstance();
+            cal.setTimeInMillis(expenseDate[0]);
+            new DatePickerDialog(this, (d, y, m, day) -> {
+                Calendar c = Calendar.getInstance();
+                c.clear();
+                c.set(y, m, day);
+                expenseDate[0] = c.getTimeInMillis();
+                dateInput.setText(DateUtil.formatDate(expenseDate[0]));
+            }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show();
+        });
+
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Edit expense")
+                .setView(view)
+                .setPositiveButton("Save", (dialog, which) -> {
+                    String d = desc.getText() == null ? "" : desc.getText().toString().trim();
+                    double amt = NumberUtil.parse(amount.getText() == null ? "" : amount.getText().toString(), 0);
+                    if (d.isEmpty()) {
+                        DialogUtil.toast(this, "Enter a description");
+                        return;
+                    }
+                    if (amt <= 0) {
+                        DialogUtil.toast(this, "Enter a valid amount");
+                        return;
+                    }
+                    String cat = category.getText() == null ? "" : category.getText().toString().trim();
+                    final Expense copy = new Expense();
+                    copy.uid = expense.uid;
+                    copy.description = d;
+                    copy.category = cat;
+                    copy.amount = amt;
+                    copy.expenseDate = expenseDate[0];
+                    copy.createdBy = expense.createdBy;
+                    copy.createdAt = expense.createdAt;
+                    repo.run(() -> {
+                        repo.updateExpense(copy);
+                        handler.post(() -> {
+                            DialogUtil.toast(this, "Expense updated");
+                            load();
+                        });
+                    });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void confirmDeleteExpense(Expense expense) {
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Delete expense")
+                .setMessage("Delete \"" + (expense.description == null || expense.description.isEmpty()
+                        ? "Expense" : expense.description) + "\"?")
+                .setPositiveButton("Delete", (dialog, which) -> repo.run(() -> {
+                    repo.deleteExpense(expense.uid);
+                    handler.post(() -> {
+                        DialogUtil.toast(this, "Expense deleted");
+                        load();
+                    });
+                }))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -343,7 +485,7 @@ public class ReportsActivity extends AppCompatActivity {
                             }
                             @Override public Object[] row(Object item, int index) {
                                 DayReportRow d = (DayReportRow) item;
-                                return new Object[]{DateUtil.formatDate(d.dayStart), d.totalSales, d.totalCost, d.profit, d.itemCount, d.saleCount};
+                                return new Object[]{DateUtil.formatDate(DateUtil.startOfDay(d.dayStart)), d.totalSales, d.totalCost, d.profit, d.itemCount, d.saleCount};
                             }
                         }));
                 sections.add(new ExcelUtil.Section("Cashiers", cashiers,

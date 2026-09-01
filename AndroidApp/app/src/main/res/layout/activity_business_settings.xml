@@ -122,7 +122,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:hint="Tax percentage (e.g. 16)">
+                        android:hint="Tax percentage (1.5 = TOT)">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/input_tax"

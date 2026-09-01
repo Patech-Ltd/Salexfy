@@ -8,10 +8,13 @@ import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
 import com.patechltd.salexfypos.backup.BackupWorker;
+import com.patechltd.salexfypos.db.AppDatabase;
 import com.patechltd.salexfypos.db.Repository;
+import com.patechltd.salexfypos.license.LicenseManager;
 import com.patechltd.salexfypos.sync.SyncWorker;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.CrashHandler;
+import com.patechltd.salexfypos.util.Notifier;
 import com.patechltd.salexfypos.util.Prefs;
 import com.patechltd.salexfypos.util.SoundUtil;
 
@@ -27,9 +30,28 @@ public class SalexfyApp extends Application {
         AppLogger.i("Salexfy POS starting");
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
         SoundUtil.init(context);
+        Notifier.ensureChannels(context);
+        AppDatabase.warmUp(context);
         seedIfNeeded(context);
         scheduleAutoBackup(context);
         scheduleSync(context);
+        validateLicenseInBackground(context);
+    }
+
+    /**
+     * Kicks off a background license validation. Never blocks startup. If the
+     * license is found invalid/expired from a responsive server, we record that
+     * in prefs; the gate itself is enforced in MainActivity so the user is not
+     * locked mid-launch.
+     */
+    private void validateLicenseInBackground(Context context) {
+        new Thread(() -> {
+            try {
+                LicenseManager.validate(context);
+            } catch (Throwable t) {
+                AppLogger.d("License background check failed: " + t.getMessage());
+            }
+        }).start();
     }
 
     private void seedIfNeeded(Context context) {

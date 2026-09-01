@@ -14,10 +14,18 @@ public class StorageUtil {
     }
 
     public static void createReportUri(Activity activity, String stamp) {
+        createReportUri(activity, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx", "sales_report_" + stamp);
+    }
+
+    public static void createReportUri(Activity activity, String mime, String extension, String stamp) {
+        activity.startActivityForResult(createReportIntent(mime, extension, stamp), REQ_CREATE_REPORT);
+    }
+
+    public static Intent createReportIntent(String mime, String extension, String stamp) {
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-        intent.setType("application/vnd.ms-excel");
+        intent.setType(mime);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
-        intent.putExtra(Intent.EXTRA_TITLE, "sales_report_" + stamp + ".xls");
-        activity.startActivityForResult(intent, REQ_CREATE_REPORT);
+        intent.putExtra(Intent.EXTRA_TITLE, "report_" + stamp + "." + extension);
+        return intent;
     }
 }

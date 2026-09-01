@@ -626,10 +626,11 @@ public class ProductEditActivity extends AppCompatActivity {
                 });
             } else {
                 handler.post(() -> {
-                    if (!units.isEmpty()) {
+                    Unit unit = defaultUnit(units);
+                    if (unit != null) {
                         UnitRow base = new UnitRow();
-                        base.unitId = units.get(0).uid;
-                        base.unitName = units.get(0).name;
+                        base.unitId = unit.uid;
+                        base.unitName = unit.name;
                         base.factor = 1;
                         base.price = 0;
                         base.isBase = true;
@@ -724,7 +725,21 @@ public class ProductEditActivity extends AppCompatActivity {
             }
         }
         if (fallback != null && !fallback.isEmpty()) return fallback;
-        return units.isEmpty() ? "Pcs" : units.get(0).name;
+        Unit unit = defaultUnit(units);
+        return unit == null ? "Pcs" : unit.name;
+    }
+
+    /** Prefers a "piece"-style unit so new products default to it. */
+    private static Unit defaultUnit(List<Unit> list) {
+        Unit first = null;
+        for (Unit u : list) {
+            if (first == null) first = u;
+            String n = u.name == null ? "" : u.name.trim().toLowerCase(java.util.Locale.ROOT);
+            if (n.equals("pc") || n.equals("pcs") || n.equals("piece") || n.contains("piece")) {
+                return u;
+            }
+        }
+        return first;
     }
 
     private void updateRows() {
@@ -768,6 +783,11 @@ public class ProductEditActivity extends AppCompatActivity {
         String notes = notesInput.getText() == null ? "" : notesInput.getText().toString().trim();
         double openingStock = isNewProduct ? NumberUtil.parse(text(openingStockInput), 0) : 0;
 
+        if (cost <= 0) {
+            Toast.makeText(this, "Buying price is required", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         for (UnitRow row : unitRows) {
             if (row.unitName == null || row.unitName.isEmpty()) {
                 Toast.makeText(this, "Every unit needs a name - tap a unit row to pick one",
@@ -779,6 +799,10 @@ public class ProductEditActivity extends AppCompatActivity {
         UnitRow base = unitRows.get(0);
         UnitRow bulk = unitRows.size() > 1 ? unitRows.get(1) : null;
         base.price = NumberUtil.parse(text(retailInput), base.price);
+        if (base.price <= 0) {
+            Toast.makeText(this, "Selling price is required", Toast.LENGTH_SHORT).show();
+            return;
+        }
         final String fRetailUnit = base.unitName;
         final String fRetailUnitId = base.unitId;
         final double fRetailPrice = base.price;

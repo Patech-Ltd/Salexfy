@@ -123,6 +123,24 @@
                             android:inputType="number"
                             android:maxLines="1" />
                     </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:hint="License key (if licensed)"
+                        app:counterEnabled="true"
+                        app:counterMaxLength="24"
+                        app:helperText="Leave blank for offline/unlicensed use">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/input_license_key"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textCapCharacters"
+                            android:maxLines="1" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

@@ -215,12 +215,22 @@ public abstract class ProductDao {
             + "WHERE productId IN (:ids) GROUP BY productId")
     public abstract List<ProductQty> getQtys(List<String> ids);
 
+    @Query("SELECT productId, SUM(qty) AS qty FROM stock_movements GROUP BY productId")
+    public abstract List<ProductQty> getAllQtys();
+
     @Query("SELECT * FROM products WHERE (:query = '' OR name LIKE '%' || :query || '%' "
             + "OR barcode LIKE '%' || :query || '%' OR sku LIKE '%' || :query || '%' "
             + "OR id IN (SELECT productId FROM product_barcodes WHERE barcode LIKE '%' || :query || '%')) "
             + "AND (:categoryId IS NULL OR categoryId = :categoryId) "
             + "AND isActive = 1 ORDER BY name ASC")
     public abstract LiveData<List<Product>> searchActive(String query, String categoryId);
+
+    @Query("SELECT * FROM products WHERE (:query = '' OR name LIKE '%' || :query || '%' "
+            + "OR barcode LIKE '%' || :query || '%' OR sku LIKE '%' || :query || '%' "
+            + "OR id IN (SELECT productId FROM product_barcodes WHERE barcode LIKE '%' || :query || '%')) "
+            + "AND (:categoryId IS NULL OR categoryId = :categoryId) "
+            + "AND isActive = 1 ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    public abstract List<Product> searchActivePage(String query, String categoryId, int limit, int offset);
 
     @Query("SELECT p.id as productId, p.name, p.barcode, COALESCE(p.retailUnit,'Pcs') as unitLabel, "
             + "COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) as currentQty, "
@@ -239,6 +249,16 @@ public abstract class ProductDao {
             + "AND COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) <= p.reorderLevel "
             + "ORDER BY p.name ASC")
     public abstract LiveData<List<Product>> observeLowStock();
+
+    @Query("SELECT p.id AS productId, p.name AS name, p.barcode AS barcode, "
+            + "COALESCE(p.retailUnit, 'Pcs') AS unitLabel, "
+            + "COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) AS currentQty, "
+            + "p.reorderLevel AS reorderLevel, p.isActive AS isActive "
+            + "FROM products p "
+            + "WHERE p.isActive = 1 "
+            + "AND COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) <= p.reorderLevel "
+            + "ORDER BY COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) ASC, p.name ASC")
+    public abstract LiveData<List<StockRow>> observeLowStockRows();
 
     @Query("SELECT COUNT(*) FROM products WHERE isActive = 1")
     public abstract LiveData<Integer> observeActiveCount();

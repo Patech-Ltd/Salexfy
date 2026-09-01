@@ -26,11 +26,11 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.CartAdapter;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Product;
-import com.patechltd.salexfypos.db.entity.ProductBarcode;
 import com.patechltd.salexfypos.db.entity.ProductUnit;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
@@ -40,7 +40,6 @@ import com.patechltd.salexfypos.model.PaymentMethod;
 import com.patechltd.salexfypos.scanner.ScannerView;
 import com.patechltd.salexfypos.security.PermissionChecker;
 import com.patechltd.salexfypos.security.Session;
-import com.patechltd.salexfypos.sync.SyncEvents;
 import com.patechltd.salexfypos.ui.products.QuickAddProductActivity;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.DialogUtil;
@@ -60,20 +59,14 @@ public class SellFragment extends Fragment {
     private ScannerView scanner;
     private CartAdapter cartAdapter;
     private final List<SaleItem> cart = new ArrayList<>();
-    private final Map<String, Product> byBarcode = new HashMap<>();
-    private final List<Product> products = new ArrayList<>();
-    private final Map<String, List<ProductUnit>> unitsByProduct = new HashMap<>();
-    private final Map<String, String> unitNameById = new HashMap<>();
     private boolean wholesaleMode;
     private Sale currentSale;
     private TextView subtotalView, taxView, totalView, itemCountView, feedbackView, transNoView;
     private MaterialButton btnHold, btnCheckout, btnPause, btnTogglePreview, btnSearch;
-    private View previewContainer;
+    private View previewContainer, emptyCartView;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable syncListener = () -> handler.post(this::loadProducts);
     private boolean previewVisible = true;
     private boolean scanningPaused = false;
-    private boolean productsLoaded;
     private static final int REQ_PAYMENT = 4101;
     private static final int REQ_PRODUCT_SEARCH = 4102;
     private static final int REQ_HELD = 4103;
@@ -95,6 +88,7 @@ public class SellFragment extends Fragment {
 
         scanner = view.findViewById(R.id.scanner);
         previewContainer = view.findViewById(R.id.preview_container);
+        emptyCartView = view.findViewById(R.id.empty_cart);
         RecyclerView cartList = view.findViewById(R.id.cart_list);
         subtotalView = view.findViewById(R.id.subtotal);
         taxView = view.findViewById(R.id.tax_amount);
@@ -108,6 +102,8 @@ public class SellFragment extends Fragment {
         btnTogglePreview = view.findViewById(R.id.btn_toggle_preview);
         btnSearch = view.findViewById(R.id.btn_search);
         view.findViewById(R.id.btn_sales).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), SalesHistoryActivity.class)));
+        view.findViewById(R.id.btn_recent_sales).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), SalesHistoryActivity.class)));
         view.findViewById(R.id.btn_manual_sale).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), ManualSaleActivity.class)));
@@ -156,21 +152,19 @@ public class SellFragment extends Fragment {
         btnSearch.setOnClickListener(v -> openProductSearch());
         view.findViewById(R.id.btn_held).setOnClickListener(v -> openHeldList());
 
-        loadProducts();
+        updateHeldBadge();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        SyncEvents.addListener(syncListener);
         ensurePermissionAndStart();
-        loadProducts();
+        updateHeldBadge();
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        SyncEvents.removeListener(syncListener);
         scanner.stop();
     }
 
@@ -199,70 +193,41 @@ public class SellFragment extends Fragment {
         }
     }
 
-    private void loadProducts() {
+    private void updateHeldBadge() {
         repo.run(() -> {
-            List<Product> all = repo.products.getAllActive();
-            List<ProductBarcode> extra = repo.products.getAllBarcodes();
-            List<ProductUnit> allUnits = repo.products.getAllProductUnits();
-            List<com.patechltd.salexfypos.db.entity.Unit> units = repo.directory.getUnits();
+            int count = repo.sales.getHeld().size();
             handler.post(() -> {
-                products.clear();
-                products.addAll(all);
-                byBarcode.clear();
-                Map<String, Product> byId = new HashMap<>();
-                for (Product p : all) {
-                    byId.put(p.uid, p);
-                    if (p.barcode != null && !p.barcode.isEmpty()) {
-                        byBarcode.put(p.barcode.trim(), p);
-                    }
+                if (getActivity() instanceof com.patechltd.salexfypos.MainActivity) {
+                    ((com.patechltd.salexfypos.MainActivity) getActivity()).updateHeldBadge(count);
                 }
-                for (ProductBarcode pb : extra) {
-                    Product p = pb.barcode == null ? null : byId.get(pb.productId);
-                    if (p != null && !pb.barcode.trim().isEmpty()) {
-                        byBarcode.put(pb.barcode.trim(), p);
-                    }
-                }
-                unitsByProduct.clear();
-                for (ProductUnit pu : allUnits) {
-                    List<ProductUnit> list = unitsByProduct.get(pu.productId);
-                    if (list == null) {
-                        list = new ArrayList<>();
-                        unitsByProduct.put(pu.productId, list);
-                    }
-                    list.add(pu);
-                }
-                unitNameById.clear();
-                for (com.patechltd.salexfypos.db.entity.Unit u : units) {
-                    unitNameById.put(u.uid, u.name);
-                }
-                productsLoaded = true;
             });
         });
     }
 
     private void handleScan(String code) {
-        if (!productsLoaded) {
-            loadProducts();
-            handler.postDelayed(() -> handleScan(code), 150);
-            return;
-        }
-        Product product = byBarcode.get(code.trim());
-        if (product == null) {
-            SoundUtil.errorBeep();
-            showFeedback("Product not found", false);
-            new MaterialAlertDialogBuilder(requireContext())
-                    .setTitle("Unknown barcode")
-                    .setMessage("No product has barcode " + code + ".\nAdd it quickly?")
-                    .setPositiveButton("Quick add", (d, w) -> {
-                        Intent i = new Intent(requireContext(), QuickAddProductActivity.class);
-                        i.putExtra("barcode", code);
-                        startActivity(i);
-                    })
-                    .setNegativeButton("Cancel", null)
-                    .show();
-            return;
-        }
-        addToCart(product);
+        final String trimmed = code == null ? "" : code.trim();
+        if (trimmed.isEmpty()) return;
+        repo.run(() -> {
+            Product product = repo.products.findActiveByBarcode(trimmed);
+            handler.post(() -> {
+                if (product == null) {
+                    SoundUtil.errorBeep();
+                    showFeedback("Product not found", false);
+                    new MaterialAlertDialogBuilder(requireContext())
+                            .setTitle("Unknown barcode")
+                            .setMessage("No product has barcode " + trimmed + ".\nAdd it quickly?")
+                            .setPositiveButton("Quick add", (d, w) -> {
+                                Intent i = new Intent(requireContext(), QuickAddProductActivity.class);
+                                i.putExtra("barcode", trimmed);
+                                startActivity(i);
+                            })
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                } else {
+                    addToCart(product);
+                }
+            });
+        });
     }
 
     private void addToCart(Product product) {
@@ -287,6 +252,7 @@ public class SellFragment extends Fragment {
         }
 
         SaleItem item = new SaleItem();
+        item.uid = UUID.randomUUID().toString();
         item.productId = product.uid;
         item.productName = product.name;
         item.barcode = product.barcode;
@@ -306,13 +272,9 @@ public class SellFragment extends Fragment {
 
     private String resolveUnitLabel(Product p, boolean wholesale) {
         if (wholesale) {
-            String name = unitNameById.get(p.wholesaleUnitId);
-            if (name != null && !name.isEmpty()) return name;
             if (p.wholesaleUnit != null && !p.wholesaleUnit.isEmpty()) return p.wholesaleUnit;
             return resolveUnitLabel(p, false);
         }
-        String name = unitNameById.get(p.retailUnitId);
-        if (name != null && !name.isEmpty()) return name;
         if (p.retailUnit != null && !p.retailUnit.isEmpty()) return p.retailUnit;
         return "Pcs";
     }
@@ -332,26 +294,49 @@ public class SellFragment extends Fragment {
 
     private void convertCartPrices() {
         if (cart.isEmpty()) return;
-        for (SaleItem item : cart) {
-            Product p = findProduct(item.productId);
-            if (p == null) continue;
-            item.isWholesale = wholesaleMode;
-            item.unitLabel = resolveUnitLabel(p, wholesaleMode);
-            double price = wholesaleMode ? p.wholesalePrice : p.retailPrice;
-            if (price <= 0) price = wholesaleMode ? p.retailPrice : p.wholesalePrice;
-            item.unitPrice = price;
-            int factor = wholesaleMode ? Math.max(1, p.wholesaleFactor) : 1;
-            item.factor = factor;
-            item.stockQty = item.qty * factor;
-            item.lineTotal = item.qty * item.unitPrice;
-        }
-        afterCartChange();
-        showFeedback(wholesaleMode ? "Prices switched to wholesale" : "Prices switched to retail", false);
+        repo.run(() -> {
+            Map<String, Product> byId = new HashMap<>();
+            for (SaleItem item : cart) {
+                if (!byId.containsKey(item.productId)) {
+                    Product p = repo.products.getById(item.productId);
+                    if (p != null) byId.put(item.productId, p);
+                }
+            }
+            handler.post(() -> {
+                boolean changed = false;
+                for (SaleItem item : cart) {
+                    Product p = byId.get(item.productId);
+                    if (p == null) continue;
+                    changed = true;
+                    item.isWholesale = wholesaleMode;
+                    item.unitLabel = resolveUnitLabel(p, wholesaleMode);
+                    double price = wholesaleMode ? p.wholesalePrice : p.retailPrice;
+                    if (price <= 0) price = wholesaleMode ? p.retailPrice : p.wholesalePrice;
+                    item.unitPrice = price;
+                    int factor = wholesaleMode ? Math.max(1, p.wholesaleFactor) : 1;
+                    item.factor = factor;
+                    item.stockQty = item.qty * factor;
+                    item.lineTotal = item.qty * item.unitPrice;
+                }
+                if (changed) {
+                    afterCartChange();
+                    showFeedback(wholesaleMode ? "Prices switched to wholesale" : "Prices switched to retail", false);
+                }
+            });
+        });
     }
 
     private void editLine(int position) {
         SaleItem item = cart.get(position);
-        Product product = findProduct(item.productId);
+        repo.run(() -> {
+            Product loaded = repo.products.getById(item.productId);
+            List<ProductUnit> loadedUnits = loaded == null ? null
+                    : repo.products.getUnitsByProduct(loaded.uid);
+            handler.post(() -> buildEditLineDialog(item, loaded, loadedUnits));
+        });
+    }
+
+    private void buildEditLineDialog(SaleItem item, Product product, List<ProductUnit> productUnits) {
         View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_edit_line, null);
 
         TextView title = view.findViewById(R.id.line_title);
@@ -366,12 +351,17 @@ public class SellFragment extends Fragment {
         title.setText(item.productName);
         qtyInput.setText(String.valueOf(item.qty));
         priceInput.setText(String.valueOf(item.unitPrice));
+        priceInput.setEnabled(false);
+        priceInput.setFocusable(false);
+        TextInputLayout priceLayout = view.findViewById(R.id.line_price_layout);
+        if (priceLayout != null) {
+            priceLayout.setHelperText("Price is fixed at the saved product price");
+        }
 
-        List<ProductUnit> productUnits = product == null ? null : unitsByProduct.get(product.uid);
         if (productUnits != null && !productUnits.isEmpty()) {
             for (ProductUnit pu : productUnits) {
                 Chip chip = new Chip(requireContext());
-                chip.setText(unitNameFor(pu.unitId, pu.unitName));
+                chip.setText(pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName);
                 chip.setTag(pu);
                 chip.setCheckable(true);
                 chip.setChecked(pu.unitName != null && pu.unitName.equals(item.unitLabel));
@@ -411,7 +401,7 @@ public class SellFragment extends Fragment {
             Object tag = chip.getTag();
             if (tag instanceof ProductUnit) {
                 ProductUnit pu = (ProductUnit) tag;
-                selectedUnitName[0] = unitNameFor(pu.unitId, pu.unitName);
+                selectedUnitName[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
                 selectedPrice[0] = pu.price;
                 selectedFactor[0] = Math.max(1, pu.factor);
                 priceInput.setText(String.valueOf(pu.price));
@@ -481,22 +471,6 @@ public class SellFragment extends Fragment {
                 .show();
     }
 
-    private String unitNameFor(String unitId, String fallback) {
-        if (unitId != null) {
-            String name = unitNameById.get(unitId);
-            if (name != null && !name.isEmpty()) return name;
-        }
-        if (fallback != null && !fallback.isEmpty()) return fallback;
-        return "Unit";
-    }
-
-    private Product findProduct(String id) {
-        for (Product p : products) {
-            if (p.uid.equals(id)) return p;
-        }
-        return null;
-    }
-
     private void afterCartChange() {
         cartAdapter.submit(cart);
         itemCountView.setText(cart.size() + " item" + (cart.size() == 1 ? "" : "s"));
@@ -504,6 +478,12 @@ public class SellFragment extends Fragment {
         updateTotals();
         scheduleDraftSave();
         autoManagePreview();
+        updateEmptyState();
+    }
+
+    private void updateEmptyState() {
+        if (emptyCartView == null) return;
+        emptyCartView.setVisibility(cart.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     private void updateTransNo() {
@@ -526,9 +506,9 @@ public class SellFragment extends Fragment {
 
     private void autoManagePreview() {
         int size = cart.size();
-        if (size >= 8 && previewVisible) {
+        if (size >= 10 && previewVisible) {
             setPreviewVisible(false);
-        } else if (size < 6 && !previewVisible) {
+        } else if (size < 8 && !previewVisible) {
             setPreviewVisible(true);
         }
     }
@@ -627,6 +607,7 @@ public class SellFragment extends Fragment {
         updateTransNo();
         updateTotals();
         autoManagePreview();
+        updateEmptyState();
     }
 
     private void openCheckout() {
@@ -727,17 +708,12 @@ public class SellFragment extends Fragment {
         if (requestCode == REQ_PRODUCT_SEARCH && resultCode == android.app.Activity.RESULT_OK && data != null) {
             String productId = data.getStringExtra(ProductSearchActivity.EXTRA_PRODUCT_ID);
             if (productId != null) {
-                Product p = findProduct(productId);
-                if (p == null) {
-                    repo.run(() -> {
-                        Product loaded = repo.products.getById(productId);
-                        if (loaded != null && loaded.isActive) {
-                            handler.post(() -> addToCart(loaded));
-                        }
-                    });
-                } else {
-                    addToCart(p);
-                }
+                repo.run(() -> {
+                    Product loaded = repo.products.getById(productId);
+                    if (loaded != null && loaded.isActive) {
+                        handler.post(() -> addToCart(loaded));
+                    }
+                });
             }
             return;
         }
@@ -850,6 +826,7 @@ public class SellFragment extends Fragment {
             final double fEarned = NumberUtil.round2(sale.total
                     * Prefs.getDouble(requireContext(), Prefs.KEY_LOYALTY_POINTS_PER_MONEY, 1.0));
             sale.pointsEarned = fEarned;
+            final double fCustomerBalance = repo.outstandingDebt(resolvedCustomerId);
 
             try {
                 repo.completeSale(sale, items, payments);
@@ -870,7 +847,7 @@ public class SellFragment extends Fragment {
                             .show();
                     if (com.patechltd.salexfypos.print.PrinterManager.isPrintingEnabled(requireContext())) {
                         com.patechltd.salexfypos.print.PrinterManager.print(requireContext(), sale, items,
-                                payments, (ok, msg) -> {
+                                payments, fCustomerBalance, (ok, msg) -> {
                                     if (!ok) DialogUtil.toast(requireContext(), msg);
                                 });
                     }
@@ -913,7 +890,6 @@ public class SellFragment extends Fragment {
         }
         sb.append("----------------------------\n");
         sb.append("Subtotal: ").append(NumberUtil.money(sale.subtotal)).append('\n');
-        if (sale.taxAmount > 0) sb.append("Tax: ").append(NumberUtil.money(sale.taxAmount)).append('\n');
         if (sale.discount > 0) sb.append("Points discount: -").append(NumberUtil.money(sale.discount)).append('\n');
         sb.append("TOTAL: ").append(NumberUtil.money(sale.total)).append('\n');
         if (payments != null && !payments.isEmpty()) {
@@ -972,6 +948,7 @@ public class SellFragment extends Fragment {
                 updateTransNo();
                 updateTotals();
                 autoManagePreview();
+                updateEmptyState();
                 Toast.makeText(requireContext(), "Transaction " + sw.sale.saleNo + " recalled",
                         Toast.LENGTH_SHORT).show();
             });

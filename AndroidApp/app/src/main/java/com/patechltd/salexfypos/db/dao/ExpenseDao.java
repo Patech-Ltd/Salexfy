@@ -4,6 +4,7 @@ import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.OnConflictStrategy;
 import androidx.room.Query;
+import androidx.room.Update;
 
 import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.sync.SyncSerializer;
@@ -17,6 +18,9 @@ public abstract class ExpenseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract long insertRaw(Expense expense);
 
+    @Update
+    abstract int updateRaw(Expense expense);
+
     @Query("DELETE FROM expenses WHERE id = :id")
     abstract void deleteRaw(String id);
 
@@ -24,6 +28,14 @@ public abstract class ExpenseDao {
         long id = insertRaw(expense);
         SyncTracker.track(SyncTracker.EXPENSE, expense.uid, "INSERT", SyncSerializer.toJson(expense));
         return id;
+    }
+
+    public int update(Expense expense) {
+        int rows = updateRaw(expense);
+        if (rows > 0) {
+            SyncTracker.track(SyncTracker.EXPENSE, expense.uid, "UPDATE", SyncSerializer.toJson(expense));
+        }
+        return rows;
     }
 
     public void delete(String id) {

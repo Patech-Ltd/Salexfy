@@ -27,6 +27,15 @@
 
     <style name="Theme.SalexfyPos" parent="Base.Theme.SalexfyPos" />
 
+    <style name="Theme.SalexfyPos.SearchDialog" parent="Theme.SalexfyPos">
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowCloseOnTouchOutside">true</item>
+        <item name="android:windowSoftInputMode">stateVisible|adjustResize</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
     <style name="Widget.App.Button" parent="Widget.Material3.Button">
         <item name="cornerRadius">14dp</item>
         <item name="android:textAllCaps">false</item>

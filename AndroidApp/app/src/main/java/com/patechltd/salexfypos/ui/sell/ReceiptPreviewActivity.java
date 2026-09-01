@@ -53,7 +53,8 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
                     finish();
                     return;
                 }
-                String text = ReceiptPrinter.buildReceiptText(this, sw.sale, sw.items, sw.payments);
+                double balance = repo.outstandingDebt(sw.sale.customerId);
+                String text = ReceiptPrinter.buildReceiptText(this, sw.sale, sw.items, sw.payments, balance);
                 ((TextView) findViewById(R.id.receipt)).setText(text);
             });
         });
@@ -63,8 +64,9 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         repo.run(() -> {
             SaleWithItems sw = cached != null ? cached : repo.sales.getSaleWithItems(saleId);
             if (sw == null || sw.sale == null) return;
+            double balance = repo.outstandingDebt(sw.sale.customerId);
             com.patechltd.salexfypos.print.PrinterManager.print(this, sw.sale, sw.items, sw.payments,
-                    (ok, msg) -> runOnUiThread(() -> DialogUtil.toast(this, msg)));
+                    balance, (ok, msg) -> runOnUiThread(() -> DialogUtil.toast(this, msg)));
         });
     }
 

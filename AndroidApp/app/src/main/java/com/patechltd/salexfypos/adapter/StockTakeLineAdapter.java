@@ -30,9 +30,15 @@ public class StockTakeLineAdapter extends RecyclerView.Adapter<StockTakeLineAdap
 
     private final List<Line> items = new ArrayList<>();
     private final Listener listener;
+    private boolean readOnly;
 
     public StockTakeLineAdapter(Listener listener) {
         this.listener = listener;
+    }
+
+    public void setReadOnly(boolean readOnly) {
+        this.readOnly = readOnly;
+        notifyDataSetChanged();
     }
 
     public void submit(List<Line> list) {
@@ -59,7 +65,7 @@ public class StockTakeLineAdapter extends RecyclerView.Adapter<StockTakeLineAdap
         holder.sub.setText("Unit: " + (line.unit == null ? "" : line.unit));
         holder.counted.setText("Counted: " + NumberUtil.qty(line.countedQty));
         holder.system.setText("System: " + NumberUtil.qty(line.systemQty));
-        holder.itemView.setOnClickListener(v -> listener.onClick(position));
+        holder.itemView.setOnClickListener(readOnly ? null : v -> listener.onClick(position));
     }
 
     @Override

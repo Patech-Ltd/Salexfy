@@ -9,7 +9,7 @@
     <FrameLayout
         android:id="@+id/preview_container"
         android:layout_width="match_parent"
-        android:layout_height="210dp">
+        android:layout_height="140dp">
 
         <com.patechltd.salexfypos.scanner.ScannerView
             android:id="@+id/scanner"
@@ -70,8 +70,8 @@
         android:background="@color/surface"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp">
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp">
 
         <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/unit_toggle"
@@ -84,16 +84,26 @@
                 android:id="@+id/btn_retail"
                 style="@style/Widget.App.ToggleButton"
                 android:layout_width="wrap_content"
-                android:layout_height="44dp"
+                android:layout_height="40dp"
                 android:text="Retail" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_wholesale"
                 style="@style/Widget.App.ToggleButton"
                 android:layout_width="wrap_content"
-                android:layout_height="44dp"
+                android:layout_height="40dp"
                 android:text="Wholesale" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <TextView
+            android:id="@+id/trans_no"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text=""
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
 
         <View
             android:layout_width="0dp"
@@ -101,57 +111,94 @@
             android:layout_weight="1" />
 
         <TextView
-            android:id="@+id/trans_no"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text=""
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp"
-            android:textStyle="bold" />
-
-        <TextView
             android:id="@+id/item_count"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
             android:text="0 items"
             android:textColor="@color/text_secondary"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textStyle="bold" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_manual_sale"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
+            android:layout_height="36dp"
+            android:layout_marginStart="4dp"
             android:minWidth="0dp"
             android:text="Manual"
-            android:textSize="12sp"
-            app:icon="@drawable/ic_note_add"
-            app:iconSize="18dp" />
+            android:textSize="12sp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_sales"
-            style="@style/Widget.Material3.Button.OutlinedButton"
+            style="@style/Widget.Material3.Button.TextButton"
             android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_marginStart="6dp"
+            android:layout_height="36dp"
             android:minWidth="0dp"
-            android:text="View Sales"
+            android:text="Sales"
             android:textSize="12sp"
             app:icon="@drawable/ic_receipt"
-            app:iconSize="18dp" />
+            app:iconSize="16dp" />
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/cart_list"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:padding="10dp"
-        android:paddingBottom="4dp" />
+        android:layout_weight="1">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/cart_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:padding="10dp"
+            android:paddingBottom="4dp" />
+
+        <LinearLayout
+            android:id="@+id/empty_cart"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:alpha="0.3"
+                android:src="@drawable/ic_cart"
+                app:tint="@color/text_disabled" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Cart is empty"
+                android:textColor="@color/text_disabled"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Scan a barcode or tap Search to add products"
+                android:textColor="@color/text_disabled"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+            android:id="@+id/btn_recent_sales"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="16dp"
+            android:text=""
+            app:icon="@drawable/ic_receipt"
+            app:iconTint="@color/white"
+            app:backgroundTint="@color/brand_primary"
+            app:fabCustomSize="52dp" />
+    </FrameLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -164,7 +211,9 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone"
+            >
 
             <TextView
                 android:layout_width="0dp"
@@ -187,7 +236,9 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:visibility="gone"
+            >
 
             <TextView
                 android:layout_width="0dp"
@@ -233,42 +284,42 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="8dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_hold"
                 style="@style/Widget.App.OutlineButton"
                 android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_marginEnd="6dp"
+                android:layout_height="46dp"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:minWidth="0dp"
                 android:text="Hold"
-                android:textSize="14sp" />
+                android:textSize="13sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_held"
                 style="@style/Widget.App.OutlineButton"
                 android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_marginStart="6dp"
-                android:layout_marginEnd="6dp"
+                android:layout_height="46dp"
+                android:layout_marginStart="4dp"
+                android:layout_marginEnd="4dp"
                 android:layout_weight="1"
                 android:minWidth="0dp"
                 android:text="Held"
-                android:textSize="14sp" />
+                android:textSize="13sp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btn_checkout"
                 style="@style/Widget.App.CheckoutButton"
                 android:layout_width="0dp"
-                android:layout_height="50dp"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1.3"
+                android:layout_height="52dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1.5"
                 android:minWidth="0dp"
                 android:text="Checkout"
-                android:textSize="15sp" />
+                android:textSize="16sp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

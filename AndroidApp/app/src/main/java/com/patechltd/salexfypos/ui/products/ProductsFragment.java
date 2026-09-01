@@ -43,6 +43,7 @@ public class ProductsFragment extends Fragment {
 
     private static final int REQ_SCAN = 4001;
     private static final int REQ_PICK_DIRECTORY = 4002;
+    private static final int REQ_EXPORT = 4003;
     private static final int PAGE_SIZE = 50;
     private Repository repo;
     private ProductAdapter adapter;
@@ -78,6 +79,14 @@ public class ProductsFragment extends Fragment {
         AutoCompleteTextView search = view.findViewById(R.id.search_input);
         MaterialButton btnCategories = view.findViewById(R.id.btn_categories);
         MaterialButton btnAdd = view.findViewById(R.id.btn_add_product);
+
+        view.findViewById(R.id.btn_export_products).setOnClickListener(v -> {
+            String stamp = com.patechltd.salexfypos.util.DateUtil.formatDate(System.currentTimeMillis());
+            startActivityForResult(
+                    com.patechltd.salexfypos.util.StorageUtil.createReportIntent(
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx", "products_" + stamp),
+                    REQ_EXPORT);
+        });
 
         suggestionAdapter = new SuggestionsAdapter(LayoutInflater.from(requireContext()));
         search.setAdapter(suggestionAdapter);
@@ -179,7 +188,47 @@ public class ProductsFragment extends Fragment {
             Class<?> cls = index == 0 ? CategoryActivity.class
                     : index == 1 ? BrandActivity.class : UnitActivity.class;
             startActivity(new Intent(requireContext(), cls));
+            return;
         }
+        if (requestCode == REQ_EXPORT && resultCode == android.app.Activity.RESULT_OK && data != null
+                && data.getData() != null) {
+            exportProducts(android.net.Uri.parse(data.getDataString()));
+        }
+    }
+
+    private void exportProducts(android.net.Uri uri) {
+        repo.run(() -> {
+            List<Product> products = repo.products.getAll();
+            Map<String, Double> qtys = new HashMap<>();
+            for (com.patechltd.salexfypos.db.ProductQty pq : repo.products.getAllQtys()) {
+                qtys.put(pq.productId, pq.qty);
+            }
+            List<Object> rows = new ArrayList<>(products);
+            boolean ok = com.patechltd.salexfypos.util.ExcelUtil.export(requireContext(), uri,
+                    "Products", rows, new com.patechltd.salexfypos.util.ExcelUtil.RowWriter() {
+                        @Override public Object[] header() {
+                            return new Object[]{"Name", "Barcode", "SKU", "Category", "Brand",
+                                    "Retail Unit", "Retail Price", "Wholesale Unit", "Wholesale Price",
+                                    "Cost Price", "Stock Qty", "Reorder Level", "Status"};
+                        }
+                        @Override public Object[] row(Object item, int index) {
+                            Product p = (Product) item;
+                            Double q = qtys.get(p.uid);
+                            String cat = categoryNames.get(p.categoryId);
+                            String brand = brandNames.get(p.brandId);
+                            String unit = unitNames.get(p.retailUnitId);
+                            if (unit == null || unit.isEmpty()) unit = p.retailUnit;
+                            String wUnit = unitNames.get(p.wholesaleUnitId);
+                            if (wUnit == null || wUnit.isEmpty()) wUnit = p.wholesaleUnit;
+                            return new Object[]{p.name, p.barcode, p.sku, cat, brand, unit,
+                                    p.retailPrice, wUnit, p.wholesalePrice, p.costPrice,
+                                    q == null ? 0 : q, p.reorderLevel,
+                                    p.isActive ? "Active" : "Inactive"};
+                        }
+                    });
+            handler.post(() -> android.widget.Toast.makeText(requireContext(),
+                    ok ? "Products exported" : "Export failed", Toast.LENGTH_SHORT).show());
+        });
     }
 
     private void loadReferences() {

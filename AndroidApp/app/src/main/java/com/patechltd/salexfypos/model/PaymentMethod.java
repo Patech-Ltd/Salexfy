@@ -1,37 +1,29 @@
 package com.patechltd.salexfypos.model;
 
-public enum PaymentMethod {
-    CASH("Cash"),
-    MPESA("M-Pesa"),
-    AIRTEL_MONEY("Airtel Money"),
-    TIGO_PESA("Tigo Pesa"),
-    MTN_MOMO("MTN MoMo"),
-    ORANGE_MONEY("Orange Money"),
-    HALOPESA("Halopesa"),
-    CARD("Card"),
-    BANK("Bank Transfer"),
-    CHEQUE("Cheque"),
-    MOBILE_PAY("Google Pay / Apple Pay"),
-    PAYPAL("PayPal"),
-    CRYPTO("Crypto"),
-    VOUCHER("Gift Voucher"),
-    CREDIT("On Credit");
+import com.patechltd.salexfypos.util.PaymentMethods;
 
-    private final String label;
+/**
+ * Payment method identifiers (stable ids stored on sales / sale_payments)
+ * and lookups. The actual user-facing list is configurable in Settings and
+ * lives in the payment_methods table; this class only exposes the special
+ * system ids and label resolution.
+ */
+public final class PaymentMethod {
 
-    PaymentMethod(String label) {
-        this.label = label;
+    public static final String CASH = "CASH";
+    public static final String MPESA = "MPESA";
+    public static final String CREDIT = "CREDIT";
+
+    private PaymentMethod() {
     }
 
-    public String getLabel() {
-        return label;
+    /** Display label for a stored method id. Falls back to the raw id. */
+    public static String labelOf(String id) {
+        return PaymentMethods.labelOf(id);
     }
 
-    public static String labelOf(String name) {
-        if (name == null || name.isEmpty()) return "Cash";
-        for (PaymentMethod m : values()) {
-            if (m.name().equals(name)) return m.label;
-        }
-        return name;
+    /** True when the method records a credit balance (on-credit) sale. */
+    public static boolean isCredit(String id) {
+        return PaymentMethods.isCredit(id);
     }
 }

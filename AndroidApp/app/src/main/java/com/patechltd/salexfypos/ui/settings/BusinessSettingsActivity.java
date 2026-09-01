@@ -21,7 +21,8 @@ public class BusinessSettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_business_settings);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         shopName = findViewById(R.id.input_shop_name);
         address = findViewById(R.id.input_shop_address);

@@ -22,8 +22,10 @@ import com.patechltd.salexfypos.model.Authority;
 import com.patechltd.salexfypos.security.PermissionChecker;
 import com.patechltd.salexfypos.security.Session;
 import com.patechltd.salexfypos.ui.help.HelpActivity;
+import com.patechltd.salexfypos.ui.reports.TOTActivity;
 import com.patechltd.salexfypos.ui.settings.DebugActivity;
 import com.patechltd.salexfypos.ui.settings.SettingsActivity;
+import com.patechltd.salexfypos.ui.suppliers.BillsActivity;
 import com.patechltd.salexfypos.ui.suppliers.CustomerListActivity;
 import com.patechltd.salexfypos.ui.suppliers.SupplierListActivity;
 import com.patechltd.salexfypos.ui.users.UserListActivity;
@@ -33,7 +35,7 @@ import com.patechltd.salexfypos.util.Prefs;
 public class MoreFragment extends Fragment {
 
     private Repository repo;
-    private View rowUsers, rowSuppliers, rowCustomers, rowBackup, rowSettings, rowDebug;
+    private View rowUsers, rowSuppliers, rowBills, rowCustomers, rowTOT, rowBackup, rowSettings, rowDebug;
 
     @Nullable
     @Override
@@ -49,14 +51,18 @@ public class MoreFragment extends Fragment {
 
         rowUsers = view.findViewById(R.id.row_users);
         rowSuppliers = view.findViewById(R.id.row_suppliers);
+        rowBills = view.findViewById(R.id.row_bills);
         rowCustomers = view.findViewById(R.id.row_customers);
+        rowTOT = view.findViewById(R.id.row_tot);
         rowBackup = view.findViewById(R.id.row_backup);
         rowSettings = view.findViewById(R.id.row_settings);
         rowDebug = view.findViewById(R.id.row_debug);
 
         rowUsers.setOnClickListener(v -> startActivity(new Intent(requireContext(), UserListActivity.class)));
         rowSuppliers.setOnClickListener(v -> startActivity(new Intent(requireContext(), SupplierListActivity.class)));
+        rowBills.setOnClickListener(v -> startActivity(new Intent(requireContext(), BillsActivity.class)));
         rowCustomers.setOnClickListener(v -> startActivity(new Intent(requireContext(), CustomerListActivity.class)));
+        rowTOT.setOnClickListener(v -> startActivity(new Intent(requireContext(), TOTActivity.class)));
         rowBackup.setOnClickListener(v -> startActivity(new Intent(requireContext(), SettingsActivity.class).putExtra("openBackup", true)));
         rowSettings.setOnClickListener(v -> startActivity(new Intent(requireContext(), SettingsActivity.class)));
         rowDebug.setOnClickListener(v -> startActivity(new Intent(requireContext(), DebugActivity.class)));
@@ -74,7 +80,9 @@ public class MoreFragment extends Fragment {
     private void applyPermissions() {
         rowUsers.setVisibility(PermissionChecker.has(requireContext(), Authority.USER_VIEW) ? View.VISIBLE : View.GONE);
         rowSuppliers.setVisibility(PermissionChecker.has(requireContext(), Authority.SUPPLIER_VIEW) ? View.VISIBLE : View.GONE);
+        rowBills.setVisibility(PermissionChecker.has(requireContext(), Authority.SUPPLIER_VIEW) ? View.VISIBLE : View.GONE);
         rowCustomers.setVisibility(PermissionChecker.has(requireContext(), Authority.CUSTOMER_VIEW) ? View.VISIBLE : View.GONE);
+        rowTOT.setVisibility(PermissionChecker.has(requireContext(), Authority.REPORT_VIEW) ? View.VISIBLE : View.GONE);
         rowBackup.setVisibility(PermissionChecker.has(requireContext(), Authority.BACKUP_MANAGE) ? View.VISIBLE : View.GONE);
         rowSettings.setVisibility(PermissionChecker.has(requireContext(), Authority.SETTINGS_EDIT) ? View.VISIBLE : View.GONE);
         rowDebug.setVisibility(PermissionChecker.has(requireContext(), Authority.DEBUG_VIEW) ? View.VISIBLE : View.GONE);

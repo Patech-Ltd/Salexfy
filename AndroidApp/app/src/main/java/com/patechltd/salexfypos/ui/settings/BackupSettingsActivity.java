@@ -39,7 +39,8 @@ public class BackupSettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_backup_settings);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         autoBackup = findViewById(R.id.switch_auto_backup);
         backupInterval = findViewById(R.id.input_backup_interval);

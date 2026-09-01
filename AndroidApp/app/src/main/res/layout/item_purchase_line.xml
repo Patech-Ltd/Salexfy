@@ -38,6 +38,14 @@
                 android:layout_marginTop="2dp"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/product_profit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/success"
+                android:textSize="12sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -52,6 +60,19 @@
                 android:layout_height="wrap_content"
                 android:textColor="@color/brand_primary_dark"
                 android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/btn_cost"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:background="@drawable/bg_search"
+                android:contentDescription="Edit buying price"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
+                android:textColor="@color/brand_primary"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <ImageButton

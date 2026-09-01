@@ -47,6 +47,12 @@ public class Prefs {
     public static final String KEY_SYNC_LAST_SYNC = "last_sync_time";
     public static final String KEY_SYNC_PULL_CURSOR = "sync_pull_cursor";
     public static final String KEY_DEVICE_ID = "device_id";
+    public static final String KEY_APP_LOCK_NEEDS_REAUTH = "app_lock_needs_reauth";
+    public static final String KEY_APP_LOCK_LAST_UNLOCK = "app_lock_last_unlock";
+    public static final String KEY_APP_LOCK_TIMEOUT_MS = "app_lock_timeout_ms";
+    public static final String KEY_LICENSE_KEY = "license_key";
+    public static final String KEY_LICENSE_EXPIRY = "license_expiry";
+    public static final String KEY_SHOP_ID = "shop_id";
 
     private static final String PREFS = "salexfy_prefs";
 
@@ -107,6 +113,6 @@ public class Prefs {
     }
 
     public static double taxPercent(Context context) {
-        return getDouble(context, KEY_TAX_PERCENT, 0);
+        return getDouble(context, KEY_TAX_PERCENT, TaxUtil.TOT_RATE);
     }
 }

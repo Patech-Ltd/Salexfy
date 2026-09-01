@@ -13,9 +13,15 @@ public interface SyncRecordRepository extends JpaRepository<SyncRecord, Long> {
 
     Optional<SyncRecord> findByDeviceIdAndDeviceSeq(String deviceId, long deviceSeq);
 
-    @Query("SELECT r FROM SyncRecord r WHERE r.updatedAt > :since AND r.deviceId <> :deviceId "
-            + "ORDER BY r.updatedAt ASC, r.id ASC")
-    List<SyncRecord> findPullBatch(@Param("since") long since,
+    /**
+     * Returns changes newer than the given timestamp from OTHER devices in the
+     * SAME shop, so a device never receives its own records back and never
+     * receives another shop's data.
+     */
+    @Query("SELECT r FROM SyncRecord r WHERE r.shopId = :shopId AND r.updatedAt > :since "
+            + "AND r.deviceId <> :deviceId ORDER BY r.updatedAt ASC, r.id ASC")
+    List<SyncRecord> findPullBatch(@Param("shopId") String shopId,
+                                   @Param("since") long since,
                                    @Param("deviceId") String deviceId,
                                    Pageable pageable);
 }

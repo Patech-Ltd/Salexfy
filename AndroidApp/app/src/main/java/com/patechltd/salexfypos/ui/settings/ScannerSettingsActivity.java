@@ -29,7 +29,8 @@ public class ScannerSettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_scanner_settings);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         scannerEngineGroup = findViewById(R.id.scanner_engine_group);
         zxingSensitivityGroup = findViewById(R.id.zxing_sensitivity_group);

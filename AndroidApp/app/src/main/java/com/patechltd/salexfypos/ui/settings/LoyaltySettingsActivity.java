@@ -21,7 +21,8 @@ public class LoyaltySettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_loyalty_settings);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         loyaltyPoints = findViewById(R.id.input_loyalty_points);
         loyaltyValue = findViewById(R.id.input_loyalty_value);

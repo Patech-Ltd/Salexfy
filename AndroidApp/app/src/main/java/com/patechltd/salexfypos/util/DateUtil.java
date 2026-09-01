@@ -51,6 +51,21 @@ public class DateUtil {
         return c.getTimeInMillis();
     }
 
+    public static long endOfMonth(long millis) {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(startOfMonth(millis));
+        c.set(Calendar.DAY_OF_MONTH, c.getActualMaximum(Calendar.DAY_OF_MONTH));
+        c.set(Calendar.HOUR_OF_DAY, 23);
+        c.set(Calendar.MINUTE, 59);
+        c.set(Calendar.SECOND, 59);
+        c.set(Calendar.MILLISECOND, 999);
+        return c.getTimeInMillis();
+    }
+
+    public static String monthName(long millis) {
+        return new SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(new Date(millis));
+    }
+
     public static long startOfWeek(long millis) {
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(millis);

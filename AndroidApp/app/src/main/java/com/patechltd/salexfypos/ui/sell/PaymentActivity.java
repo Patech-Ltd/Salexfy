@@ -22,9 +22,10 @@ import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Customer;
-import com.patechltd.salexfypos.model.PaymentMethod;
+import com.patechltd.salexfypos.db.entity.PaymentMethod;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
+import com.patechltd.salexfypos.util.PaymentMethods;
 import com.patechltd.salexfypos.util.Prefs;
 
 import java.util.ArrayList;
@@ -67,7 +68,8 @@ public class PaymentActivity extends AppCompatActivity {
     private final List<Customer> customers = new ArrayList<>();
     private final Map<String, Double> debts = new HashMap<>();
 
-    private PaymentMethod method = PaymentMethod.CASH;
+    private PaymentMethod method;
+    private PaymentMethod cashMethod;
     private Customer selectedCustomer;
     private Customer creditAccount;
 
@@ -85,6 +87,11 @@ public class PaymentActivity extends AppCompatActivity {
     private View pointsRow;
     private SwitchMaterial usePoints;
     private TextInputEditText notes;
+    private ChipGroup chips;
+    private View quickRow;
+    private MaterialButton quick500;
+    private MaterialButton quick1000;
+    private MaterialButton quick2000;
 
     private double pointsDiscount;
     private double pointValue;
@@ -98,7 +105,8 @@ public class PaymentActivity extends AppCompatActivity {
         pointValue = Prefs.getDouble(this, Prefs.KEY_LOYALTY_POINT_VALUE, 0.5);
         total = getIntent().getDoubleExtra(EXTRA_TOTAL, 0);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> finish());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         ((TextView) findViewById(R.id.pay_total)).setText(NumberUtil.money(total));
 
@@ -118,30 +126,43 @@ public class PaymentActivity extends AppCompatActivity {
         customerBtn.setOnClickListener(v -> pickCustomer());
 
         ChipGroup chips = findViewById(R.id.payment_chips);
-        for (PaymentMethod m : PaymentMethod.values()) {
+        List<PaymentMethod> active = PaymentMethods.active();
+        for (PaymentMethod m : active) {
             Chip chip = new Chip(this);
-            chip.setText(m.getLabel());
+            chip.setText(m.name == null ? m.id : m.name);
             chip.setCheckable(true);
             chip.setId(View.generateViewId());
             chip.setTag(m);
             chips.addView(chip);
-            if (m == PaymentMethod.CASH) chip.setChecked(true);
+            if (com.patechltd.salexfypos.model.PaymentMethod.CASH.equals(m.id)) {
+                chip.setChecked(true);
+                cashMethod = m;
+            }
         }
+        this.chips = chips;
+        if (cashMethod == null && !active.isEmpty()) cashMethod = active.get(0);
+        method = cashMethod != null ? cashMethod : PaymentMethods.find("CASH");
         chips.setOnCheckedStateChangeListener((group, checkedIds) -> {
             Chip chip = group.findViewById(checkedIds.isEmpty() ? -1 : checkedIds.get(0));
             if (chip == null || chip.getTag() == null) return;
             method = (PaymentMethod) chip.getTag();
             refreshCustomerButton();
             refreshDebtRow();
+            updateQuickButtons();
             updateSummary();
         });
+        repo.run(repo::refreshPaymentMethods);
 
+        quickRow = findViewById(R.id.quick_row);
+        quick500 = findViewById(R.id.quick_500);
+        quick1000 = findViewById(R.id.quick_1000);
+        quick2000 = findViewById(R.id.quick_2000);
         findViewById(R.id.btn_add).setOnClickListener(v -> addPayment());
-        findViewById(R.id.quick_exact).setOnClickListener(v ->
-                payAmount.setText(NumberUtil.money(remaining())));
-        findViewById(R.id.quick_500).setOnClickListener(v -> payAmount.setText("500"));
-        findViewById(R.id.quick_1000).setOnClickListener(v -> payAmount.setText("1000"));
-        findViewById(R.id.quick_2000).setOnClickListener(v -> payAmount.setText("2000"));
+        findViewById(R.id.quick_exact).setOnClickListener(v -> quickExact());
+        quick500.setOnClickListener(v -> payAmount.setText(quick500.getText()));
+        quick1000.setOnClickListener(v -> payAmount.setText(quick1000.getText()));
+        quick2000.setOnClickListener(v -> payAmount.setText(quick2000.getText()));
+        updateQuickButtons();
 
         payAmount.addTextChangedListener(new TextWatcher() {
             @Override
@@ -168,6 +189,7 @@ public class PaymentActivity extends AppCompatActivity {
             setResult(RESULT_HOLD);
             finish();
         });
+        findViewById(R.id.btn_cash_complete).setOnClickListener(v -> cashComplete());
         findViewById(R.id.btn_complete).setOnClickListener(v -> complete());
 
         loadCustomers();
@@ -211,7 +233,7 @@ public class PaymentActivity extends AppCompatActivity {
             if (customerId == null) return;
             for (Customer c : customers) {
                 if (c.uid.equals(customerId)) {
-                    if (method == PaymentMethod.CREDIT) {
+                    if (method != null && method.isCredit) {
                         creditAccount = c;
                     }
                     selectedCustomer = c;
@@ -226,7 +248,7 @@ public class PaymentActivity extends AppCompatActivity {
                 if (c == null) return;
                 handler.post(() -> {
                     customers.add(c);
-                    if (method == PaymentMethod.CREDIT) creditAccount = c;
+                    if (method != null && method.isCredit) creditAccount = c;
                     selectedCustomer = c;
                     refreshCustomerButton();
                     refreshPointsUI();
@@ -250,7 +272,7 @@ public class PaymentActivity extends AppCompatActivity {
                         repo.suppliers.insertCustomer(c);
                         handler.post(() -> {
                             customers.add(c);
-                            if (method == PaymentMethod.CREDIT) creditAccount = c;
+                            if (method != null && method.isCredit) creditAccount = c;
                             selectedCustomer = c;
                             refreshCustomerButton();
                             refreshPointsUI();
@@ -261,7 +283,7 @@ public class PaymentActivity extends AppCompatActivity {
     }
 
     private void refreshCustomerButton() {
-        if (method == PaymentMethod.CREDIT) {
+        if (method != null && method.isCredit) {
             customerBtn.setText(creditAccount == null
                     ? "Select credit account (customer)"
                     : "Credit account: " + creditAccount.name);
@@ -278,7 +300,7 @@ public class PaymentActivity extends AppCompatActivity {
             DialogUtil.toast(this, "Enter a valid amount");
             return;
         }
-        if (method == PaymentMethod.CREDIT) {
+        if (method != null && method.isCredit) {
             if (creditAccount == null) {
                 DialogUtil.toast(this, "Select a credit account for credit payments");
                 pickCustomer();
@@ -291,6 +313,63 @@ public class PaymentActivity extends AppCompatActivity {
         payAmount.setText("");
         renderLines();
         updateSummary();
+    }
+
+    private void selectCashChip() {
+        for (int i = 0; i < chips.getChildCount(); i++) {
+            View v = chips.getChildAt(i);
+            if (v instanceof Chip) {
+                Chip c = (Chip) v;
+                if (c.getTag() instanceof PaymentMethod) {
+                    PaymentMethod m = (PaymentMethod) c.getTag();
+                    if (com.patechltd.salexfypos.model.PaymentMethod.CASH.equals(m.id) && !c.isChecked()) {
+                        c.setChecked(true);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    private void quickExact() {
+        double amount = NumberUtil.round2(remaining());
+        if (amount <= 0.001) {
+            DialogUtil.toast(this, "Nothing left to pay");
+            return;
+        }
+        payAmount.setText(NumberUtil.money(amount));
+    }
+
+    private void updateQuickButtons() {
+        if (quickRow == null) return;
+        boolean credit = method != null && method.isCredit;
+        quickRow.setVisibility(credit ? View.GONE : View.VISIBLE);
+        boolean mpesa = !credit && method != null
+                && !com.patechltd.salexfypos.model.PaymentMethod.CASH.equals(method.id);
+        quick500.setText(String.valueOf(mpesa ? 100 : 500));
+        quick1000.setText(String.valueOf(mpesa ? 500 : 1000));
+        quick2000.setText(String.valueOf(mpesa ? 1000 : 2000));
+    }
+
+    private void cashComplete() {
+        selectCashChip();
+        double amount = NumberUtil.round2(remaining());
+        if (amount > 0.001) {
+            lines.add(new PaymentLine(cashMethod(), amount, null, null));
+            renderLines();
+            updateSummary();
+        }
+        complete();
+    }
+
+    private PaymentMethod cashMethod() {
+        if (cashMethod != null) return cashMethod;
+        cashMethod = PaymentMethods.find(com.patechltd.salexfypos.model.PaymentMethod.CASH);
+        if (cashMethod == null) {
+            List<PaymentMethod> active = PaymentMethods.active();
+            cashMethod = active.isEmpty() ? null : active.get(0);
+        }
+        return cashMethod;
     }
 
     private void renderLines() {
@@ -313,7 +392,7 @@ public class PaymentActivity extends AppCompatActivity {
             texts.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
             TextView title = new TextView(this);
-            title.setText(PaymentMethod.labelOf(line.method.name())
+            title.setText((line.method == null ? "" : (line.method.name == null ? line.method.id : line.method.name))
                     + (line.customerName != null ? "  •  " + line.customerName : ""));
             title.setTextColor(getResources().getColor(R.color.text_primary));
             title.setTextSize(15);
@@ -396,7 +475,7 @@ public class PaymentActivity extends AppCompatActivity {
         String[] customerNames = new String[n];
         for (int i = 0; i < n; i++) {
             PaymentLine line = lines.get(i);
-            methods[i] = line.method.name();
+            methods[i] = line.method != null ? line.method.id : null;
             amounts[i] = line.amount;
             customerIds[i] = line.customerId;
             customerNames[i] = line.customerName;
@@ -452,7 +531,7 @@ public class PaymentActivity extends AppCompatActivity {
 
     private void refreshDebtRow() {
         if (debtRow == null) return;
-        if (method != PaymentMethod.CREDIT) {
+        if (method == null || !method.isCredit) {
             debtRow.setVisibility(View.GONE);
             return;
         }
@@ -464,7 +543,7 @@ public class PaymentActivity extends AppCompatActivity {
         double debt = customerDebt(creditAccount);
         double already = 0;
         for (PaymentLine line : lines) {
-            if (line.method == PaymentMethod.CREDIT
+            if (line.method != null && line.method.isCredit
                     && creditAccount.uid.equals(line.customerId)) already += line.amount;
         }
         double newLoan = Math.max(0, dueAmount() - allocated() + already);

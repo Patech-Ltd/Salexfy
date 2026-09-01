@@ -23,6 +23,7 @@ public class SyncSettingsActivity extends AppCompatActivity {
     private TextInputEditText username;
     private TextInputEditText password;
     private TextInputEditText interval;
+    private TextInputEditText licenseKey;
     private TextView lastSync;
     private TextView unsyncedText;
     private MaterialButton btnSyncNow;
@@ -32,13 +33,15 @@ public class SyncSettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sync_settings);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         syncSwitch = findViewById(R.id.switch_sync);
         serverUrl = findViewById(R.id.input_server_url);
         username = findViewById(R.id.input_username);
         password = findViewById(R.id.input_password);
         interval = findViewById(R.id.input_interval);
+        licenseKey = findViewById(R.id.input_license_key);
         lastSync = findViewById(R.id.last_sync);
         unsyncedText = findViewById(R.id.unsynced_text);
         btnSyncNow = findViewById(R.id.btn_sync_now);
@@ -64,6 +67,7 @@ public class SyncSettingsActivity extends AppCompatActivity {
         username.setText(Prefs.getString(this, Prefs.KEY_SYNC_USERNAME, ""));
         password.setText(Prefs.getString(this, Prefs.KEY_SYNC_PASSWORD, ""));
         interval.setText(String.valueOf(Prefs.getLong(this, Prefs.KEY_SYNC_INTERVAL_MINUTES, 30)));
+        licenseKey.setText(Prefs.getString(this, Prefs.KEY_LICENSE_KEY, ""));
         updateStatus();
     }
 
@@ -85,6 +89,7 @@ public class SyncSettingsActivity extends AppCompatActivity {
                 textOf(serverUrl));
         Prefs.putString(this, Prefs.KEY_SYNC_USERNAME, textOf(username));
         Prefs.putString(this, Prefs.KEY_SYNC_PASSWORD, textOf(password));
+        Prefs.putString(this, Prefs.KEY_LICENSE_KEY, textOf(licenseKey));
         long minutes = parseLong(interval);
         Prefs.putLong(this, Prefs.KEY_SYNC_INTERVAL_MINUTES, Math.max(15, minutes));
         DialogUtil.toast(this, "Settings saved");
@@ -124,6 +129,7 @@ public class SyncSettingsActivity extends AppCompatActivity {
         Prefs.putString(this, Prefs.KEY_SYNC_SERVER_URL, textOf(serverUrl));
         Prefs.putString(this, Prefs.KEY_SYNC_USERNAME, textOf(username));
         Prefs.putString(this, Prefs.KEY_SYNC_PASSWORD, textOf(password));
+        Prefs.putString(this, Prefs.KEY_LICENSE_KEY, textOf(licenseKey));
         long minutes = parseLong(interval);
         Prefs.putLong(this, Prefs.KEY_SYNC_INTERVAL_MINUTES, Math.max(15, minutes));
     }

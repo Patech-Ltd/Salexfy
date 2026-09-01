@@ -33,6 +33,9 @@ public class AppUser {
 
     private boolean isActive = true;
 
+    /** Multi-tenancy: the store this user belongs to. Devices/shops are isolated by this. */
+    private String shopId = "default";
+
     private long createdAt = System.currentTimeMillis();
 
     public Long getId() {
@@ -89,6 +92,14 @@ public class AppUser {
 
     public void setActive(boolean active) {
         isActive = active;
+    }
+
+    public String getShopId() {
+        return shopId;
+    }
+
+    public void setShopId(String shopId) {
+        this.shopId = shopId;
     }
 
     public long getCreatedAt() {

@@ -83,8 +83,9 @@ public class SaleDetailActivity extends AppCompatActivity {
         repo.run(() -> {
             SaleWithItems sw = cached != null ? cached : repo.sales.getSaleWithItems(saleId);
             if (sw == null || sw.sale == null) return;
+            double balance = repo.outstandingDebt(sw.sale.customerId);
             com.patechltd.salexfypos.print.PrinterManager.print(this, sw.sale, sw.items, sw.payments,
-                    (ok, msg) -> runOnUiThread(() -> DialogUtil.toast(this, msg)));
+                    balance, (ok, msg) -> runOnUiThread(() -> DialogUtil.toast(this, msg)));
         });
     }
 
@@ -134,7 +135,8 @@ public class SaleDetailActivity extends AppCompatActivity {
 
         RecyclerView itemsList = findViewById(R.id.items_list);
         itemsList.setLayoutManager(new LinearLayoutManager(this));
-        itemsList.setAdapter(new LineAdapter(sw.items == null ? new ArrayList<>() : sw.items));
+        List<SaleItem> saleItems = sw.items == null ? new ArrayList<>() : sw.items;
+        itemsList.setAdapter(new LineAdapter(saleItems));
 
         LinearLayout totals = findViewById(R.id.totals_container);
         totals.removeAllViews();
@@ -146,6 +148,10 @@ public class SaleDetailActivity extends AppCompatActivity {
             addTotalRow(totals, "Tax", NumberUtil.money(sale.taxAmount), false);
         }
         addTotalRow(totals, "Total", NumberUtil.money(sale.total), true);
+        double cost = 0;
+        for (SaleItem item : saleItems) cost += item.stockQty * item.costPrice;
+        double profit = sale.total - cost;
+        addTotalRow(totals, "Profit", NumberUtil.money(profit), false);
 
         if (sw.payments != null && !sw.payments.isEmpty()) {
             for (SalePayment p : sw.payments) {
@@ -264,6 +270,17 @@ public class SaleDetailActivity extends AppCompatActivity {
             String unit = item.unitLabel == null || item.unitLabel.isEmpty() ? "" : " " + item.unitLabel;
             holder.sub.setText(NumberUtil.qty(item.qty) + unit + "  ×  " + NumberUtil.money(item.unitPrice));
             holder.total.setText(NumberUtil.money(item.lineTotal));
+            if (item.costPrice > 0) {
+                double buy = item.stockQty * item.costPrice;
+                double profit = item.lineTotal - buy;
+                holder.profit.setText("Buy " + NumberUtil.money(buy) + "  •  Profit "
+                        + NumberUtil.money(profit));
+                holder.profit.setTextColor(holder.profit.getResources().getColor(
+                        profit < 0 ? R.color.error : R.color.success));
+                holder.profit.setVisibility(View.VISIBLE);
+            } else {
+                holder.profit.setVisibility(View.GONE);
+            }
         }
 
         @Override
@@ -272,13 +289,14 @@ public class SaleDetailActivity extends AppCompatActivity {
         }
 
         static class VH extends RecyclerView.ViewHolder {
-            final TextView name, sub, total;
+            final TextView name, sub, total, profit;
 
             VH(@NonNull View itemView) {
                 super(itemView);
                 name = itemView.findViewById(R.id.line_name);
                 sub = itemView.findViewById(R.id.line_sub);
                 total = itemView.findViewById(R.id.line_total);
+                profit = itemView.findViewById(R.id.line_profit);
             }
         }
     }

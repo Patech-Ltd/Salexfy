@@ -40,7 +40,8 @@ public class UserEditActivity extends AppCompatActivity {
         setContentView(R.layout.activity_user_edit);
         repo = Repository.get(this);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         name = findViewById(R.id.input_name);
         username = findViewById(R.id.input_username);

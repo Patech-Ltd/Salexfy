@@ -23,11 +23,12 @@ public class SyncService {
     }
 
     /**
-     * Stores a batch of changes idempotently (keyed by device + seq) and
-     * returns the seqs that were accepted, so the app can clear them locally.
+     * Stores a batch of changes idempotently (keyed by device + seq) scoped
+     * to a shop, and returns the seqs that were accepted, so the app can clear
+     * them locally.
      */
     @Transactional
-    public List<Long> push(PushRequest request) {
+    public List<Long> push(PushRequest request, String shopId) {
         List<Long> acknowledged = new ArrayList<>();
         if (request == null || request.deviceId() == null || request.changes() == null) {
             return acknowledged;
@@ -44,6 +45,7 @@ public class SyncService {
                 record.setRecordId(change.recordId());
                 record.setOperation(change.operation());
                 record.setPayload(change.payload());
+                record.setShopId(shopId);
                 record.setUpdatedAt(now);
                 records.save(record);
                 acknowledged.add(change.seq());
@@ -55,12 +57,14 @@ public class SyncService {
     }
 
     /**
-     * Returns changes newer than the given timestamp that were pushed by
-     * OTHER devices, so a device never receives its own records back.
+     * Returns changes newer than the given timestamp pushed by OTHER devices
+     * in the SAME shop. A device never receives its own records back or data
+     * from a different shop.
      */
-    public List<ChangeDto> pull(long since, String deviceId) {
+    public List<ChangeDto> pull(long since, String deviceId, String shopId) {
         List<ChangeDto> out = new ArrayList<>();
-        for (SyncRecord r : records.findPullBatch(since, deviceId == null ? "" : deviceId,
+        for (SyncRecord r : records.findPullBatch(shopId, since,
+                deviceId == null ? "" : deviceId,
                 PageRequest.of(0, PULL_BATCH))) {
             out.add(new ChangeDto(r.getDeviceSeq(), r.getEntityType(), r.getRecordId(),
                     r.getOperation(), r.getPayload(), r.getUpdatedAt()));

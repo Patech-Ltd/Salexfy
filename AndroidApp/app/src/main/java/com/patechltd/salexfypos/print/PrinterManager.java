@@ -5,6 +5,8 @@ import android.hardware.usb.UsbDevice;
 import android.os.Handler;
 import android.os.Looper;
 
+import com.patechltd.salexfypos.db.entity.Purchase;
+import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
 import com.patechltd.salexfypos.db.entity.SalePayment;
@@ -50,13 +52,18 @@ public final class PrinterManager {
 
     public static void print(Context context, Sale sale, List<SaleItem> items,
                              List<SalePayment> payments, PrintCallback callback) {
+        print(context, sale, items, payments, 0, callback);
+    }
+
+    public static void print(Context context, Sale sale, List<SaleItem> items,
+                             List<SalePayment> payments, double customerBalance, PrintCallback callback) {
         final Context app = context.getApplicationContext();
         new Thread(() -> {
             String type = Prefs.getString(app, Prefs.KEY_PRINTER_TYPE, TYPE_NONE);
             String message;
             boolean ok = false;
             try {
-                byte[] data = ReceiptPrinter.buildReceiptBytes(app, sale, items, payments);
+                byte[] data = ReceiptPrinter.buildReceiptBytes(app, sale, items, payments, customerBalance);
                 if (TYPE_BLUETOOTH.equals(type)) {
                     String address = Prefs.getString(app, Prefs.KEY_PRINTER_BT_ADDRESS, "");
                     if (address.isEmpty()) throw new Exception("No Bluetooth printer selected");
@@ -71,6 +78,42 @@ public final class PrinterManager {
                 }
                 ok = true;
                 message = "Receipt printed";
+            } catch (Exception e) {
+                message = "Print failed: " + e.getMessage();
+                AppLogger.e("Print failed", e);
+            }
+            final boolean fOk = ok;
+            final String fMessage = message;
+            new Handler(Looper.getMainLooper()).post(() -> {
+                if (callback != null) callback.onResult(fOk, fMessage);
+            });
+        }).start();
+    }
+
+    public static void printPurchase(Context context, Purchase purchase,
+                                     List<PurchaseItem> items, String supplierName,
+                                     PrintCallback callback) {
+        final Context app = context.getApplicationContext();
+        new Thread(() -> {
+            String type = Prefs.getString(app, Prefs.KEY_PRINTER_TYPE, TYPE_NONE);
+            String message;
+            boolean ok = false;
+            try {
+                byte[] data = ReceiptPrinter.buildPurchaseBytes(app, purchase, items, supplierName);
+                if (TYPE_BLUETOOTH.equals(type)) {
+                    String address = Prefs.getString(app, Prefs.KEY_PRINTER_BT_ADDRESS, "");
+                    if (address.isEmpty()) throw new Exception("No Bluetooth printer selected");
+                    BluetoothPrinter.print(address, data);
+                } else if (TYPE_USB.equals(type)) {
+                    int vendor = Prefs.getInt(app, Prefs.KEY_PRINTER_USB_VENDOR, 0);
+                    int product = Prefs.getInt(app, Prefs.KEY_PRINTER_USB_PRODUCT, 0);
+                    if (vendor == 0) throw new Exception("No USB printer selected");
+                    UsbPrinter.print(app, vendor, product, data);
+                } else {
+                    throw new Exception("Printing is disabled");
+                }
+                ok = true;
+                message = "Invoice printed";
             } catch (Exception e) {
                 message = "Print failed: " + e.getMessage();
                 AppLogger.e("Print failed", e);

@@ -23,15 +23,16 @@ import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.Product;
+import com.patechltd.salexfypos.db.entity.PaymentMethod;
 import com.patechltd.salexfypos.db.entity.Sale;
 import com.patechltd.salexfypos.db.entity.SaleItem;
 import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.db.entity.User;
-import com.patechltd.salexfypos.model.PaymentMethod;
 import com.patechltd.salexfypos.security.Session;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
+import com.patechltd.salexfypos.util.PaymentMethods;
 import com.patechltd.salexfypos.util.Prefs;
 
 import java.util.ArrayList;
@@ -48,7 +49,7 @@ public class ManualSaleActivity extends AppCompatActivity {
     private long saleDate = System.currentTimeMillis();
     private String customerId = null;
     private String customerName = null;
-    private PaymentMethod method = PaymentMethod.CASH;
+    private PaymentMethod method = null;
     private String currency;
 
     private TextView dateInput;
@@ -73,6 +74,13 @@ public class ManualSaleActivity extends AppCompatActivity {
         setContentView(R.layout.activity_manual_sale);
         repo = Repository.get(this);
         currency = Prefs.currency(this);
+
+        method = PaymentMethods.find(com.patechltd.salexfypos.model.PaymentMethod.CASH);
+        if (method == null) {
+            List<PaymentMethod> defaults = PaymentMethods.active();
+            if (!defaults.isEmpty()) method = defaults.get(0);
+        }
+        repo.run(repo::refreshPaymentMethods);
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         toolbar.setNavigationOnClickListener(v -> finish());
@@ -109,6 +117,7 @@ public class ManualSaleActivity extends AppCompatActivity {
 
         customerLabel.setOnClickListener(v -> pickCustomer());
         methodLabel.setOnClickListener(v -> pickMethod());
+        methodLabel.setText("Method: " + (method == null || method.name == null ? "Cash" : method.name));
 
         RecyclerView itemList = findViewById(R.id.item_list);
         itemList.setLayoutManager(new LinearLayoutManager(this));
@@ -214,27 +223,45 @@ public class ManualSaleActivity extends AppCompatActivity {
     }
 
     private void pickMethod() {
-        PaymentMethod[] methods = PaymentMethod.values();
-        String[] labels = new String[methods.length];
-        for (int i = 0; i < methods.length; i++) labels[i] = methods[i].getLabel();
-        DialogUtil.pick(this, "Payment method", labels, method.ordinal(), which -> {
-            method = methods[which];
-            methodLabel.setText("Method: " + method.getLabel());
+        List<PaymentMethod> list = PaymentMethods.active();
+        if (list.isEmpty()) {
+            DialogUtil.toast(this, "Add a payment method in Settings first");
+            return;
+        }
+        String[] labels = new String[list.size()];
+        for (int i = 0; i < list.size(); i++) {
+            PaymentMethod m = list.get(i);
+            labels[i] = m.name != null && !m.name.isEmpty() ? m.name : m.id;
+        }
+        DialogUtil.pick(this, "Payment method", labels, currentMethodIndex(list), which -> {
+            method = list.get(which);
+            methodLabel.setText("Method: " + (method.name == null ? method.id : method.name));
             recalc();
         });
     }
 
+    private int currentMethodIndex(List<PaymentMethod> list) {
+        String id = method != null ? method.id : com.patechltd.salexfypos.model.PaymentMethod.CASH;
+        for (int i = 0; i < list.size(); i++) {
+            if (id.equals(list.get(i).id)) return i;
+        }
+        return 0;
+    }
+
+    private double taxOn(double subtotal) {
+        return subtotal * Prefs.taxPercent(this) / 100.0;
+    }
+
     private void recalc() {
         double subtotal = 0;
-        double tax = 0;
         for (Line l : lines) {
             double lineTotal = l.qty * l.price;
             subtotal += lineTotal;
-            tax += lineTotal * l.product.taxPercent / 100.0;
         }
+        double tax = taxOn(subtotal);
         double total = subtotal + tax;
         double paid;
-        if (method == PaymentMethod.CREDIT) {
+        if (method != null && method.isCredit) {
             paid = 0;
         } else {
             paid = NumberUtil.parse(paidInput.getText() == null ? "" : paidInput.getText().toString(), total);
@@ -264,15 +291,14 @@ public class ManualSaleActivity extends AppCompatActivity {
                 ? "" : ((EditText) findViewById(R.id.notes_input)).getText().toString().trim();
 
         double subtotal = 0;
-        double tax = 0;
         for (Line l : lines) {
             double lineTotal = l.qty * l.price;
             subtotal += lineTotal;
-            tax += lineTotal * l.product.taxPercent / 100.0;
         }
+        double tax = taxOn(subtotal);
         final double total = subtotal + tax;
         double paid;
-        if (method == PaymentMethod.CREDIT) {
+        if (method != null && method.isCredit) {
             paid = 0;
         } else {
             paid = NumberUtil.parse(paidInput.getText() == null ? "" : paidInput.getText().toString(), total);
@@ -305,7 +331,7 @@ public class ManualSaleActivity extends AppCompatActivity {
             sale.total = NumberUtil.round2(total);
             sale.paidAmount = NumberUtil.round2(paidFinal);
             sale.changeAmount = 0;
-            sale.paymentMethod = method.name();
+            sale.paymentMethod = method != null ? method.id : com.patechltd.salexfypos.model.PaymentMethod.CASH;
             sale.status = "COMPLETE";
             sale.notes = notes;
             sale.createdBy = cashierId;
@@ -330,10 +356,11 @@ public class ManualSaleActivity extends AppCompatActivity {
             }
 
             List<SalePayment> payments = new ArrayList<>();
-            if (method == PaymentMethod.CREDIT) {
+            boolean creditMode = method != null && method.isCredit;
+            if (creditMode) {
                 SalePayment credit = new SalePayment();
                 credit.uid = UUID.randomUUID().toString();
-                credit.method = PaymentMethod.CREDIT.name();
+                credit.method = com.patechltd.salexfypos.model.PaymentMethod.CREDIT;
                 credit.amount = NumberUtil.round2(total);
                 credit.customerId = customerId;
                 credit.customerName = customerName;
@@ -341,7 +368,7 @@ public class ManualSaleActivity extends AppCompatActivity {
             } else {
                 SalePayment main = new SalePayment();
                 main.uid = UUID.randomUUID().toString();
-                main.method = method.name();
+                main.method = method != null ? method.id : com.patechltd.salexfypos.model.PaymentMethod.CASH;
                 main.amount = NumberUtil.round2(paidFinal);
                 main.customerId = customerId;
                 main.customerName = customerName;
@@ -349,7 +376,7 @@ public class ManualSaleActivity extends AppCompatActivity {
                 if (balance > 0.01) {
                     SalePayment credit = new SalePayment();
                     credit.uid = UUID.randomUUID().toString();
-                    credit.method = PaymentMethod.CREDIT.name();
+                    credit.method = com.patechltd.salexfypos.model.PaymentMethod.CREDIT;
                     credit.amount = balance;
                     credit.customerId = customerId;
                     credit.customerName = customerName;

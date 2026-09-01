@@ -50,8 +50,8 @@ public abstract class DirectoryListActivity<T> extends AppCompatActivity {
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
         toolbar.setTitle(getTitleText());
-        toolbar.setNavigationOnClickListener(v -> finish());
         setSupportActionBar(toolbar);
+        toolbar.setNavigationOnClickListener(v -> finish());
 
         repo = Repository.get(this);
         RecyclerView list = findViewById(R.id.list);

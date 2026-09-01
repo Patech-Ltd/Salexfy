@@ -44,7 +44,8 @@ public class CustomerDetailActivity extends AppCompatActivity {
         repo = Repository.get(this);
         customerId = getIntent().getStringExtra("customerId");
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         name = findViewById(R.id.customer_name);
         phone = findViewById(R.id.customer_phone);

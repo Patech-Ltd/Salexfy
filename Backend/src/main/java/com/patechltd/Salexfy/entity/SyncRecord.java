@@ -16,13 +16,18 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "sync_records", indexes = {
         @Index(name = "idx_sync_device_seq", columnList = "deviceId,deviceSeq", unique = true),
-        @Index(name = "idx_sync_updated", columnList = "updatedAt")
+        @Index(name = "idx_sync_updated", columnList = "updatedAt"),
+        @Index(name = "idx_sync_shop", columnList = "shopId")
 })
 public class SyncRecord {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    /** Multi-tenancy: the shop this record belongs to. Prevents cross-shop leakage. */
+    @Column(nullable = false)
+    private String shopId = "default";
 
     @Column(nullable = false)
     private String deviceId;
@@ -50,6 +55,14 @@ public class SyncRecord {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getShopId() {
+        return shopId;
+    }
+
+    public void setShopId(String shopId) {
+        this.shopId = shopId;
     }
 
     public String getDeviceId() {

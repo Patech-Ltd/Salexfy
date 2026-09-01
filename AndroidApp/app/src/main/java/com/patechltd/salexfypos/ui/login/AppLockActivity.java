@@ -9,6 +9,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.biometric.BiometricManager;
@@ -34,6 +35,11 @@ public class AppLockActivity extends AppCompatActivity {
     private MaterialButton btnUnlock;
     private ProgressBar progress;
 
+    private int failedAttempts = 0;
+    private long lockoutUntil = 0;
+    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private static final long LOCKOUT_DURATION_MS = 30_000;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -53,13 +59,19 @@ public class AppLockActivity extends AppCompatActivity {
         if (biometricEnabled && biometricAvailable) {
             btnFingerprint.setVisibility(View.VISIBLE);
             btnFingerprint.setOnClickListener(v -> showBiometricPrompt());
-            // Auto-trigger on open
             showBiometricPrompt();
         } else {
             btnFingerprint.setVisibility(View.GONE);
         }
 
         btnUnlock.setOnClickListener(v -> verifyPassword());
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                moveTaskToBack(true);
+            }
+        });
     }
 
     private boolean isBiometricAvailable() {
@@ -79,7 +91,6 @@ public class AppLockActivity extends AppCompatActivity {
 
                     @Override
                     public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
-                        // User dismissed or error — let them fall back to password
                     }
 
                     @Override
@@ -98,6 +109,13 @@ public class AppLockActivity extends AppCompatActivity {
     }
 
     private void verifyPassword() {
+        long now = System.currentTimeMillis();
+        if (now < lockoutUntil) {
+            long remaining = (lockoutUntil - now) / 1000;
+            Toast.makeText(this, "Too many attempts. Wait " + remaining + "s", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String pwd = passwordField.getText() != null ? passwordField.getText().toString() : "";
         if (pwd.isEmpty()) {
             Toast.makeText(this, "Enter your password", Toast.LENGTH_SHORT).show();
@@ -106,7 +124,6 @@ public class AppLockActivity extends AppCompatActivity {
 
         String userId = Session.userId(this);
         if (userId == null) {
-            // Session expired — go to full login
             redirectToLogin();
             return;
         }
@@ -119,11 +136,21 @@ public class AppLockActivity extends AppCompatActivity {
             User user = repo.admin.getUser(userId);
             Handler handler = new Handler(Looper.getMainLooper());
             if (user == null || !PasswordHasher.verify(pwd, user.salt, user.passwordHash)) {
+                failedAttempts++;
+                if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+                    lockoutUntil = System.currentTimeMillis() + LOCKOUT_DURATION_MS;
+                    failedAttempts = 0;
+                }
                 handler.post(() -> {
                     btnUnlock.setEnabled(true);
                     progress.setVisibility(View.GONE);
-                    Toast.makeText(this, "Incorrect password", Toast.LENGTH_SHORT).show();
                     passwordField.setText("");
+                    if (lockoutUntil > System.currentTimeMillis()) {
+                        Toast.makeText(this, "Account locked for 30 seconds", Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(this, "Incorrect password (" + failedAttempts + "/" + MAX_FAILED_ATTEMPTS + ")",
+                                Toast.LENGTH_SHORT).show();
+                    }
                 });
             } else {
                 handler.post(this::unlock);
@@ -132,6 +159,10 @@ public class AppLockActivity extends AppCompatActivity {
     }
 
     private void unlock() {
+        long now = System.currentTimeMillis();
+        Prefs.putLong(this, Prefs.KEY_APP_LOCK_LAST_UNLOCK, now);
+        Prefs.putBoolean(this, Prefs.KEY_APP_LOCK_NEEDS_REAUTH, false);
+
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
@@ -140,14 +171,15 @@ public class AppLockActivity extends AppCompatActivity {
 
     private void redirectToLogin() {
         Session.end(this);
+        Prefs.putBoolean(this, Prefs.KEY_APP_LOCK_NEEDS_REAUTH, false);
         startActivity(new Intent(this, LoginActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
         finish();
     }
 
     @Override
-    public void onBackPressed() {
-        // Prevent back-navigation past the lock screen
-        moveTaskToBack(true);
+    protected void onDestroy() {
+        super.onDestroy();
+        passwordField.setText("");
     }
 }

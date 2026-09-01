@@ -9,10 +9,12 @@ import androidx.room.Query;
 import androidx.room.Transaction;
 import androidx.room.Update;
 
+import com.patechltd.salexfypos.db.BillRow;
 import com.patechltd.salexfypos.db.PurchaseWithItems;
 import com.patechltd.salexfypos.db.SupplierPayableRow;
 import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
+import com.patechltd.salexfypos.db.entity.SupplierPayment;
 import com.patechltd.salexfypos.sync.SyncSerializer;
 import com.patechltd.salexfypos.sync.SyncTracker;
 
@@ -118,4 +120,26 @@ public abstract class PurchaseDao {
             + "COALESCE((SELECT SUM(p.total - p.paidAmount) FROM purchases p WHERE p.supplierId = su.id), 0) AS payable "
             + "FROM suppliers su ORDER BY su.name ASC")
     public abstract List<SupplierPayableRow> getSupplierPayables();
+
+    @Query("SELECT p.id AS purchaseId, p.invoiceNo, p.supplierId, su.name AS supplierName, "
+            + "p.purchaseDate, p.total, p.paidAmount, (p.total - p.paidAmount) AS balance "
+            + "FROM purchases p LEFT JOIN suppliers su ON su.id = p.supplierId "
+            + "WHERE (p.total - p.paidAmount) > 0.001 "
+            + "ORDER BY p.purchaseDate ASC")
+    public abstract List<BillRow> getBills();
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract long insertSupplierPaymentRaw(SupplierPayment payment);
+
+    public long insertSupplierPayment(SupplierPayment payment) {
+        long id = insertSupplierPaymentRaw(payment);
+        SyncTracker.track(SyncTracker.SUPPLIER_PAYMENT, payment.uid, "INSERT", SyncSerializer.toJson(payment));
+        return id;
+    }
+
+    @Query("SELECT * FROM supplier_payments WHERE purchaseId = :purchaseId ORDER BY paymentDate DESC")
+    public abstract List<SupplierPayment> getSupplierPayments(String purchaseId);
+
+    @Query("SELECT COALESCE(SUM(p.total - p.paidAmount), 0) FROM purchases p")
+    public abstract double totalOutstanding();
 }

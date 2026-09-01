@@ -8,6 +8,8 @@ public class DayReportRow {
 
     public double totalSales;
 
+    public double subtotal;
+
     public double totalCost;
 
     public double profit;

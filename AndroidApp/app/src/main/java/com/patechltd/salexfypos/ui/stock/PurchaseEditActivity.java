@@ -1,6 +1,7 @@
 package com.patechltd.salexfypos.ui.stock;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -10,6 +11,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -23,9 +25,9 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.PurchaseLineAdapter;
+import com.patechltd.salexfypos.db.PurchaseWithItems;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Product;
-import com.patechltd.salexfypos.db.entity.ProductBarcode;
 import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Supplier;
@@ -37,25 +39,27 @@ import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class PurchaseEditActivity extends AppCompatActivity {
+
+    private static final int REQ_BATCH = 7001;
 
     private Repository repo;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<PurchaseItem> items = new ArrayList<>();
-    private final java.util.Map<String, Product> byBarcode = new java.util.HashMap<>();
-    private final java.util.Map<String, Product> byId = new java.util.HashMap<>();
     private String supplierId;
     private long purchaseDate = System.currentTimeMillis();
     private ScannerView scanner;
     private FrameLayout scannerContainer;
     private PurchaseLineAdapter adapter;
     private TextView supplierRow, subtotalView, totalView;
-    private TextInputEditText invoiceNo, paid, notes;
+    private TextInputEditText invoiceNo, paid, notes, dateField;
+    private MaterialButton save, delete, toggleScanner, batchAdd, btnEdit, btnPreview, btnPrint;
     private boolean editingExisting;
+    private boolean editing;
+    private boolean paidTouched;
+    private String existingSupplierName;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,9 +67,9 @@ public class PurchaseEditActivity extends AppCompatActivity {
         setContentView(R.layout.activity_purchase_edit);
 
         MaterialToolbar toolbar = findViewById(R.id.toolbar);
-        toolbar.setNavigationOnClickListener(v -> finish());
         setSupportActionBar(toolbar);
-
+        if (getSupportActionBar() != null) getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        toolbar.setNavigationOnClickListener(v -> finish());
         repo = Repository.get(this);
         String editId = getIntent().getStringExtra("id");
         editingExisting = editId != null;
@@ -74,13 +78,17 @@ public class PurchaseEditActivity extends AppCompatActivity {
         invoiceNo = findViewById(R.id.invoice_no);
         paid = findViewById(R.id.paid);
         notes = findViewById(R.id.notes);
+        dateField = findViewById(R.id.date_field);
         subtotalView = findViewById(R.id.subtotal);
         totalView = findViewById(R.id.total);
-        TextInputEditText dateField = findViewById(R.id.date_field);
-        MaterialButton save = findViewById(R.id.btn_save);
-        MaterialButton delete = findViewById(R.id.btn_delete);
-        MaterialButton toggleScanner = findViewById(R.id.btn_toggle_scanner);
-        MaterialButton batchAdd = findViewById(R.id.btn_batch_add);
+        save = findViewById(R.id.btn_save);
+        delete = findViewById(R.id.btn_delete);
+        toggleScanner = findViewById(R.id.btn_toggle_scanner);
+        batchAdd = findViewById(R.id.btn_batch_add);
+        MaterialButton exact = findViewById(R.id.btn_exact);
+        btnEdit = findViewById(R.id.btn_edit);
+        btnPreview = findViewById(R.id.btn_preview);
+        btnPrint = findViewById(R.id.btn_print_invoice);
         scannerContainer = findViewById(R.id.scanner_container);
         scanner = findViewById(R.id.scanner);
         RecyclerView list = findViewById(R.id.items_list);
@@ -88,11 +96,27 @@ public class PurchaseEditActivity extends AppCompatActivity {
         adapter = new PurchaseLineAdapter(new PurchaseLineAdapter.Listener() {
             @Override
             public void onClick(int position) {
+                if (editingExisting && !editing) {
+                    Toast.makeText(PurchaseEditActivity.this,
+                            "Tap \"Edit Purchase\" to change lines", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 editLine(position);
             }
 
             @Override
+            public void onEditCost(int position) {
+                if (editingExisting && !editing) {
+                    Toast.makeText(PurchaseEditActivity.this,
+                            "Tap \"Edit Purchase\" to change buying prices", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                editCost(position);
+            }
+
+            @Override
             public void onRemove(int position) {
+                if (editingExisting && !editing) return;
                 items.remove(position);
                 afterChange();
             }
@@ -100,29 +124,37 @@ public class PurchaseEditActivity extends AppCompatActivity {
         list.setLayoutManager(new LinearLayoutManager(this));
         list.setAdapter(adapter);
 
+        adapter.setShowProfit(editingExisting);
+
+        repo.run(() -> {
+            final java.util.Map<String, Product> map = new java.util.HashMap<>();
+            for (Product p : repo.products.getAllActive()) map.put(p.uid, p);
+            handler.post(() -> adapter.setProducts(map));
+        });
+
         if (editingExisting) {
-            toolbar.setTitle("Purchase Details");
-            loadExisting(editId);
+            toolbar.setTitle(editing ? "Edit Purchase" : "Purchase Details");
+            btnPreview.setVisibility(View.VISIBLE);
+            btnPrint.setVisibility(View.VISIBLE);
+            btnEdit.setVisibility(View.VISIBLE);
             save.setVisibility(View.GONE);
             toggleScanner.setVisibility(View.GONE);
-            dateField.setText(DateUtil.formatDate(purchaseDate));
+            batchAdd.setVisibility(View.GONE);
+            delete.setVisibility(View.VISIBLE);
+            loadExisting(editId);
         } else {
+            toolbar.setTitle("New Purchase");
+            delete.setVisibility(View.GONE);
             repo.run(() -> {
                 String no = repo.nextInvoiceNo();
                 handler.post(() -> invoiceNo.setText(no));
             });
-            dateField.setText(DateUtil.formatDate(purchaseDate));
             paid.setText("0");
-            toggleScanner.setOnClickListener(v -> {
-                boolean show = scannerContainer.getVisibility() == View.VISIBLE;
-                scannerContainer.setVisibility(show ? View.GONE : View.VISIBLE);
-                if (!show) ensurePermissionAndStart();
-            });
-            batchAdd.setOnClickListener(v -> openBatchAdd());
         }
+        dateField.setText(DateUtil.formatDate(purchaseDate));
 
         dateField.setOnClickListener(v -> {
-            if (editingExisting) return;
+            if (editingExisting && !editing) return;
             MaterialDatePicker<Long> picker = MaterialDatePicker.Builder.datePicker()
                     .setTitleText("Purchase date")
                     .setSelection(purchaseDate)
@@ -134,12 +166,34 @@ public class PurchaseEditActivity extends AppCompatActivity {
             picker.show(getSupportFragmentManager(), "date");
         });
 
-        supplierRow.setOnClickListener(v -> pickSupplier());
+        supplierRow.setOnClickListener(v -> {
+            if (editingExisting && !editing) return;
+            pickSupplier();
+        });
+
+        toggleScanner.setOnClickListener(v -> {
+            boolean show = scannerContainer.getVisibility() == View.VISIBLE;
+            scannerContainer.setVisibility(show ? View.GONE : View.VISIBLE);
+            if (show) scanner.stop();
+            else ensurePermissionAndStart();
+        });
+
+        batchAdd.setOnClickListener(v ->
+                startActivityForResult(new Intent(this, PurchasePickerActivity.class), REQ_BATCH));
 
         save.setOnClickListener(v -> savePurchase());
         delete.setOnClickListener(v -> confirmDelete());
+        btnEdit.setOnClickListener(v -> enterEditMode());
+        btnPreview.setOnClickListener(v -> openPreview());
+        btnPrint.setOnClickListener(v -> printInvoice());
 
-        loadProducts();
+        exact.setOnClickListener(v -> {
+            paidTouched = true;
+            paid.setText(String.valueOf(NumberUtil.round2(computeTotal())));
+        });
+        paid.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus) paidTouched = true;
+        });
     }
 
     @Override
@@ -148,6 +202,12 @@ public class PurchaseEditActivity extends AppCompatActivity {
         if (scannerContainer != null && scannerContainer.getVisibility() == View.VISIBLE) {
             ensurePermissionAndStart();
         }
+    }
+
+    @Override
+    public boolean onSupportNavigateUp() {
+        finish();
+        return true;
     }
 
     @Override
@@ -176,80 +236,31 @@ public class PurchaseEditActivity extends AppCompatActivity {
         }
     }
 
-    private void loadProducts() {
+    private void enterEditMode() {
+        editing = true;
+        ((MaterialToolbar) findViewById(R.id.toolbar)).setTitle("Edit Purchase");
+        btnEdit.setVisibility(View.GONE);
+        btnPreview.setVisibility(View.GONE);
+        btnPrint.setVisibility(View.GONE);
+        save.setVisibility(View.VISIBLE);
+        toggleScanner.setVisibility(View.VISIBLE);
+        batchAdd.setVisibility(View.VISIBLE);
+        delete.setVisibility(View.VISIBLE);
+        supplierRow.setText(supplierRow.getText());
+    }
+
+    private void handleScan(String code) {
+        final String trimmed = code == null ? "" : code.trim();
         repo.run(() -> {
-            List<Product> all = repo.products.getAllActive();
-            List<ProductBarcode> extra = repo.products.getAllBarcodes();
-            for (Product p : all) {
-                byId.put(p.uid, p);
-                if (p.barcode != null && !p.barcode.isEmpty()) {
-                    byBarcode.put(p.barcode.trim(), p);
+            Product p = repo.products.findActiveByBarcode(trimmed);
+            handler.post(() -> {
+                if (p == null) {
+                    Toast.makeText(this, "Product not found", Toast.LENGTH_SHORT).show();
+                    return;
                 }
-            }
-            for (ProductBarcode pb : extra) {
-                Product p = pb.barcode == null ? null : byId.get(pb.productId);
-                if (p != null && !pb.barcode.trim().isEmpty()) {
-                    byBarcode.put(pb.barcode.trim(), p);
-                }
-            }
+                addPurchaseItem(p, 1);
+            });
         });
-    }
-
-    private void openBatchAdd() {
-        com.google.android.material.textfield.TextInputEditText input = new com.google.android.material.textfield.TextInputEditText(this);
-        input.setHint("One barcode per line. Optional qty after a comma or space, e.g.\n8901234567890, 5");
-        input.setGravity(android.view.Gravity.TOP);
-        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        int pad = (int) (16 * getResources().getDisplayMetrics().density);
-        input.setPadding(pad, pad, pad, pad);
-        input.setMinHeight((int) (180 * getResources().getDisplayMetrics().density));
-
-        new MaterialAlertDialogBuilder(this)
-                .setTitle("Batch add products")
-                .setView(input)
-                .setPositiveButton("Add", (dialog, which) -> {
-                    String text = input.getText() == null ? "" : input.getText().toString();
-                    parseBatch(text);
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
-    private void parseBatch(String text) {
-        String[] lines = text.split("\n");
-        int added = 0;
-        int notFound = 0;
-        StringBuilder missing = new StringBuilder();
-        for (String raw : lines) {
-            String line = raw.trim();
-            if (line.isEmpty()) continue;
-            String barcode = line;
-            double qty = 1;
-            int comma = line.indexOf(',');
-            int space = line.indexOf(' ');
-            int sep = -1;
-            if (comma > 0) sep = comma;
-            else if (space > 0) sep = space;
-            if (sep > 0) {
-                barcode = line.substring(0, sep).trim();
-                qty = Math.max(0, NumberUtil.parse(line.substring(sep + 1).trim(), 1));
-            }
-            Product p = byBarcode.get(barcode);
-            if (p == null) {
-                notFound++;
-                if (missing.length() < 200) {
-                    if (missing.length() > 0) missing.append(", ");
-                    missing.append(barcode);
-                }
-                continue;
-            }
-            addPurchaseItem(p, qty);
-            added++;
-        }
-        String message = added + " item" + (added == 1 ? "" : "s") + " added";
-        if (notFound > 0) message += "\nNot found: " + missing;
-        DialogUtil.toast(this, message);
     }
 
     private void addPurchaseItem(Product p, double qty) {
@@ -268,50 +279,74 @@ public class PurchaseEditActivity extends AppCompatActivity {
         item.productName = p.name;
         item.barcode = p.barcode;
         boolean useWholesale = p.wholesalePrice > 0;
+        int factor = useWholesale ? Math.max(1, p.wholesaleFactor) : 1;
         item.isWholesale = useWholesale;
         item.unitLabel = useWholesale ? p.wholesaleUnit : p.retailUnit;
-        item.unitPrice = useWholesale ? p.wholesalePrice : p.retailPrice;
+        double buyPrice = p.costPrice > 0
+                ? (useWholesale ? p.costPrice * factor : p.costPrice)
+                : (useWholesale ? p.wholesalePrice : p.retailPrice);
+        item.unitPrice = buyPrice;
         item.qty = qty;
-        item.stockQty = qty * (useWholesale ? Math.max(1, p.wholesaleFactor) : 1);
+        item.stockQty = qty * factor;
         item.lineTotal = qty * item.unitPrice;
         items.add(item);
         afterChange();
         com.patechltd.salexfypos.util.SoundUtil.beep();
     }
 
-    private void handleScan(String code) {
-        Product p = byBarcode.get(code.trim());
-        if (p == null) {
-            Toast.makeText(this, "Product not found", Toast.LENGTH_SHORT).show();
+    private void editLine(int position) {
+        if (position < 0 || position >= items.size()) return;
+        final PurchaseItem item = items.get(position);
+        if (item.productId == null) {
+            showEditLineDialog(item, null);
             return;
         }
-        for (PurchaseItem item : items) {
-            if (item.productId.equals(p.uid)) {
-                item.qty += 1;
-                item.stockQty = item.stockQty + (item.isWholesale ? Math.max(1, p.wholesaleFactor) : 1);
-                item.lineTotal = item.qty * item.unitPrice;
-                afterChange();
-                return;
-            }
-        }
-        PurchaseItem item = new PurchaseItem();
-        item.productId = p.uid;
-        item.productName = p.name;
-        item.barcode = p.barcode;
-        boolean useWholesale = p.wholesalePrice > 0;
-        item.isWholesale = useWholesale;
-        item.unitLabel = useWholesale ? p.wholesaleUnit : p.retailUnit;
-        item.unitPrice = useWholesale ? p.wholesalePrice : p.retailPrice;
-        item.qty = 1;
-        item.stockQty = useWholesale ? Math.max(1, p.wholesaleFactor) : 1;
-        item.lineTotal = item.unitPrice;
-        items.add(item);
-        afterChange();
-        com.patechltd.salexfypos.util.SoundUtil.beep();
+        repo.run(() -> {
+            Product p = repo.products.getById(item.productId);
+            handler.post(() -> showEditLineDialog(item, p));
+        });
     }
 
-    private void editLine(int position) {
-        PurchaseItem item = items.get(position);
+    private void editCost(int position) {
+        if (position < 0 || position >= items.size()) return;
+        final PurchaseItem item = items.get(position);
+        if (item.productId == null) {
+            showCostInput(item, null);
+            return;
+        }
+        repo.run(() -> {
+            Product p = repo.products.getById(item.productId);
+            handler.post(() -> showCostInput(item, p));
+        });
+    }
+
+    private void showCostInput(final PurchaseItem item, final Product p) {
+        DialogUtil.input(this, "Buying price per " + (item.unitLabel == null ? "" : item.unitLabel),
+                "New buying price for " + item.productName,
+                String.valueOf(item.unitPrice), "Save", value -> {
+                    double price = NumberUtil.parse(value, item.unitPrice);
+                    applyCostChange(item, p, price);
+                });
+    }
+
+    private void applyCostChange(final PurchaseItem item, final Product p, final double price) {
+        item.unitPrice = NumberUtil.round2(Math.max(0, price));
+        item.lineTotal = NumberUtil.round2(item.qty * item.unitPrice);
+        afterChange();
+        int factor = (p != null && item.isWholesale && p.wholesaleFactor > 0) ? p.wholesaleFactor : 1;
+        final double unitCost = NumberUtil.round2(item.unitPrice / factor);
+        if (p == null) return;
+        repo.run(() -> {
+            Product live = repo.products.getById(p.uid);
+            if (live != null) {
+                live.costPrice = unitCost;
+                live.updatedAt = System.currentTimeMillis();
+                repo.products.update(live);
+            }
+        });
+    }
+
+    private void showEditLineDialog(final PurchaseItem item, final Product p) {
         View view = getLayoutInflater().inflate(R.layout.dialog_edit_line, null);
         TextView title = view.findViewById(R.id.line_title);
         com.google.android.material.button.MaterialButtonToggleGroup toggle = view.findViewById(R.id.line_unit_toggle);
@@ -335,14 +370,15 @@ public class PurchaseEditActivity extends AppCompatActivity {
                 .setView(view)
                 .setPositiveButton("Save", (dialog, which) -> {
                     item.isWholesale = wholesaleBtn.isChecked();
-                    item.qty = Math.max(0.001, NumberUtil.parse(qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
-                    item.unitPrice = NumberUtil.parse(priceInput.getText() == null ? "" : priceInput.getText().toString(), item.unitPrice);
-                    Product p = byId.get(item.productId);
+                    item.qty = Math.max(0.001, NumberUtil.parse(
+                            qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
+                    double price = NumberUtil.parse(
+                            priceInput.getText() == null ? "" : priceInput.getText().toString(), item.unitPrice);
                     int factor = item.isWholesale && p != null ? Math.max(1, p.wholesaleFactor) : 1;
                     item.stockQty = item.qty * factor;
-                    item.unitLabel = p != null ? (item.isWholesale ? p.wholesaleUnit : p.retailUnit) : item.unitLabel;
-                    item.lineTotal = item.qty * item.unitPrice;
-                    afterChange();
+                    item.unitLabel = p != null
+                            ? (item.isWholesale ? p.wholesaleUnit : p.retailUnit) : item.unitLabel;
+                    applyCostChange(item, p, price);
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
@@ -354,35 +390,53 @@ public class PurchaseEditActivity extends AppCompatActivity {
         for (PurchaseItem item : items) subtotal += item.lineTotal;
         subtotalView.setText(NumberUtil.money(subtotal));
         totalView.setText(NumberUtil.money(subtotal));
+        if (!editingExisting && !paidTouched) {
+            paid.setText(String.valueOf(NumberUtil.round2(subtotal)));
+        }
+    }
+
+    private double computeTotal() {
+        double total = 0;
+        for (PurchaseItem item : items) total += item.lineTotal;
+        return NumberUtil.round2(total);
     }
 
     private void pickSupplier() {
         repo.run(() -> {
             List<Supplier> suppliers = repo.suppliers.getSuppliers();
             List<String> names = new ArrayList<>();
+            names.add("＋ Add new supplier");
             for (Supplier s : suppliers) names.add(s.name);
-            names.add("+ New supplier");
-            handler.post(() -> DialogUtil.pick(this, "Supplier", names.toArray(new String[0]), -1, which -> {
-                if (which < suppliers.size()) {
-                    supplierId = suppliers.get(which).uid;
-                    supplierRow.setText("Supplier: " + suppliers.get(which).name);
+            handler.post(() -> DialogUtil.pick(this, "Select supplier",
+                    names.toArray(new String[0]), -1, which -> {
+                if (which == 0) {
+                    addNewSupplier();
                 } else {
-                    DialogUtil.inputText(this, "New supplier", "Supplier name", "", "Add", value -> {
-                        if (value.trim().isEmpty()) return;
-                        Supplier s = new Supplier();
-                        s.uid = java.util.UUID.randomUUID().toString();
-                        s.name = value.trim();
-                        s.createdAt = System.currentTimeMillis();
-                        repo.run(() -> {
-                            repo.suppliers.insertSupplier(s);
-                            handler.post(() -> {
-                                supplierId = s.uid;
-                                supplierRow.setText("Supplier: " + s.name);
-                            });
-                        });
-                    });
+                    int idx = which - 1;
+                    if (idx >= 0 && idx < suppliers.size()) {
+                        supplierId = suppliers.get(idx).uid;
+                        supplierRow.setText("Supplier: " + suppliers.get(idx).name);
+                    }
                 }
             }));
+        });
+    }
+
+    private void addNewSupplier() {
+        DialogUtil.inputText(this, "New supplier", "Supplier name", "", "Add", value -> {
+            if (value.trim().isEmpty()) return;
+            final String name = value.trim();
+            Supplier s = new Supplier();
+            s.uid = java.util.UUID.randomUUID().toString();
+            s.name = name;
+            s.createdAt = System.currentTimeMillis();
+            repo.run(() -> {
+                repo.suppliers.insertSupplier(s);
+                handler.post(() -> {
+                    supplierId = s.uid;
+                    supplierRow.setText("Supplier: " + name);
+                });
+            });
         });
     }
 
@@ -396,6 +450,9 @@ public class PurchaseEditActivity extends AppCompatActivity {
             return;
         }
         Purchase purchase = new Purchase();
+        if (editingExisting) {
+            purchase.uid = getIntent().getStringExtra("id");
+        }
         purchase.invoiceNo = invoiceNo.getText() == null ? "" : invoiceNo.getText().toString().trim();
         purchase.supplierId = supplierId;
         purchase.purchaseDate = purchaseDate;
@@ -408,16 +465,22 @@ public class PurchaseEditActivity extends AppCompatActivity {
         purchase.status = "COMPLETE";
         purchase.notes = notes.getText() == null ? "" : notes.getText().toString().trim();
         purchase.createdBy = Session.userId(this);
-        purchase.createdAt = System.currentTimeMillis();
+        purchase.createdAt = editingExisting ? System.currentTimeMillis() : System.currentTimeMillis();
         List<PurchaseItem> copy = new ArrayList<>(items);
 
         repo.run(() -> {
             try {
                 if (purchase.invoiceNo.isEmpty()) purchase.invoiceNo = repo.nextInvoiceNo();
-                repo.savePurchase(purchase, copy, true);
-                AppLogger.i("Purchase " + purchase.invoiceNo + " saved");
+                if (editingExisting) {
+                    repo.updatePurchase(purchase, copy, false);
+                } else {
+                    repo.savePurchase(purchase, copy, false);
+                }
+                AppLogger.i("Purchase " + purchase.invoiceNo + (editingExisting ? " updated" : " saved"));
                 handler.post(() -> {
-                    Toast.makeText(this, "Purchase saved. Stock updated.", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, editingExisting
+                            ? "Purchase updated. Stock re-adjusted."
+                            : "Purchase saved. Stock updated.", Toast.LENGTH_SHORT).show();
                     finish();
                 });
             } catch (Exception e) {
@@ -427,9 +490,35 @@ public class PurchaseEditActivity extends AppCompatActivity {
         });
     }
 
+    private void openPreview() {
+        Intent i = new Intent(this, PurchasePreviewActivity.class);
+        i.putExtra("purchaseId", getIntent().getStringExtra("id"));
+        startActivity(i);
+    }
+
+    private void printInvoice() {
+        repo.run(() -> {
+            PurchaseWithItems pw = repo.purchases.getPurchaseWithItems(getIntent().getStringExtra("id"));
+            if (pw == null || pw.purchase == null) return;
+            String supplierName = existingSupplierName;
+            if (supplierName == null && pw.purchase.supplierId != null) {
+                Supplier s = repo.suppliers.getSupplier(pw.purchase.supplierId);
+                supplierName = s == null ? null : s.name;
+            }
+            final String fName = supplierName;
+            handlePrint(pw, fName);
+        });
+    }
+
+    private void handlePrint(final PurchaseWithItems pw, final String supplierName) {
+        handler.post(() -> com.patechltd.salexfypos.print.PrinterManager.printPurchase(this, pw.purchase,
+                pw.items == null ? new ArrayList<>() : pw.items, supplierName,
+                (ok, msg) -> runOnUiThread(() -> DialogUtil.toast(this, msg))));
+    }
+
     private void loadExisting(String id) {
         repo.run(() -> {
-            com.patechltd.salexfypos.db.PurchaseWithItems pw = repo.purchases.getPurchaseWithItems(id);
+            PurchaseWithItems pw = repo.purchases.getPurchaseWithItems(id);
             final String supplierName;
             if (pw != null && pw.purchase != null && pw.purchase.supplierId != null) {
                 Supplier s = repo.suppliers.getSupplier(pw.purchase.supplierId);
@@ -443,21 +532,23 @@ public class PurchaseEditActivity extends AppCompatActivity {
                     return;
                 }
                 Purchase p = pw.purchase;
+                existingSupplierName = supplierName != null && !"—".equals(supplierName)
+                        ? supplierName : null;
                 if (supplierName != null) {
                     supplierRow.setText("Supplier: " + supplierName);
+                    supplierId = p.supplierId;
                 }
                 invoiceNo.setText(p.invoiceNo);
                 paid.setText(String.valueOf(p.paidAmount));
                 notes.setText(p.notes);
                 if (p.purchaseDate > 0) {
                     purchaseDate = p.purchaseDate;
-                    ((TextInputEditText) findViewById(R.id.date_field)).setText(DateUtil.formatDate(p.purchaseDate));
+                    dateField.setText(DateUtil.formatDate(p.purchaseDate));
                 }
                 items.clear();
                 if (pw.items != null) items.addAll(pw.items);
                 adapter.submit(items);
                 afterChange();
-                findViewById(R.id.btn_delete).setVisibility(View.VISIBLE);
             });
         });
     }
@@ -470,5 +561,37 @@ public class PurchaseEditActivity extends AppCompatActivity {
                     if (p != null) repo.deletePurchase(p);
                     handler.post(this::finish);
                 }));
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_BATCH && resultCode == RESULT_OK && data != null) {
+            String[] ids = data.getStringArrayExtra(PurchasePickerActivity.EXTRA_IDS);
+            String[] qtys = data.getStringArrayExtra(PurchasePickerActivity.EXTRA_QTYS);
+            if (ids == null || ids.length == 0) return;
+            List<Product> products = new ArrayList<>();
+            List<Double> quantities = new ArrayList<>();
+            repo.run(() -> {
+                for (int i = 0; i < ids.length; i++) {
+                    Product prod = repo.products.getById(ids[i]);
+                    if (prod != null) {
+                        products.add(prod);
+                        double q = qtys != null && i < qtys.length && qtys[i] != null
+                                ? NumberUtil.parse(qtys[i], 1) : 1;
+                        quantities.add(Math.max(0.001, q));
+                    }
+                }
+                final List<Product> prods = new ArrayList<>(products);
+                final List<Double> qtysList = new ArrayList<>(quantities);
+                handler.post(() -> {
+                    for (int i = 0; i < prods.size(); i++) {
+                        addPurchaseItem(prods.get(i), qtysList.get(i));
+                    }
+                    Toast.makeText(this, prods.size() + " product" + (prods.size() == 1 ? "" : "s")
+                            + " added", Toast.LENGTH_SHORT).show();
+                });
+            });
+        }
     }
 }

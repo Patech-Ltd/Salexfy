@@ -51,7 +51,8 @@ public class DebugActivity extends AppCompatActivity {
         setContentView(R.layout.activity_debug);
         repo = Repository.get(this);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         adapter = new KeyValueAdapter();
         adapter.setListener(this::onCrashRowClicked);

@@ -12,91 +12,21 @@
         android:layout_height="wrap_content"
         android:background="@color/brand_primary_dark"
         app:navigationIcon="@drawable/ic_arrow_back"
-        app:title="Help"
+        app:title="Help &amp; Support"
         app:titleTextColor="@color/white" />
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:fillViewport="true">
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
+            android:id="@+id/help_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Getting started"
-                android:textColor="@color/brand_primary_dark"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:lineSpacingMultiplier="1.2"
-                android:text="1.  Open the Sell tab and point the camera at a barcode or QR code to add it to the cart.\n\n2.  No product found? Add it on the Products tab, then come back and scan again.\n\n3.  Use retail or wholesale prices with the toggle on the sell screen.\n\n4.  Tap Checkout to finish a sale, choose a payment method, and view the receipt.\n\n5.  Add stock through the Stock tab - Purchases, or do a count with Stock Take.\n\n6.  Watch your numbers on the Reports tab and export to Excel anytime.\n\n7.  Back up your data regularly from Settings."
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:text="Selling"
-                android:textColor="@color/brand_primary_dark"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:lineSpacingMultiplier="1.2"
-                android:text="Hold a sale to set it aside; recall it from the Held list anytime.\n\nEdit a line by tapping the quantity or the pencil icon.\n\nPayments can be Cash, Card, M-Pesa or On Credit.\n\nA draft is saved automatically even if you leave the screen."
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:text="Products"
-                android:textColor="@color/brand_primary_dark"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:lineSpacingMultiplier="1.2"
-                android:text="Every product can have a retail and wholesale price.\n\nSet a wholesale factor (e.g. 12 for a dozen) so quantities convert automatically.\n\nA low-stock alert appears when quantity falls below the minimum."
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="22dp"
-                android:text="Backup"
-                android:textColor="@color/brand_primary_dark"
-                android:textSize="16sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:lineSpacingMultiplier="1.2"
-                android:text="Automatic backups are kept on internal storage (last 10 kept).\n\nUse Settings - Backup now for a manual copy.\n\nRestore replaces all current data - make a fresh backup first."
-                android:textColor="@color/text_primary"
-                android:textSize="14sp" />
-        </LinearLayout>
+            android:padding="14dp" />
     </ScrollView>
 </LinearLayout>

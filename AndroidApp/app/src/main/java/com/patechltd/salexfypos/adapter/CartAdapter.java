@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.patechltd.salexfypos.R;
@@ -28,16 +29,67 @@ public class CartAdapter extends RecyclerView.Adapter<CartAdapter.VH> {
     }
 
     private final List<SaleItem> items = new ArrayList<>();
+    private final List<Snapshot> snapshots = new ArrayList<>();
     private final Listener listener;
 
     public CartAdapter(Listener listener) {
         this.listener = listener;
     }
 
-    public void submit(List<SaleItem> list) {
+    public void submit(List<SaleItem> newList) {
+        List<SaleItem> oldList = new ArrayList<>(items);
+        final List<Snapshot> oldSnaps = new ArrayList<>(snapshots);
         items.clear();
-        items.addAll(list);
-        notifyDataSetChanged();
+        items.addAll(newList);
+        DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override
+            public int getOldListSize() {
+                return oldList.size();
+            }
+
+            @Override
+            public int getNewListSize() {
+                return items.size();
+            }
+
+            @Override
+            public boolean areItemsTheSame(int oldPos, int newPos) {
+                SaleItem o = oldList.get(oldPos);
+                SaleItem n = items.get(newPos);
+                if (o.uid != null && n.uid != null) return o.uid.equals(n.uid);
+                return o == n;
+            }
+
+            @Override
+            public boolean areContentsTheSame(int oldPos, int newPos) {
+                if (oldPos >= oldSnaps.size()) return false;
+                Snapshot s = oldSnaps.get(oldPos);
+                SaleItem n = items.get(newPos);
+                return s.qty == n.qty
+                        && s.unitPrice == n.unitPrice
+                        && s.lineTotal == n.lineTotal
+                        && eq(s.unitLabel, n.unitLabel);
+            }
+        }).dispatchUpdatesTo(this);
+        snapshots.clear();
+        for (SaleItem it : items) snapshots.add(new Snapshot(it));
+    }
+
+    private static class Snapshot {
+        final double qty, unitPrice, lineTotal;
+        final String unitLabel;
+
+        Snapshot(SaleItem item) {
+            qty = item.qty;
+            unitPrice = item.unitPrice;
+            lineTotal = item.lineTotal;
+            unitLabel = item.unitLabel;
+        }
+    }
+
+    private static boolean eq(String a, String b) {
+        if (a == null) return b == null;
+        return a.equals(b);
     }
 
     public List<SaleItem> getItems() {
@@ -62,10 +114,10 @@ public class CartAdapter extends RecyclerView.Adapter<CartAdapter.VH> {
         holder.qty.setText(NumberUtil.qty(item.qty));
         holder.lineTotal.setText(NumberUtil.money(item.lineTotal));
         holder.unitPrice.setText("@" + NumberUtil.money(item.unitPrice));
-        holder.plus.setOnClickListener(v -> listener.onPlus(position));
-        holder.minus.setOnClickListener(v -> listener.onMinus(position));
-        holder.remove.setOnClickListener(v -> listener.onRemove(position));
-        holder.itemView.setOnClickListener(v -> listener.onClick(position));
+        holder.plus.setOnClickListener(v -> listener.onPlus(holder.getAdapterPosition()));
+        holder.minus.setOnClickListener(v -> listener.onMinus(holder.getAdapterPosition()));
+        holder.remove.setOnClickListener(v -> listener.onRemove(holder.getAdapterPosition()));
+        holder.itemView.setOnClickListener(v -> listener.onClick(holder.getAdapterPosition()));
     }
 
     @Override

@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -18,7 +19,6 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.Toolbar;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -32,47 +32,60 @@ import com.patechltd.salexfypos.util.NumberUtil;
 import com.patechltd.salexfypos.util.Prefs;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
- * Full-page product finder for the sell screen. Tapping a product returns
- * its UID in the result intent.
+ * Floating dialog product finder for the sell screen. Tapping a product returns
+ * its UID in the result intent and closes the dialog. Results are loaded in pages
+ * directly from the database so the whole catalog is never held in memory.
  */
 public class ProductSearchActivity extends AppCompatActivity {
 
     public static final String EXTRA_WHOLESALE = "wholesale";
     public static final String EXTRA_PRODUCT_ID = "productId";
+    private static final int PAGE_SIZE = 50;
 
     private Repository repo;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<ProductStock> items = new ArrayList<>();
-    private final Map<String, String> unitNames = new HashMap<>();
     private SearchAdapter adapter;
     private boolean wholesale;
     private String query = "";
     private String categoryId = null;
+    private int loadedPages;
+    private boolean loading;
+    private boolean exhausted;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_product_search);
 
-        Toolbar toolbar = findViewById(R.id.toolbar);
-        setSupportActionBar(toolbar);
-        if (getSupportActionBar() != null) {
-            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        }
+        sizeAsDialog();
 
         repo = Repository.get(this);
         wholesale = getIntent().getBooleanExtra(EXTRA_WHOLESALE, false);
+
+        findViewById(R.id.btn_close).setOnClickListener(v -> finish());
 
         RecyclerView list = findViewById(R.id.result_list);
         adapter = new SearchAdapter();
         list.setLayoutManager(new LinearLayoutManager(this));
         list.setAdapter(adapter);
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
+                if (lm == null) return;
+                int visible = lm.getChildCount();
+                int total = lm.getItemCount();
+                int first = lm.findFirstVisibleItemPosition();
+                if (!loading && !exhausted && first + visible >= total - 10) {
+                    loadPage();
+                }
+            }
+        });
 
         EditText search = findViewById(R.id.search_input);
         search.addTextChangedListener(new TextWatcher() {
@@ -87,42 +100,68 @@ public class ProductSearchActivity extends AppCompatActivity {
             @Override
             public void afterTextChanged(Editable s) {
                 query = s.toString().trim().toLowerCase(Locale.ROOT);
-                refresh();
+                resetAndReload();
             }
         });
 
-        load();
+        loadCategories();
+        loadPage();
     }
 
-    private void load() {
+    private void sizeAsDialog() {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int w = (int) Math.min(560 * dm.density, dm.widthPixels - 16 * dm.density);
+        int h = (int) Math.min(720 * dm.density, dm.heightPixels - 24 * dm.density);
+        getWindow().setLayout(w, h);
+    }
+
+    private void resetAndReload() {
+        items.clear();
+        adapter.submit(items);
+        loadedPages = 0;
+        exhausted = false;
+        loadPage();
+    }
+
+    private void loadCategories() {
         repo.run(() -> {
-            List<Product> all = repo.products.getAllActive();
             List<Category> cats = repo.directory.getCategories();
-            for (com.patechltd.salexfypos.db.entity.Unit u : repo.directory.getUnits()) {
-                unitNames.put(u.uid, u.name);
-            }
+            handler.post(() -> buildChips(cats));
+        });
+    }
+
+    private void loadPage() {
+        if (loading) return;
+        loading = true;
+        repo.run(() -> {
+            List<Product> page = repo.products.searchActivePage(
+                    query, categoryId == null ? null : categoryId, PAGE_SIZE, loadedPages * PAGE_SIZE);
             List<String> ids = new ArrayList<>();
-            for (Product p : all) ids.add(p.uid);
-            Map<String, Double> qtys = new HashMap<>();
-            for (com.patechltd.salexfypos.db.ProductQty pq : repo.products.getQtys(ids)) {
-                qtys.put(pq.productId, pq.qty);
-            }
-            List<ProductStock> rows = new ArrayList<>();
-            for (Product p : all) {
-                ProductStock ps = new ProductStock();
-                ps.product = p;
-                Double v = qtys.get(p.uid);
-                ps.currentQty = v == null ? 0 : v;
-                String label = unitNames.get(p.retailUnitId);
-                if (label == null || label.isEmpty()) label = p.retailUnit;
-                ps.unitLabel = label;
-                rows.add(ps);
+            for (Product p : page) ids.add(p.uid);
+            java.util.Map<String, Double> qtys = new java.util.HashMap<>();
+            if (!ids.isEmpty()) {
+                for (com.patechltd.salexfypos.db.ProductQty pq : repo.products.getQtys(ids)) {
+                    qtys.put(pq.productId, pq.qty);
+                }
             }
             handler.post(() -> {
-                items.clear();
-                items.addAll(rows);
-                buildChips(cats);
-                refresh();
+                loading = false;
+                if (page.isEmpty()) {
+                    exhausted = true;
+                } else {
+                    loadedPages++;
+                    for (Product p : page) {
+                        ProductStock ps = new ProductStock();
+                        ps.product = p;
+                        Double v = qtys.get(p.uid);
+                        ps.currentQty = v == null ? 0 : v;
+                        ps.unitLabel = (p.retailUnit == null || p.retailUnit.isEmpty()) ? "Pcs" : p.retailUnit;
+                        items.add(ps);
+                    }
+                    adapter.submit(items);
+                }
+                findViewById(R.id.empty_hint).setVisibility(items.isEmpty() && exhausted
+                        ? View.VISIBLE : View.GONE);
             });
         });
     }
@@ -157,32 +196,9 @@ public class ProductSearchActivity extends AppCompatActivity {
                         : getResources().getColor(R.color.text_secondary));
                 c.setBackgroundResource(sel ? R.drawable.bg_chip_selected : R.drawable.bg_chip);
             }
-            refresh();
+            resetAndReload();
         });
         container.addView(chip);
-    }
-
-    private List<ProductStock> matches() {
-        List<ProductStock> out = new ArrayList<>();
-        for (ProductStock ps : items) {
-            Product p = ps.product;
-            if (!p.isActive) continue;
-            if (categoryId != null && !categoryId.equals(p.categoryId)) continue;
-            if (!query.isEmpty()) {
-                boolean hit = p.name != null && p.name.toLowerCase(Locale.ROOT).contains(query);
-                if (!hit && p.barcode != null) hit = p.barcode.toLowerCase(Locale.ROOT).contains(query);
-                if (!hit && p.sku != null) hit = p.sku.toLowerCase(Locale.ROOT).contains(query);
-                if (!hit) continue;
-            }
-            out.add(ps);
-        }
-        return out;
-    }
-
-    private void refresh() {
-        List<ProductStock> rows = matches();
-        adapter.submit(rows);
-        findViewById(R.id.empty_hint).setVisibility(rows.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     private int dp(int value) {
@@ -194,12 +210,6 @@ public class ProductSearchActivity extends AppCompatActivity {
         result.putExtra(EXTRA_PRODUCT_ID, ps.product.uid);
         setResult(RESULT_OK, result);
         finish();
-    }
-
-    @Override
-    public boolean onSupportNavigateUp() {
-        finish();
-        return true;
     }
 
     private class SearchAdapter extends RecyclerView.Adapter<SearchAdapter.VH> {

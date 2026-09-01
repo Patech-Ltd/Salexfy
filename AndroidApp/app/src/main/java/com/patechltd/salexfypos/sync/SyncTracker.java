@@ -16,6 +16,7 @@ public final class SyncTracker {
     public static final String DEBT_PAYMENT = "DEBT_PAYMENT";
     public static final String PURCHASE = "PURCHASE";
     public static final String PURCHASE_ITEM = "PURCHASE_ITEM";
+    public static final String SUPPLIER_PAYMENT = "SUPPLIER_PAYMENT";
     public static final String SALE = "SALE";
     public static final String SALE_ITEM = "SALE_ITEM";
     public static final String SALE_PAYMENT = "SALE_PAYMENT";

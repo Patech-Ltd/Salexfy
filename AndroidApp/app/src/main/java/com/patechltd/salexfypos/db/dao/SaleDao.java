@@ -10,6 +10,7 @@ import androidx.room.Update;
 
 import com.patechltd.salexfypos.db.CashierReportRow;
 import com.patechltd.salexfypos.db.DayReportRow;
+import com.patechltd.salexfypos.db.MonthReportRow;
 import com.patechltd.salexfypos.db.PaymentMethodTotalRow;
 import com.patechltd.salexfypos.db.SaleWithItems;
 import com.patechltd.salexfypos.db.TopProductRow;
@@ -115,6 +116,15 @@ public abstract class SaleDao {
     @Query("SELECT * FROM sales WHERE status = 'HELD' ORDER BY createdAt ASC")
     public abstract List<Sale> getHeld();
 
+    @Transaction
+    @Query("SELECT * FROM sales WHERE status = 'HELD' "
+            + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
+            + "     OR notes LIKE '%' || :q || '%' "
+            + "     OR id IN (SELECT saleId FROM sale_items "
+            + "               WHERE productName LIKE '%' || :q || '%')) "
+            + "ORDER BY createdAt DESC LIMIT :limit OFFSET :offset")
+    public abstract List<SaleWithItems> getHeldPage(String q, int limit, int offset);
+
     @Query("SELECT * FROM sales WHERE status = 'HELD' ORDER BY createdAt ASC")
     public abstract LiveData<List<Sale>> observeHeld();
 
@@ -127,21 +137,22 @@ public abstract class SaleDao {
     @Query("SELECT MAX(saleNo) FROM sales")
     public abstract String maxSaleNo();
 
-    @Query("SELECT (saleDate / 86400000) AS dayStart, "
+    @Query("SELECT (strftime('%s', date(saleDate / 1000, 'unixepoch', 'localtime')) * 1000) AS dayStart, "
             + "COUNT(*) AS saleCount, "
             + "COALESCE(SUM(total), 0) AS totalSales, "
-            + "COALESCE(SUM((SELECT SUM(item.qty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS totalCost, "
-            + "COALESCE(SUM(total - (SELECT SUM(item.qty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit, "
+            + "COALESCE(SUM(subtotal), 0) AS subtotal, "
+            + "COALESCE(SUM((SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS totalCost, "
+            + "COALESCE(SUM(total - (SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit, "
             + "COALESCE(SUM(discount), 0) AS discountTotal, "
             + "COALESCE(SUM((SELECT COUNT(*) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS itemCount "
             + "FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD' "
-            + "GROUP BY (saleDate / 86400000) ORDER BY dayStart DESC")
+            + "GROUP BY (strftime('%s', date(saleDate / 1000, 'unixepoch', 'localtime')) * 1000) ORDER BY dayStart DESC")
     public abstract List<DayReportRow> getDailyReport(long from, long to);
 
     @Query("SELECT cashierId, cashierName, COUNT(*) AS saleCount, "
             + "COALESCE(SUM(total), 0) AS totalSales, "
-            + "COALESCE(SUM(total - (SELECT SUM(item.qty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit, "
+            + "COALESCE(SUM(total - (SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit, "
             + "0 AS commission "
             + "FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD' "
@@ -156,9 +167,23 @@ public abstract class SaleDao {
             + "GROUP BY item.productId ORDER BY totalQty DESC LIMIT :limit")
     public abstract List<TopProductRow> getTopProducts(long from, long to, int limit);
 
+    @Query("SELECT (strftime('%s', date(saleDate / 1000, 'unixepoch', 'localtime', 'start of month')) * 1000) AS monthStart, "
+            + "COUNT(*) AS saleCount, "
+            + "COALESCE(SUM(total), 0) AS totalSales, "
+            + "COALESCE(SUM(subtotal), 0) AS subtotal, "
+            + "COALESCE(SUM((SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS totalCost, "
+            + "COALESCE(SUM(total - (SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit "
+            + "FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
+            + "GROUP BY monthStart ORDER BY monthStart DESC")
+    public abstract List<MonthReportRow> getMonthlySummary();
+
     @Query("SELECT COALESCE(SUM(total), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD'")
     public abstract double salesTotal(long from, long to);
+
+    @Query("SELECT COALESCE(SUM(subtotal), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
+            + "AND status != 'DRAFT' AND status != 'HELD'")
+    public abstract double subtotalTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(taxAmount), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
             + "AND status != 'DRAFT' AND status != 'HELD'")
@@ -172,7 +197,7 @@ public abstract class SaleDao {
             + "AND status != 'DRAFT' AND status != 'HELD'")
     public abstract int saleCountBetween(long from, long to);
 
-    @Query("SELECT COALESCE(SUM(item.qty * item.costPrice), 0) FROM sale_items item "
+    @Query("SELECT COALESCE(SUM(item.stockQty * item.costPrice), 0) FROM sale_items item "
             + "JOIN sales s ON s.id = item.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
             + "AND s.status != 'DRAFT' AND s.status != 'HELD'")
@@ -200,4 +225,15 @@ public abstract class SaleDao {
             + "               OR barcode LIKE '%' || :q || '%')) "
             + "ORDER BY saleDate DESC LIMIT :limit OFFSET :offset")
     public abstract List<SaleWithItems> searchCompletePage(String q, long from, long to, int limit, int offset);
+
+    @Transaction
+    @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
+            + "AND saleDate >= :from AND saleDate <= :to "
+            + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
+            + "     OR customerName LIKE '%' || :q || '%' "
+            + "     OR id IN (SELECT saleId FROM sale_items "
+            + "               WHERE productName LIKE '%' || :q || '%' "
+            + "               OR barcode LIKE '%' || :q || '%')) "
+            + "ORDER BY saleDate DESC")
+    public abstract List<SaleWithItems> exportComplete(String q, long from, long to);
 }

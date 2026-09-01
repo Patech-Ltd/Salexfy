@@ -56,10 +56,15 @@ public class SalesHistoryActivity extends AppCompatActivity {
 
         repo = Repository.get(this);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         findViewById(R.id.btn_manual_sale).setOnClickListener(v ->
                 startActivity(new Intent(this, ManualSaleActivity.class)));
+
+        findViewById(R.id.btn_export_sales).setOnClickListener(v ->
+                com.patechltd.salexfypos.util.StorageUtil.createReportUri(this,
+                        "sales_" + DateUtil.formatDate(System.currentTimeMillis())));
 
         adapter = new KeyValueAdapter();
         adapter.setListener(position -> {
@@ -209,6 +214,44 @@ public class SalesHistoryActivity extends AppCompatActivity {
 
     private int dp(int v) {
         return Math.round(getResources().getDisplayMetrics().density * v);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == com.patechltd.salexfypos.util.StorageUtil.REQ_CREATE_REPORT
+                && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            exportSales(data.getData());
+        }
+    }
+
+    private void exportSales(android.net.Uri uri) {
+        repo.run(() -> {
+            final List<SaleWithItems> list =
+                    repo.sales.exportComplete(query, from, to);
+            boolean ok = com.patechltd.salexfypos.util.ExcelUtil.export(this, uri,
+                    "Sales", list, new com.patechltd.salexfypos.util.ExcelUtil.RowWriter() {
+                        @Override public Object[] header() {
+                            return new Object[]{"Sale No", "Date", "Time", "Payment", "Cashier",
+                                    "Customer", "Subtotal", "Tax", "Discount", "Total",
+                                    "Paid", "Change", "Items"};
+                        }
+                        @Override public Object[] row(Object item, int index) {
+                            SaleWithItems sw = (SaleWithItems) item;
+                            if (sw == null || sw.sale == null) return null;
+                            int items = sw.items == null ? 0 : sw.items.size();
+                            return new Object[]{sw.sale.saleNo,
+                                    DateUtil.formatDate(sw.sale.saleDate),
+                                    DateUtil.formatTime(sw.sale.saleDate),
+                                    com.patechltd.salexfypos.model.PaymentMethod.labelOf(sw.sale.paymentMethod),
+                                    sw.sale.cashierName, sw.sale.customerName,
+                                    sw.sale.subtotal, sw.sale.taxAmount, sw.sale.discount,
+                                    sw.sale.total, sw.sale.paidAmount, sw.sale.changeAmount, items};
+                        }
+                    });
+            handler.post(() -> android.widget.Toast.makeText(this,
+                    ok ? "Sales exported" : "Export failed", android.widget.Toast.LENGTH_SHORT).show());
+        });
     }
 
     private void resetAndLoad() {

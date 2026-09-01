@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
@@ -23,8 +25,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody LoginRequest request) {
         return auth.login(request.username(), request.password())
-                .<ResponseEntity<?>>map(token -> ResponseEntity.ok(new LoginResponse(token)))
+                .<ResponseEntity<?>>map(token -> {
+                    String shopId = auth.shopIdForToken(token).orElse("default");
+                    return ResponseEntity.ok(new LoginResponse(token, shopId));
+                })
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body("Invalid username or password"));
+                        .body(Map.of("error", "Invalid username or password")));
     }
 }

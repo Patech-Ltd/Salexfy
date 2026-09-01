@@ -35,17 +35,23 @@ import java.util.Locale;
 
 /**
  * Full-page list of held (paused) transactions. Tap to recall, trash icon
- * to discard.
+ * to discard. Rows are loaded in pages straight from the database so the
+ * whole held list is never held in memory.
  */
 public class HeldSalesActivity extends AppCompatActivity {
 
     public static final String EXTRA_SALE_ID = "saleId";
+    private static final int PAGE_SIZE = 30;
 
     private Repository repo;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<SaleWithItems> all = new ArrayList<>();
+    private final List<SaleWithItems> visible = new ArrayList<>();
     private HeldAdapter adapter;
     private String query = "";
+    private int page;
+    private boolean loading;
+    private boolean endReached;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -61,12 +67,27 @@ public class HeldSalesActivity extends AppCompatActivity {
         repo = Repository.get(this);
 
         RecyclerView list = findViewById(R.id.held_list);
+        LinearLayoutManager lm = new LinearLayoutManager(this);
         adapter = new HeldAdapter();
-        list.setLayoutManager(new LinearLayoutManager(this));
+        list.setLayoutManager(lm);
         list.setAdapter(adapter);
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(RecyclerView recyclerView, int dx, int dy) {
+                if (dy <= 0) return;
+                int total = lm.getItemCount();
+                int last = lm.findLastVisibleItemPosition();
+                if (total > 0 && last >= total - 3) loadNextPage();
+            }
+        });
 
         EditText search = findViewById(R.id.held_search);
         search.addTextChangedListener(new TextWatcher() {
+            private final Runnable debounce = () -> {
+                query = search.getText() == null ? "" : search.getText().toString().trim();
+                resetAndReload();
+            };
+
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
             }
@@ -77,57 +98,49 @@ public class HeldSalesActivity extends AppCompatActivity {
 
             @Override
             public void afterTextChanged(Editable s) {
-                query = s.toString().trim().toLowerCase(Locale.ROOT);
-                refresh();
+                handler.removeCallbacks(debounce);
+                handler.postDelayed(debounce, 400);
             }
         });
 
-        load();
+        resetAndReload();
     }
 
-    private void load() {
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resetAndReload();
+    }
+
+    private void resetAndReload() {
+        page = 0;
+        endReached = false;
+        all.clear();
+        render();
+        loadNextPage();
+    }
+
+    private void loadNextPage() {
+        if (loading || endReached) return;
+        loading = true;
+        final int pageNo = page;
         repo.run(() -> {
-            List<Sale> held = repo.sales.getHeld();
-            List<SaleWithItems> rows = new ArrayList<>();
-            for (Sale s : held) {
-                SaleWithItems sw = repo.sales.getSaleWithItems(s.uid);
-                if (sw != null) rows.add(sw);
-            }
+            List<SaleWithItems> rows = repo.sales.getHeldPage(query, PAGE_SIZE, pageNo * PAGE_SIZE);
             handler.post(() -> {
-                all.clear();
+                if (rows.size() < PAGE_SIZE) endReached = true;
                 all.addAll(rows);
-                refresh();
+                page++;
+                loading = false;
+                render();
             });
         });
     }
 
-    private void refresh() {
-        List<SaleWithItems> rows = matches();
-        adapter.submit(rows);
-        findViewById(R.id.empty_hint).setVisibility(rows.isEmpty() ? View.VISIBLE : View.GONE);
-    }
-
-    private List<SaleWithItems> matches() {
-        List<SaleWithItems> out = new ArrayList<>();
-        for (SaleWithItems sw : all) {
-            Sale s = sw.sale;
-            if (query.isEmpty()) {
-                out.add(sw);
-                continue;
-            }
-            boolean hit = s.saleNo != null && s.saleNo.toLowerCase(Locale.ROOT).contains(query);
-            if (!hit && s.notes != null && s.notes.toLowerCase(Locale.ROOT).contains(query)) hit = true;
-            if (!hit) {
-                for (SaleItem it : sw.items) {
-                    if (it.productName != null && it.productName.toLowerCase(Locale.ROOT).contains(query)) {
-                        hit = true;
-                        break;
-                    }
-                }
-            }
-            if (hit) out.add(sw);
-        }
-        return out;
+    private void render() {
+        visible.clear();
+        visible.addAll(all);
+        adapter.submit(visible);
+        findViewById(R.id.empty_hint).setVisibility(visible.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     private void recall(Sale sale) {
@@ -144,7 +157,7 @@ public class HeldSalesActivity extends AppCompatActivity {
                     repo.sales.deleteSale(sale.uid);
                     handler.post(() -> {
                         Toast.makeText(this, "Held transaction deleted", Toast.LENGTH_SHORT).show();
-                        load();
+                        resetAndReload();
                     });
                 }));
     }
@@ -193,7 +206,7 @@ public class HeldSalesActivity extends AppCompatActivity {
 
         @Override
         public int getItemCount() {
-            return rows.size();
+            return visible.size();
         }
 
         private String itemNames(SaleWithItems sw) {

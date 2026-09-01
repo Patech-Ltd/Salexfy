@@ -25,8 +25,10 @@ import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.db.entity.StockMovement;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.StockTakeItem;
+import com.patechltd.salexfypos.db.entity.SupplierPayment;
 import com.patechltd.salexfypos.model.MovementType;
 import com.patechltd.salexfypos.sync.SyncTracker;
+import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.NumberUtil;
 
 import java.util.List;
@@ -60,6 +62,7 @@ public class Repository {
     public final CrashDao crash;
     public final ExpenseDao expenses;
     public final SyncDao sync;
+    public final com.patechltd.salexfypos.db.dao.PaymentMethodDao paymentMethods;
 
     private Repository(Context context) {
         db = AppDatabase.getInstance(context);
@@ -73,7 +76,9 @@ public class Repository {
         crash = db.crashDao();
         expenses = db.expenseDao();
         sync = db.syncDao();
+        paymentMethods = db.paymentMethodDao();
         SyncTracker.attach(sync);
+        run(this::refreshPaymentMethods);
     }
 
     public static Repository get(Context context) {
@@ -144,6 +149,67 @@ public class Repository {
             }
         }
         return String.format("%08d", next);
+    }
+
+    /** Reloads the payment-method list into the shared cache (background). */
+    public void refreshPaymentMethods() {
+        try {
+            List<com.patechltd.salexfypos.db.entity.PaymentMethod> all = paymentMethods.getAll();
+            if (all.isEmpty()) {
+                paymentMethods.insert(seedMethod("CASH", "Cash", false, true, true, 0));
+                paymentMethods.insert(seedMethod("MPESA", "M-Pesa", false, false, true, 1));
+                paymentMethods.insert(seedMethod("CREDIT", "On Credit", true, true, true, 2));
+                paymentMethods.insert(seedMethod("AIRTEL", "Airtel Money", false, false, false, 3));
+                paymentMethods.insert(seedMethod("TIGO", "Tigo Pesa", false, false, false, 4));
+                paymentMethods.insert(seedMethod("MTN", "MTN MoMo", false, false, false, 5));
+                paymentMethods.insert(seedMethod("ORANGE", "Orange Money", false, false, false, 6));
+                paymentMethods.insert(seedMethod("HALOPESA", "Halopesa", false, false, false, 7));
+                paymentMethods.insert(seedMethod("CARD", "Card", false, false, false, 8));
+                paymentMethods.insert(seedMethod("BANK", "Bank Transfer", false, false, false, 9));
+                paymentMethods.insert(seedMethod("CHEQUE", "Cheque", false, false, false, 10));
+                paymentMethods.insert(seedMethod("VOUCHER", "Gift Voucher", false, false, false, 11));
+                all = paymentMethods.getAll();
+            }
+            com.patechltd.salexfypos.util.PaymentMethods.refresh(all);
+        } catch (Exception e) {
+            AppLogger.e("Refresh payment methods failed", e);
+        }
+    }
+
+    private com.patechltd.salexfypos.db.entity.PaymentMethod seedMethod(String id, String name,
+            boolean credit, boolean system, boolean active, int sortOrder) {
+        com.patechltd.salexfypos.db.entity.PaymentMethod m =
+                new com.patechltd.salexfypos.db.entity.PaymentMethod();
+        m.id = id;
+        m.name = name;
+        m.isCredit = credit;
+        m.isSystem = system;
+        m.active = active;
+        m.sortOrder = sortOrder;
+        return m;
+    }
+
+    public void savePaymentMethod(com.patechltd.salexfypos.db.entity.PaymentMethod method) {
+        paymentMethods.insert(method);
+        refreshPaymentMethods();
+    }
+
+    public void updatePaymentMethod(com.patechltd.salexfypos.db.entity.PaymentMethod method) {
+        paymentMethods.update(method);
+        refreshPaymentMethods();
+    }
+
+    public void deletePaymentMethod(com.patechltd.salexfypos.db.entity.PaymentMethod method) {
+        paymentMethods.delete(method);
+        refreshPaymentMethods();
+    }
+
+    public double outstandingDebt(String customerId) {
+        if (customerId == null || customerId.isEmpty()) return 0;
+        double debt = suppliers.customerDebt(customerId);
+        double paid = 0;
+        for (DebtPayment payment : suppliers.getPayments(customerId)) paid += payment.amount;
+        return Math.max(0, Math.round((debt - paid) * 100.0) / 100.0);
     }
 
     public synchronized String nextInvoiceNo() {
@@ -241,6 +307,7 @@ public class Repository {
         purchases.deleteItemsForPurchase(purchase.uid);
         for (PurchaseItem item : items) {
             if (item.uid == null) item.uid = UUID.randomUUID().toString();
+            item.purchaseId = purchase.uid;
             purchases.insertPurchaseItem(item);
             adjustStock(purchase.uid, item.productId, item.stockQty, MovementType.PURCHASE, item.unitLabel,
                     purchase.createdBy, "Purchase " + purchase.invoiceNo, purchase.purchaseDate);
@@ -273,6 +340,39 @@ public class Repository {
     }
 
     @Transaction
+    public void updatePurchase(Purchase purchase, List<PurchaseItem> items, boolean updateCost) {
+        if (purchase.uid == null) return;
+        stock.deleteMovementsForRef(purchase.uid, MovementType.PURCHASE.name());
+        purchases.deleteItemsForPurchase(purchase.uid);
+        savePurchase(purchase, items, updateCost);
+    }
+
+    @Transaction
+    public SupplierPayment recordSupplierPayment(String purchaseId, double amount, String method,
+                                                String notes, String userId) {
+        Purchase purchase = purchases.getPurchase(purchaseId);
+        if (purchase == null || amount <= 0) return null;
+        double oldPaid = purchase.paidAmount;
+        double balance = purchase.total - oldPaid;
+        double applied = Math.min(amount, Math.max(0, balance));
+        applied = Math.round(applied * 100.0) / 100.0;
+        if (applied < 0.005) return null;
+        purchase.paidAmount = Math.round((oldPaid + applied) * 100.0) / 100.0;
+        purchases.updatePurchase(purchase);
+        SupplierPayment payment = new SupplierPayment();
+        payment.uid = UUID.randomUUID().toString();
+        payment.purchaseId = purchaseId;
+        payment.amount = applied;
+        payment.paymentDate = System.currentTimeMillis();
+        payment.method = method;
+        payment.notes = notes;
+        payment.createdBy = userId;
+        payment.createdAt = System.currentTimeMillis();
+        purchases.insertSupplierPayment(payment);
+        return payment;
+    }
+
+    @Transaction
     public void recordAdjustment(String productId, double delta, String note, String userId, String unitLabel) {
         Product p = products.getById(productId);
         if (p == null) return;
@@ -291,6 +391,7 @@ public class Repository {
         }
         for (StockTakeItem item : items) {
             if (item.uid == null) item.uid = UUID.randomUUID().toString();
+            if (item.stockTakeId == null) item.stockTakeId = stockTake.uid;
             stock.insertStockTakeItem(item);
             if (item.diffQty != 0) {
                 adjustStock(stockTake.uid, item.productId, item.diffQty, MovementType.STOCK_TAKE,
@@ -320,6 +421,21 @@ public class Repository {
         e.expenseDate = date;
         e.createdAt = System.currentTimeMillis();
         expenses.insert(e);
+    }
+
+    @Transaction
+    public void updateExpense(Expense expense) {
+        if (expense == null || expense.uid == null) return;
+        expense.description = expense.description == null ? "" : expense.description.trim();
+        expense.category = expense.category == null ? null : expense.category.trim();
+        expense.amount = NumberUtil.round2(expense.amount);
+        expenses.update(expense);
+    }
+
+    @Transaction
+    public void deleteExpense(String uid) {
+        if (uid == null) return;
+        expenses.delete(uid);
     }
 
     @Transaction

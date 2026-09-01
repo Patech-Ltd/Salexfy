@@ -160,13 +160,33 @@
                 android:clipToPadding="false"
                 android:padding="10dp" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btn_new_purchase"
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="54dp"
+                android:layout_height="wrap_content"
                 android:layout_margin="12dp"
-                android:text="New Purchase / Invoice"
-                app:icon="@drawable/ic_note_add" />
+                android:orientation="horizontal">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_new_purchase"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_weight="2"
+                    android:text="New Purchase / Invoice"
+                    app:icon="@drawable/ic_note_add" />
+
+                <Space
+                    android:layout_width="10dp"
+                    android:layout_height="1dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_export_purchases"
+                    style="@style/Widget.Material3.Button.OutlinedButton"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_weight="1"
+                    android:text="Export"
+                    app:icon="@drawable/ic_excel" />
+            </LinearLayout>
         </LinearLayout>
 
         <LinearLayout

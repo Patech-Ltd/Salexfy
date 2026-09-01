@@ -39,7 +39,8 @@ public class PrinterSettingsActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_printer_settings);
 
-        findViewById(R.id.toolbar).setOnClickListener(v -> onBackPressed());
+        ((com.google.android.material.appbar.MaterialToolbar) findViewById(R.id.toolbar))
+                .setNavigationOnClickListener(v -> finish());
 
         printReceipts = findViewById(R.id.switch_print_receipts);
         printerTypeGroup = findViewById(R.id.printer_type_group);

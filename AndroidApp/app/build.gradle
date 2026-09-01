@@ -54,7 +54,6 @@ dependencies {
     implementation libs.zxing.core
     implementation libs.mlkit.barcode
     implementation libs.jackson.databind
-    implementation libs.poi
     implementation libs.work.runtime
     coreLibraryDesugaring libs.desugar.jdk.libs
     implementation libs.biometric

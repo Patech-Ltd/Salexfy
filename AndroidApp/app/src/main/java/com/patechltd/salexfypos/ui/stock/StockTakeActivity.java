@@ -1,6 +1,7 @@
 package com.patechltd.salexfypos.ui.stock;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -9,6 +10,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -23,12 +25,12 @@ import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.StockTakeLineAdapter;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Product;
-import com.patechltd.salexfypos.db.entity.ProductBarcode;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.StockTakeItem;
 import com.patechltd.salexfypos.db.entity.User;
 import com.patechltd.salexfypos.scanner.ScannerView;
 import com.patechltd.salexfypos.security.Session;
+import com.patechltd.salexfypos.ui.sell.ProductSearchActivity;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
@@ -36,23 +38,20 @@ import com.patechltd.salexfypos.util.NumberUtil;
 import com.patechltd.salexfypos.util.SoundUtil;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class StockTakeActivity extends AppCompatActivity {
 
     private Repository repo;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final List<StockTakeLineAdapter.Line> lines = new ArrayList<>();
-    private final java.util.Map<String, Product> byBarcode = new java.util.HashMap<>();
-    private final java.util.Map<String, Double> qtyByProductId = new java.util.HashMap<>();
     private long takeDate = System.currentTimeMillis();
     private ScannerView scanner;
     private FrameLayout scannerContainer;
     private StockTakeLineAdapter adapter;
     private TextInputEditText nameInput;
     private String existingId;
+    private static final int REQ_SEARCH = 41;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -70,6 +69,7 @@ public class StockTakeActivity extends AppCompatActivity {
         scannerContainer = findViewById(R.id.scanner_container);
         scanner = findViewById(R.id.scanner);
         MaterialButton toggleScanner = findViewById(R.id.btn_toggle_scanner);
+        MaterialButton search = findViewById(R.id.btn_search);
         MaterialButton complete = findViewById(R.id.btn_complete);
         RecyclerView list = findViewById(R.id.items_list);
 
@@ -97,16 +97,24 @@ public class StockTakeActivity extends AppCompatActivity {
             else ensurePermissionAndStart();
         });
 
+        search.setOnClickListener(v -> {
+            Intent i = new Intent(this, ProductSearchActivity.class);
+            i.putExtra(ProductSearchActivity.EXTRA_WHOLESALE, false);
+            startActivityForResult(i, REQ_SEARCH);
+        });
+
         complete.setOnClickListener(v -> completeTake());
 
         if (existingId != null) {
             toolbar.setTitle("Stock Take Details");
             complete.setVisibility(View.GONE);
             toggleScanner.setVisibility(View.GONE);
+            search.setVisibility(View.GONE);
+            nameInput.setEnabled(false);
+            dateField.setEnabled(false);
+            adapter.setReadOnly(true);
             loadExisting(existingId);
         }
-
-        loadProducts();
     }
 
     @Override
@@ -143,33 +151,50 @@ public class StockTakeActivity extends AppCompatActivity {
         }
     }
 
-    private void loadProducts() {
+    private void handleScan(String code) {
+        final String trimmed = code == null ? "" : code.trim();
         repo.run(() -> {
-            List<Product> all = repo.products.getAllActive();
-            List<ProductBarcode> extra = repo.products.getAllBarcodes();
-            Map<String, Product> byId = new HashMap<>();
-            for (Product p : all) {
-                byId.put(p.uid, p);
-                qtyByProductId.put(p.uid, repo.products.getCurrentQty(p.uid));
-                if (p.barcode != null && !p.barcode.isEmpty()) {
-                    byBarcode.put(p.barcode.trim(), p);
+            Product p = repo.products.findActiveByBarcode(trimmed);
+            final double systemQty = p == null ? 0 : repo.stock.currentQty(p.uid);
+            handler.post(() -> {
+                if (p == null) {
+                    Toast.makeText(this, "Product not found", Toast.LENGTH_SHORT).show();
+                    return;
                 }
-            }
-            for (ProductBarcode pb : extra) {
-                Product p = pb.barcode == null ? null : byId.get(pb.productId);
-                if (p != null && !pb.barcode.trim().isEmpty()) {
-                    byBarcode.put(pb.barcode.trim(), p);
-                }
-            }
+                incrementProduct(p, systemQty);
+            });
         });
     }
 
-    private void handleScan(String code) {
-        Product p = byBarcode.get(code.trim());
-        if (p == null) {
-            Toast.makeText(this, "Product not found", Toast.LENGTH_SHORT).show();
-            return;
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_SEARCH && resultCode == RESULT_OK && data != null) {
+            String productId = data.getStringExtra(ProductSearchActivity.EXTRA_PRODUCT_ID);
+            if (productId == null) return;
+            repo.run(() -> {
+                Product p = repo.products.getById(productId);
+                final double systemQty = p == null ? 0 : repo.stock.currentQty(p.uid);
+                handler.post(() -> {
+                    if (p == null) {
+                        Toast.makeText(this, "Product not found", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    for (StockTakeLineAdapter.Line line : lines) {
+                        if (line.productId.equals(p.uid)) {
+                            Toast.makeText(this, "Already on the list — tap it to set the count", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                    }
+                    addLine(p, systemQty, systemQty);
+                    SoundUtil.beep();
+                    Toast.makeText(this, "Added " + p.name + " — tap it to set the counted quantity", Toast.LENGTH_SHORT).show();
+                });
+            });
         }
+    }
+
+    private void incrementProduct(Product p, double systemQty) {
         for (StockTakeLineAdapter.Line line : lines) {
             if (line.productId.equals(p.uid)) {
                 line.countedQty += 1;
@@ -178,16 +203,19 @@ public class StockTakeActivity extends AppCompatActivity {
                 return;
             }
         }
+        addLine(p, systemQty, systemQty + 1);
+        SoundUtil.beep();
+    }
+
+    private void addLine(Product p, double systemQty, double counted) {
         StockTakeLineAdapter.Line line = new StockTakeLineAdapter.Line();
         line.productId = p.uid;
         line.name = p.name;
         line.unit = p.retailUnit;
-        Double qty = qtyByProductId.get(p.uid);
-        line.systemQty = qty != null ? qty : 0;
-        line.countedQty = line.systemQty + 1;
+        line.systemQty = systemQty;
+        line.countedQty = counted;
         lines.add(line);
         adapter.submit(lines);
-        SoundUtil.beep();
     }
 
     private void editLine(int position) {
