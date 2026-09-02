@@ -209,7 +209,7 @@ public class ProductsFragment extends Fragment {
                         @Override public Object[] header() {
                             return new Object[]{"Name", "Barcode", "SKU", "Category", "Brand",
                                     "Retail Unit", "Retail Price", "Wholesale Unit", "Wholesale Price",
-                                    "Cost Price", "Stock Qty", "Reorder Level", "Status"};
+                                    "Buying Price", "Stock Qty", "Reorder Level", "Status"};
                         }
                         @Override public Object[] row(Object item, int index) {
                             Product p = (Product) item;

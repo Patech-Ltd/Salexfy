@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.patechltd.salexfypos" />
+                  <option name="mobileSdkAppId" value="1:278118775511:android:10793f365ae3d3e0664e92" />
+                  <option name="projectId" value="salexfypos" />
+                  <option name="projectNumber" value="278118775511" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

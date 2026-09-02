@@ -19,6 +19,7 @@ import com.patechltd.salexfypos.MainActivity;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.User;
+import com.patechltd.salexfypos.license.VersionGate;
 import com.patechltd.salexfypos.security.PasswordHasher;
 import com.patechltd.salexfypos.security.PermissionChecker;
 import com.patechltd.salexfypos.security.Session;
@@ -29,6 +30,11 @@ public class LoginActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        if (VersionGate.isBlocked(this)) {
+            VersionGate.block(this);
+            return;
+        }
 
         Repository repo = Repository.get(this);
         if (Session.isLoggedIn(this)) {

@@ -152,7 +152,7 @@
                             android:layout_height="wrap_content"
                             android:layout_marginEnd="6dp"
                             android:layout_weight="1"
-                            android:hint="Cost price"
+                            android:hint="Buying Price"
                             app:boxBackgroundMode="outline">
 
                             <com.google.android.material.textfield.TextInputEditText
@@ -206,7 +206,7 @@
                             android:layout_width="0dp"
                             android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="Scan barcode"
+                            android:text="Scan"
                             app:icon="@drawable/ic_camera" />
 
                         <com.google.android.material.button.MaterialButton

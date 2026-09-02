@@ -50,7 +50,7 @@ public class HelpActivity extends AppCompatActivity {
         addSection(container, R.drawable.ic_inventory, "Products & Stock",
                 "Add products one by one, use Quick Add for speed, or add many at once with the "
                         + "Batch button on the Products tab.\n\n"
-                        + "Every product can have a retail and a wholesale price, a cost price, a "
+                        + "Every product can have a retail and a wholesale price, a Buying Price, a "
                         + "barcode / SKU and a reorder level.\n\n"
                         + "The Products tab shows the live stock balance for each item and flags "
                         + "items that are running low.\n\n"

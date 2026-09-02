@@ -12,6 +12,8 @@ import androidx.fragment.app.FragmentTransaction;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.android.material.badge.BadgeDrawable;
+import com.google.firebase.analytics.FirebaseAnalytics;
+import com.patechltd.salexfypos.license.VersionGate;
 import com.patechltd.salexfypos.security.Session;
 import com.patechltd.salexfypos.ui.crash.CrashRecoveryActivity;
 import com.patechltd.salexfypos.ui.login.AppLockActivity;
@@ -25,6 +27,7 @@ import com.patechltd.salexfypos.util.Prefs;
 
 public class MainActivity extends AppCompatActivity {
 
+    private FirebaseAnalytics mFirebaseAnalytics;
     private SellFragment sellFragment;
     private ProductsFragment productsFragment;
     private StockFragment stockFragment;
@@ -32,6 +35,7 @@ public class MainActivity extends AppCompatActivity {
     private MoreFragment moreFragment;
     private int currentTab = -1;
     private boolean launchedFromCreate = false;
+    private boolean versionBlockShown = false;
     private BottomNavigationView bottomNav;
 
     private long lastInteractionTime;
@@ -65,6 +69,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        checkVersionGate();
 
         String pendingCrash = Prefs.getString(this, Prefs.KEY_PENDING_CRASH, "");
         if (pendingCrash != null && !pendingCrash.isEmpty()) {
@@ -102,6 +108,15 @@ public class MainActivity extends AppCompatActivity {
         launchedFromCreate = true;
         lastInteractionTime = System.currentTimeMillis();
         runLicenseGateCheck();
+
+        mFirebaseAnalytics = FirebaseAnalytics.getInstance(this);
+    }
+
+    private void checkVersionGate() {
+        if (!versionBlockShown && VersionGate.isBlocked(this)) {
+            versionBlockShown = true;
+            VersionGate.block(this);
+        }
     }
 
     private void runLicenseGateCheck() {
@@ -135,6 +150,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        checkVersionGate();
         if (launchedFromCreate) {
             launchedFromCreate = false;
             lastInteractionTime = System.currentTimeMillis();
