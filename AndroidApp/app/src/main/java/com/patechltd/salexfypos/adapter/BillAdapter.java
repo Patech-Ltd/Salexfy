@@ -38,6 +38,11 @@ public class BillAdapter extends RecyclerView.Adapter<BillAdapter.VH> {
         notifyDataSetChanged();
     }
 
+    public BillRow getItem(int position) {
+        if (position < 0 || position >= items.size()) return null;
+        return items.get(position);
+    }
+
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {

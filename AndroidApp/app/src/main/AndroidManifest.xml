@@ -139,6 +139,9 @@
             android:name=".ui.suppliers.CustomerDetailActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.suppliers.BillsActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.reports.ReportsActivity"
             android:exported="false" />
         <activity

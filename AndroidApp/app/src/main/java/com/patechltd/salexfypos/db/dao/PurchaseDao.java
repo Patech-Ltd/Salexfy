@@ -140,6 +140,9 @@ public abstract class PurchaseDao {
     @Query("SELECT * FROM supplier_payments WHERE purchaseId = :purchaseId ORDER BY paymentDate DESC")
     public abstract List<SupplierPayment> getSupplierPayments(String purchaseId);
 
+    @Query("DELETE FROM supplier_payments WHERE id = :id")
+    public abstract void rawDeleteSupplierPayment(String id);
+
     @Query("SELECT COALESCE(SUM(p.total - p.paidAmount), 0) FROM purchases p")
     public abstract double totalOutstanding();
 }

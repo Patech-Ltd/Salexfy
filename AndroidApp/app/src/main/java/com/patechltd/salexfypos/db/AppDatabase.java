@@ -16,6 +16,7 @@ import com.patechltd.salexfypos.db.dao.DirectoryDao;
 import com.patechltd.salexfypos.db.dao.ExpenseDao;
 import com.patechltd.salexfypos.db.dao.ProductDao;
 import com.patechltd.salexfypos.db.dao.PurchaseDao;
+import com.patechltd.salexfypos.db.dao.PaymentMethodDao;
 import com.patechltd.salexfypos.db.dao.SaleDao;
 import com.patechltd.salexfypos.db.dao.StockDao;
 import com.patechltd.salexfypos.db.dao.SupplierDao;
@@ -29,6 +30,7 @@ import com.patechltd.salexfypos.db.entity.Customer;
 import com.patechltd.salexfypos.db.entity.DebtPayment;
 import com.patechltd.salexfypos.db.entity.Expense;
 import com.patechltd.salexfypos.db.entity.PendingProduct;
+import com.patechltd.salexfypos.db.entity.PaymentMethod;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
 import com.patechltd.salexfypos.db.entity.ProductUnit;
@@ -42,6 +44,7 @@ import com.patechltd.salexfypos.db.entity.StockMovement;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.StockTakeItem;
 import com.patechltd.salexfypos.db.entity.Supplier;
+import com.patechltd.salexfypos.db.entity.SupplierPayment;
 import com.patechltd.salexfypos.db.entity.SyncChange;
 import com.patechltd.salexfypos.db.entity.SyncLog;
 import com.patechltd.salexfypos.db.entity.Unit;
@@ -51,8 +54,9 @@ import com.patechltd.salexfypos.db.entity.User;
         entities = {
                 Product.class, ProductBarcode.class, ProductUnit.class, PendingProduct.class,
                 Category.class, Brand.class, Unit.class,
+                PaymentMethod.class,
                 Supplier.class, Customer.class, DebtPayment.class,
-                Purchase.class, PurchaseItem.class,
+                Purchase.class, PurchaseItem.class, SupplierPayment.class,
                 Sale.class, SaleItem.class, SalePayment.class,
                 StockMovement.class, StockTake.class, StockTakeItem.class,
                 User.class, Role.class, AppSetting.class,
@@ -60,7 +64,7 @@ import com.patechltd.salexfypos.db.entity.User;
                 Expense.class,
                 SyncChange.class, SyncLog.class
         },
-        version = 10,
+        version = 12,
         exportSchema = false
 )
 @TypeConverters({Converters.class})
@@ -77,6 +81,8 @@ public abstract class AppDatabase extends RoomDatabase {
     public abstract SupplierDao supplierDao();
 
     public abstract PurchaseDao purchaseDao();
+
+    public abstract PaymentMethodDao paymentMethodDao();
 
     public abstract SaleDao saleDao();
 
@@ -98,7 +104,7 @@ public abstract class AppDatabase extends RoomDatabase {
                                     AppDatabase.class, DATABASE_NAME)
                             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                                    MIGRATION_9_10)
+                                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
                             .fallbackToDestructiveMigration()
                             .build();
                 }
@@ -275,6 +281,74 @@ public abstract class AppDatabase extends RoomDatabase {
                     + "ON `pending_products` (`barcode`)");
         }
     };
+
+    /** Ensures the two tables added in v11 exist, recovering from stale same-version databases. */
+    static final Migration MIGRATION_11_12 = new Migration(11, 12) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `supplier_payments` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`purchaseId` TEXT, "
+                    + "`amount` REAL NOT NULL DEFAULT 0, "
+                    + "`paymentDate` INTEGER NOT NULL DEFAULT 0, "
+                    + "`method` TEXT, "
+                    + "`notes` TEXT, "
+                    + "`createdBy` TEXT, "
+                    + "`createdAt` INTEGER NOT NULL DEFAULT 0, "
+                    + "PRIMARY KEY(`id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_supplier_payments_purchaseId` "
+                    + "ON `supplier_payments` (`purchaseId`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_supplier_payments_paymentDate` "
+                    + "ON `supplier_payments` (`paymentDate`)");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `payment_methods` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`name` TEXT, "
+                    + "`isCredit` INTEGER NOT NULL, "
+                    + "`isSystem` INTEGER NOT NULL, "
+                    + "`active` INTEGER NOT NULL, "
+                    + "`sortOrder` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`id`))");
+        }
+    };
+
+    static final Migration MIGRATION_10_11 = new Migration(10, 11) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("CREATE TABLE IF NOT EXISTS `supplier_payments` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`purchaseId` TEXT, "
+                    + "`amount` REAL NOT NULL DEFAULT 0, "
+                    + "`paymentDate` INTEGER NOT NULL DEFAULT 0, "
+                    + "`method` TEXT, "
+                    + "`notes` TEXT, "
+                    + "`createdBy` TEXT, "
+                    + "`createdAt` INTEGER NOT NULL DEFAULT 0, "
+                    + "PRIMARY KEY(`id`))");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_supplier_payments_purchaseId` "
+                    + "ON `supplier_payments` (`purchaseId`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_supplier_payments_paymentDate` "
+                    + "ON `supplier_payments` (`paymentDate`)");
+            database.execSQL("CREATE TABLE IF NOT EXISTS `payment_methods` ("
+                    + "`id` TEXT NOT NULL, "
+                    + "`name` TEXT, "
+                    + "`isCredit` INTEGER NOT NULL, "
+                    + "`isSystem` INTEGER NOT NULL, "
+                    + "`active` INTEGER NOT NULL, "
+                    + "`sortOrder` INTEGER NOT NULL, "
+                    + "PRIMARY KEY(`id`))");
+        }
+    };
+
+    /** Builds the database instance on a background thread so first real
+     *  access is fast. Safe to call from Application.onCreate. */
+    public static void warmUp(final Context context) {
+        new Thread(() -> {
+            try {
+                getInstance(context);
+            } catch (Throwable ignored) {
+            }
+        }, "salexfy-db-warmup").start();
+    }
 
     public static void destroyInstance() {
         instance = null;

@@ -18,6 +18,7 @@ import com.patechltd.salexfypos.db.entity.SalePayment;
 import com.patechltd.salexfypos.db.entity.StockMovement;
 import com.patechltd.salexfypos.db.entity.StockTake;
 import com.patechltd.salexfypos.db.entity.Supplier;
+import com.patechltd.salexfypos.db.entity.SupplierPayment;
 import com.patechltd.salexfypos.db.entity.Unit;
 import com.patechltd.salexfypos.db.entity.User;
 import com.patechltd.salexfypos.util.AppLogger;
@@ -84,6 +85,9 @@ public final class SyncApplier {
                 return true;
             case SyncTracker.PURCHASE_ITEM:
                 repo.purchases.insertPurchaseItem(SyncSerializer.<PurchaseItem>fromJson(change.payload, PurchaseItem.class));
+                return true;
+            case SyncTracker.SUPPLIER_PAYMENT:
+                repo.purchases.insertSupplierPayment(SyncSerializer.<SupplierPayment>fromJson(change.payload, SupplierPayment.class));
                 return true;
             case SyncTracker.SALE:
                 repo.sales.insertSale(SyncSerializer.<Sale>fromJson(change.payload, Sale.class));
@@ -156,6 +160,9 @@ public final class SyncApplier {
             }
             case SyncTracker.PURCHASE_ITEM:
                 repo.purchases.rawDeleteItem(change.recordId);
+                return true;
+            case SyncTracker.SUPPLIER_PAYMENT:
+                repo.purchases.rawDeleteSupplierPayment(change.recordId);
                 return true;
             case SyncTracker.SALE:
                 repo.sales.deleteSale(change.recordId);
