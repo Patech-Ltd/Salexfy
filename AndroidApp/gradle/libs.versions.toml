@@ -13,7 +13,7 @@ lifecycle = "2.9.2"
 room = "2.7.2"
 camera = "1.4.2"
 zbar = "1.0.0"
-opencv = "4.11.0"
+# opencv = "4.11.0"   # COMMENTED OUT to shrink APK size
 zxing = "3.5.3"
 mlkit = "17.3.0"
 jackson = "2.17.2"
@@ -43,7 +43,7 @@ camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.r
 camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camera" }
 camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camera" }
 zbar = { group = "com.yanzhenjie.zbar", name = "zbar", version.ref = "zbar" }
-opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }
+# opencv = { group = "org.opencv", name = "opencv", version.ref = "opencv" }   # COMMENTED OUT to shrink APK size
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 mlkit-barcode = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkit" }
 jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version.ref = "jackson" }

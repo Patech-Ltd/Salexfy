@@ -58,7 +58,7 @@ dependencies {
     implementation libs.camera.lifecycle
     implementation libs.camera.view
     implementation libs.zbar
-    implementation libs.opencv
+    // implementation libs.opencv   // COMMENTED OUT to shrink APK size
     implementation libs.zxing.core
     implementation libs.mlkit.barcode
     implementation libs.jackson.databind

@@ -1,5 +1,12 @@
 package com.patechltd.salexfypos.scanner;
 
+/*
+ * COMMENTED OUT with OpenCV (to shrink APK size). Restore by removing the
+ * surrounding block comment and uncommenting `implementation libs.opencv` in
+ * app/build.gradle, the opencv entries in gradle/libs.versions.toml, the
+ * btn_engine_opencv button in activity_scanner_settings.xml and the OpenCV
+ * branches in ScannerEngines.java / ScannerSettingsActivity.java.
+ *
 import android.media.Image;
 
 import androidx.camera.core.ImageProxy;
@@ -48,3 +55,4 @@ public class OpenCVQREngine implements DecodeEngine {
         return null;
     }
 }
+*/

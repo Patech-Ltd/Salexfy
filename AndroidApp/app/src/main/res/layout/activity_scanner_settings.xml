@@ -80,6 +80,7 @@
                             android:layout_weight="1"
                             android:text="ZXing" />
 
+                        <!-- COMMENTED OUT (OpenCV removed to shrink APK size)
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btn_engine_opencv"
                             style="?attr/materialButtonOutlinedStyle"
@@ -87,13 +88,14 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="OpenCV QR" />
+                        -->
                     </com.google.android.material.button.MaterialButtonToggleGroup>
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="ML Kit: fastest and most sensitive, all barcodes and QR codes (recommended, default). ZBar: all barcodes and QR codes. ZXing: all barcodes and QR codes, pure Java. OpenCV QR: QR codes only, adds ~20MB. Applies the next time a scanner screen opens."
+                        android:text="ML Kit: fastest and most sensitive, all barcodes and QR codes (recommended, default). ZBar: all barcodes and QR codes. ZXing: all barcodes and QR codes, pure Java. Applies the next time a scanner screen opens."
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 

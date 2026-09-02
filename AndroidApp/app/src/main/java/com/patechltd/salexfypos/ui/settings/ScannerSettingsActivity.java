@@ -58,12 +58,14 @@ public class ScannerSettingsActivity extends AppCompatActivity {
         String engine = Prefs.getString(this, Prefs.KEY_SCANNER_ENGINE, ScannerEngines.ENGINE_MLKIT);
         if (ScannerEngines.ENGINE_MLKIT.equals(engine)) {
             scannerEngineGroup.check(R.id.btn_engine_mlkit);
-        } else if (ScannerEngines.ENGINE_OPENCV_QR.equals(engine)) {
-            scannerEngineGroup.check(R.id.btn_engine_opencv);
+        // } else if (ScannerEngines.ENGINE_OPENCV_QR.equals(engine)) {
+        //     scannerEngineGroup.check(R.id.btn_engine_opencv);   // COMMENTED OUT (OpenCV removed)
+        } else if (ScannerEngines.ENGINE_ZBAR.equals(engine)) {
+            scannerEngineGroup.check(R.id.btn_engine_zbar);
         } else if (ScannerEngines.ENGINE_ZXING.equals(engine)) {
             scannerEngineGroup.check(R.id.btn_engine_zxing);
         } else {
-            scannerEngineGroup.check(R.id.btn_engine_zbar);
+            scannerEngineGroup.check(R.id.btn_engine_mlkit);
         }
         int sensitivity = Prefs.getInt(this, Prefs.KEY_ZXING_SENSITIVITY, 2);
         zxingSensitivityGroup.check(sensitivity <= 1 ? R.id.btn_zxing_low
@@ -85,8 +87,8 @@ public class ScannerSettingsActivity extends AppCompatActivity {
         int engineId = scannerEngineGroup.getCheckedButtonId();
         if (engineId == R.id.btn_engine_mlkit) {
             Prefs.putString(this, Prefs.KEY_SCANNER_ENGINE, ScannerEngines.ENGINE_MLKIT);
-        } else if (engineId == R.id.btn_engine_opencv) {
-            Prefs.putString(this, Prefs.KEY_SCANNER_ENGINE, ScannerEngines.ENGINE_OPENCV_QR);
+        // } else if (engineId == R.id.btn_engine_opencv) {
+        //     Prefs.putString(this, Prefs.KEY_SCANNER_ENGINE, ScannerEngines.ENGINE_OPENCV_QR);   // COMMENTED OUT (OpenCV removed)
         } else if (engineId == R.id.btn_engine_zxing) {
             Prefs.putString(this, Prefs.KEY_SCANNER_ENGINE, ScannerEngines.ENGINE_ZXING);
         } else {
