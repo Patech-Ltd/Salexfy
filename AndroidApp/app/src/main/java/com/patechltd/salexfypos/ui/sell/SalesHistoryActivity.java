@@ -285,13 +285,16 @@ public class SalesHistoryActivity extends AppCompatActivity {
         for (SaleWithItems sw : sales) {
             if (sw == null || sw.sale == null) continue;
             int count = sw.items == null ? 0 : sw.items.size();
+            boolean voided = "VOID".equals(sw.sale.status);
+            String sub = DateUtil.formatDate(sw.sale.saleDate) + " " + DateUtil.formatTime(sw.sale.saleDate)
+                    + " · " + count + " item" + (count == 1 ? "" : "s")
+                    + " · " + com.patechltd.salexfypos.model.PaymentMethod.labelOf(sw.sale.paymentMethod);
+            if (voided) sub = "VOIDED — " + sub;
             out.add(new KeyValueAdapter.Row(
                     "#" + sw.sale.saleNo,
-                    DateUtil.formatDate(sw.sale.saleDate) + " " + DateUtil.formatTime(sw.sale.saleDate)
-                            + " · " + count + " item" + (count == 1 ? "" : "s")
-                            + " · " + com.patechltd.salexfypos.model.PaymentMethod.labelOf(sw.sale.paymentMethod),
+                    sub,
                     currency + " " + NumberUtil.money(sw.sale.total),
-                    0xFF1565C0));
+                    voided ? 0xFFB00020 : 0xFF1565C0));
         }
         adapter.submit(out);
         if (out.isEmpty()) {

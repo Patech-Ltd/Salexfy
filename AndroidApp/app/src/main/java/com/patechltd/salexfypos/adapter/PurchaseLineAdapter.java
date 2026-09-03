@@ -99,14 +99,23 @@ public class PurchaseLineAdapter extends RecyclerView.Adapter<PurchaseLineAdapte
     }
 
     private String buildProfitText(PurchaseItem item, Product p) {
-        int factor = factorOf(p);
+        double factor = purchaseFactor(item, p);
         boolean wholesale = item.isWholesale && p.wholesalePrice > 0;
-        double buyPer = wholesale ? item.unitPrice / factor : item.unitPrice;
+        double buyPer = item.factor > 0 && Math.abs(item.factor - 1) > 0.001
+                ? item.unitPrice / item.factor
+                : item.unitPrice;
+        if (Math.abs(item.factor - 1) <= 0.001) {
+            buyPer = wholesale ? item.unitPrice / factor : item.unitPrice;
+        }
         double sellPer = p.retailPrice > 0 ? p.retailPrice
                 : (p.wholesalePrice > 0 ? p.wholesalePrice / factor : 0);
         String pieceUnit = p.retailUnit != null && !p.retailUnit.isEmpty() ? p.retailUnit : "Pcs";
         StringBuilder sb = new StringBuilder();
-        if (wholesale) {
+        if (item.factor > 0 && Math.abs(item.factor - 1) > 0.001) {
+            sb.append("Buy ").append(NumberUtil.money(item.unitPrice)).append("/")
+                    .append(safe(item.unitLabel))
+                    .append(" → ").append(NumberUtil.money(buyPer)).append("/").append(pieceUnit);
+        } else if (wholesale) {
             sb.append("Buy ").append(NumberUtil.money(item.unitPrice)).append("/")
                     .append(safe(p.wholesaleUnit))
                     .append(" → ").append(NumberUtil.money(buyPer)).append("/").append(pieceUnit);
@@ -122,15 +131,21 @@ public class PurchaseLineAdapter extends RecyclerView.Adapter<PurchaseLineAdapte
     }
 
     private double profitOf(PurchaseItem item, Product p) {
-        int factor = factorOf(p);
+        double factor = purchaseFactor(item, p);
         boolean wholesale = item.isWholesale && p.wholesalePrice > 0;
-        double buyPer = wholesale ? item.unitPrice / factor : item.unitPrice;
+        double buyPer;
+        if (item.factor > 0 && Math.abs(item.factor - 1) > 0.001) {
+            buyPer = item.unitPrice / item.factor;
+        } else {
+            buyPer = wholesale ? item.unitPrice / factor : item.unitPrice;
+        }
         double sellPer = p.retailPrice > 0 ? p.retailPrice
                 : (p.wholesalePrice > 0 ? p.wholesalePrice / factor : 0);
         return sellPer - buyPer;
     }
 
-    private int factorOf(Product p) {
+    private double purchaseFactor(PurchaseItem item, Product p) {
+        if (item.factor > 0 && Math.abs(item.factor - 1) > 0.001) return item.factor;
         return p != null && p.wholesaleFactor > 0 ? p.wholesaleFactor : 1;
     }
 

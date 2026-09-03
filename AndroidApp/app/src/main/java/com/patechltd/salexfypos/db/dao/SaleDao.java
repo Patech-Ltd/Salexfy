@@ -147,7 +147,7 @@ public abstract class SaleDao {
             + "COALESCE(SUM(discount), 0) AS discountTotal, "
             + "COALESCE(SUM((SELECT COUNT(*) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS itemCount "
             + "FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status != 'DRAFT' AND status != 'HELD' "
+            + "AND status != 'DRAFT' AND status != 'HELD' AND status != 'VOID' "
             + "GROUP BY (strftime('%s', date(saleDate / 1000, 'unixepoch', 'localtime')) * 1000) ORDER BY dayStart DESC")
     public abstract List<DayReportRow> getDailyReport(long from, long to);
 
@@ -156,7 +156,7 @@ public abstract class SaleDao {
             + "COALESCE(SUM(total - (SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit, "
             + "0 AS commission "
             + "FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status != 'DRAFT' AND status != 'HELD' "
+            + "AND status != 'DRAFT' AND status != 'HELD' AND status != 'VOID' "
             + "GROUP BY cashierId ORDER BY totalSales DESC")
     public abstract List<CashierReportRow> getCashierReport(long from, long to);
 
@@ -164,7 +164,7 @@ public abstract class SaleDao {
             + "SUM(item.qty) AS totalQty, SUM(item.lineTotal) AS totalSales "
             + "FROM sale_items item JOIN sales s ON s.id = item.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
-            + "AND s.status != 'DRAFT' AND s.status != 'HELD' "
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
             + "GROUP BY item.productId ORDER BY totalQty DESC LIMIT :limit")
     public abstract List<TopProductRow> getTopProducts(long from, long to, int limit);
 
@@ -174,20 +174,20 @@ public abstract class SaleDao {
             + "COALESCE(SUM(subtotal), 0) AS subtotal, "
             + "COALESCE(SUM((SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS totalCost, "
             + "COALESCE(SUM(total - (SELECT SUM(item.stockQty * item.costPrice) FROM sale_items item WHERE item.saleId = sales.id)), 0) AS profit "
-            + "FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
+            + "FROM sales WHERE status != 'DRAFT' AND status != 'HELD' AND status != 'VOID' "
             + "GROUP BY monthStart ORDER BY monthStart DESC")
     public abstract List<MonthReportRow> getMonthlySummary();
 
     @Query("SELECT COALESCE(SUM(total), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status != 'DRAFT' AND status != 'HELD'")
+            + "AND status != 'DRAFT' AND status != 'HELD' AND status != 'VOID'")
     public abstract double salesTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(subtotal), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status != 'DRAFT' AND status != 'HELD'")
+            + "AND status != 'DRAFT' AND status != 'HELD' AND status != 'VOID'")
     public abstract double subtotalTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(taxAmount), 0) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status != 'DRAFT' AND status != 'HELD'")
+            + "AND status != 'DRAFT' AND status != 'HELD' AND status != 'VOID'")
     public abstract double taxTotal(long from, long to);
 
     @Query("SELECT COALESCE(SUM(total - paidAmount), 0) FROM sales WHERE customerId = :customerId "
@@ -195,13 +195,13 @@ public abstract class SaleDao {
     public abstract double outstandingForCustomer(String customerId);
 
     @Query("SELECT COUNT(*) FROM sales WHERE saleDate >= :from AND saleDate <= :to "
-            + "AND status != 'DRAFT' AND status != 'HELD'")
+            + "AND status != 'DRAFT' AND status != 'HELD' AND status != 'VOID'")
     public abstract int saleCountBetween(long from, long to);
 
     @Query("SELECT COALESCE(SUM(item.stockQty * item.costPrice), 0) FROM sale_items item "
             + "JOIN sales s ON s.id = item.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
-            + "AND s.status != 'DRAFT' AND s.status != 'HELD'")
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID'")
     public abstract double costOfSalesBetween(long from, long to);
 
     @Query("SELECT COALESCE(SUM(total - paidAmount), 0) FROM sales "
@@ -212,7 +212,7 @@ public abstract class SaleDao {
 
     @Query("SELECT sp.method AS method, SUM(sp.amount) AS total "
             + "FROM sale_payments sp JOIN sales s ON s.id = sp.saleId "
-            + "WHERE s.status = 'COMPLETE' AND s.saleDate >= :from AND s.saleDate <= :to "
+            + "WHERE s.status != 'VOID' AND s.saleDate >= :from AND s.saleDate <= :to "
             + "GROUP BY sp.method ORDER BY total DESC")
     public abstract List<PaymentMethodTotalRow> paymentTotalsBetween(long from, long to);
 
@@ -239,9 +239,9 @@ public abstract class SaleDao {
     public abstract List<SaleWithItems> exportComplete(String q, long from, long to);
 
     @Query("SELECT s.id AS saleUid, s.saleNo, s.saleDate, s.status, "
-            + "si.productName, si.unitLabel, si.qty, si.unitPrice, si.costPrice, "
-            + "si.unitPrice * si.qty AS revenue, si.costPrice * si.qty AS cost, "
-            + "(si.unitPrice - si.costPrice) * si.qty AS profit "
+            + "si.productName, si.unitLabel, si.qty, si.stockQty, si.unitPrice, si.costPrice, "
+            + "si.qty * si.unitPrice AS revenue, si.stockQty * si.costPrice AS cost, "
+            + "(si.qty * si.unitPrice) - (si.stockQty * si.costPrice) AS profit "
             + "FROM sales s JOIN sale_items si ON s.id = si.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
             + "AND (:includeVoided = 1 OR s.status != 'VOID') "
@@ -255,13 +255,13 @@ public abstract class SaleDao {
             + "AND (:includeVoided = 1 OR s.status != 'VOID')")
     public abstract int profitLineCount(long from, long to, boolean includeVoided);
 
-    @Query("SELECT COALESCE(SUM(si.unitPrice * si.qty), 0) FROM sale_items si "
+    @Query("SELECT COALESCE(SUM(si.qty * si.unitPrice), 0) FROM sale_items si "
             + "JOIN sales s ON s.id = si.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
             + "AND (:includeVoided = 1 OR s.status != 'VOID')")
     public abstract double getSummaryRevenue(long from, long to, boolean includeVoided);
 
-    @Query("SELECT COALESCE(SUM(si.costPrice * si.qty), 0) FROM sale_items si "
+    @Query("SELECT COALESCE(SUM(si.stockQty * si.costPrice), 0) FROM sale_items si "
             + "JOIN sales s ON s.id = si.saleId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
             + "AND (:includeVoided = 1 OR s.status != 'VOID')")

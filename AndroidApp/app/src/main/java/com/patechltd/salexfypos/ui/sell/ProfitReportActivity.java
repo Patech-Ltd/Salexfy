@@ -246,8 +246,10 @@ public class ProfitReportActivity extends AppCompatActivity {
                     + "  ·  " + DateUtil.formatDate(row.saleDate));
 
             String unitStr = currency + " " + NumberUtil.money(row.unitPrice) + " / unit";
-            String costStr = row.costPrice > 0
-                    ? "  Cost " + currency + " " + NumberUtil.money(row.costPrice)
+            double perUnitCost = row.qty > 0
+                    ? (row.stockQty * row.costPrice) / row.qty : 0;
+            String costStr = perUnitCost > 0
+                    ? "  Cost " + currency + " " + NumberUtil.money(perUnitCost)
                     : "";
             holder.priceInfo.setText(unitStr + costStr);
 

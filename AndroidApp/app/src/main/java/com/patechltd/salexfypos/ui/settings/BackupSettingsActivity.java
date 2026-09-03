@@ -1,20 +1,28 @@
 package com.patechltd.salexfypos.ui.settings;
 
 import android.content.Intent;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.DocumentsContract;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.Scope;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.backup.BackupManager;
+import com.patechltd.salexfypos.drive.DriveBackupEntry;
+import com.patechltd.salexfypos.drive.DriveBackupManager;
+import com.patechltd.salexfypos.drive.DriveConfig;
+import com.patechltd.salexfypos.drive.DriveServiceHelper;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
@@ -22,17 +30,23 @@ import com.patechltd.salexfypos.util.Prefs;
 import com.patechltd.salexfypos.util.StorageUtil;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class BackupSettingsActivity extends AppCompatActivity {
+
+    private static final int RC_SIGN_IN = 9001;
 
     private SwitchMaterial autoBackup;
     private TextInputEditText backupInterval;
     private TextView lastBackup;
 
     private SwitchMaterial driveBackup;
-    private TextView driveFolder;
+    private TextView driveAccount;
     private TextView lastDriveBackup;
     private MaterialButton btnDriveBackupNow;
+    private MaterialButton btnDriveRestoreLatest;
+    private MaterialButton btnDriveList;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -47,16 +61,20 @@ public class BackupSettingsActivity extends AppCompatActivity {
         lastBackup = findViewById(R.id.last_backup);
 
         driveBackup = findViewById(R.id.switch_drive_backup);
-        driveFolder = findViewById(R.id.drive_folder);
+        driveAccount = findViewById(R.id.drive_account);
         lastDriveBackup = findViewById(R.id.last_drive_backup);
         btnDriveBackupNow = findViewById(R.id.btn_drive_backup_now);
+        btnDriveRestoreLatest = findViewById(R.id.btn_drive_restore_latest);
+        btnDriveList = findViewById(R.id.btn_drive_list);
 
         load();
 
         ((MaterialButton) findViewById(R.id.btn_backup_now)).setOnClickListener(v -> backupNow());
         ((MaterialButton) findViewById(R.id.btn_restore)).setOnClickListener(v -> restore());
-        ((MaterialButton) findViewById(R.id.btn_pick_drive_folder)).setOnClickListener(v -> pickDriveFolder());
+        ((MaterialButton) findViewById(R.id.btn_drive_sign_in)).setOnClickListener(v -> signInDrive());
         ((MaterialButton) findViewById(R.id.btn_drive_backup_now)).setOnClickListener(v -> driveBackupNow());
+        ((MaterialButton) findViewById(R.id.btn_drive_restore_latest)).setOnClickListener(v -> driveRestoreLatest());
+        ((MaterialButton) findViewById(R.id.btn_drive_list)).setOnClickListener(v -> driveList());
         ((MaterialButton) findViewById(R.id.btn_save)).setOnClickListener(v -> save());
     }
 
@@ -82,34 +100,17 @@ public class BackupSettingsActivity extends AppCompatActivity {
     }
 
     private void updateDriveSection() {
-        String uriString = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_URI, null);
-        boolean hasFolder = uriString != null && !uriString.isEmpty();
-        driveFolder.setText(hasFolder ? "Folder: " + folderName(uriString) : "No folder selected");
-        driveBackup.setEnabled(hasFolder);
-        driveBackup.setChecked(hasFolder && Prefs.getBoolean(this, Prefs.KEY_BACKUP_DRIVE_ENABLED, false));
-        btnDriveBackupNow.setEnabled(hasFolder);
+        String email = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, null);
+        boolean signedIn = email != null;
+        driveAccount.setText(signedIn ? "Signed in: " + email : "Not signed in");
+        driveBackup.setEnabled(signedIn);
+        driveBackup.setChecked(signedIn && Prefs.getBoolean(this, Prefs.KEY_BACKUP_DRIVE_ENABLED, false));
+        btnDriveBackupNow.setEnabled(signedIn);
+        btnDriveRestoreLatest.setEnabled(signedIn);
+        btnDriveList.setEnabled(signedIn);
         long last = Prefs.getLong(this, Prefs.KEY_LAST_DRIVE_BACKUP, 0);
         lastDriveBackup.setText("Last Drive backup: " + (last == 0
                 ? "Never" : DateUtil.formatDate(last) + " " + DateUtil.formatTime(last)));
-    }
-
-    private String folderName(String uriString) {
-        try {
-            Uri treeUri = Uri.parse(uriString);
-            Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
-                    DocumentsContract.getTreeDocumentId(treeUri));
-            try (Cursor cursor = getContentResolver().query(docUri, null, null, null, null)) {
-                if (cursor != null && cursor.moveToFirst()) {
-                    int idx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
-                    if (idx >= 0) {
-                        String name = cursor.getString(idx);
-                        if (name != null && !name.isEmpty()) return name;
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        return uriString;
     }
 
     private void save() {
@@ -117,19 +118,29 @@ public class BackupSettingsActivity extends AppCompatActivity {
         int hours = (int) NumberUtil.parse(
                 backupInterval.getText() == null ? "" : backupInterval.getText().toString(), 6);
         Prefs.putInt(this, Prefs.KEY_BACKUP_INTERVAL_HOURS, Math.max(1, hours));
-        String uriString = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_URI, null);
+        String email = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, null);
         Prefs.putBoolean(this, Prefs.KEY_BACKUP_DRIVE_ENABLED,
-                uriString != null && !uriString.isEmpty() && driveBackup.isChecked());
+                email != null && driveBackup.isChecked());
         DialogUtil.toast(this, "Settings saved");
         finish();
     }
 
-    private void pickDriveFolder() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
-                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(intent, StorageUtil.REQ_DRIVE_FOLDER);
+    private GoogleSignInOptions signInOptions() {
+        return new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestScopes(new Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
+                .build();
+    }
+
+    private void signInDrive() {
+        GoogleSignInClient client = GoogleSignIn.getClient(this, signInOptions());
+        startActivityForResult(client.getSignInIntent(), RC_SIGN_IN);
+    }
+
+    private GoogleSignInAccount currentAccount() {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account == null || account.getEmail() == null) return null;
+        if (!DriveServiceHelper.hasDriveScope(account)) return null;
+        return account;
     }
 
     private void backupNow() {
@@ -146,15 +157,112 @@ public class BackupSettingsActivity extends AppCompatActivity {
 
     private void driveBackupNow() {
         final BackupSettingsActivity self = this;
+        GoogleSignInAccount account = currentAccount();
+        if (account == null) {
+            DialogUtil.toast(this, "Sign in to Google Drive first");
+            return;
+        }
         btnDriveBackupNow.setEnabled(false);
         new Thread(() -> {
-            boolean ok = BackupManager.backupToDrive(self);
-            runOnUiThread(() -> {
-                btnDriveBackupNow.setEnabled(true);
-                updateDriveSection();
-                DialogUtil.toast(self, ok ? "Backup uploaded to Drive" : "Drive backup failed");
-            });
+            try {
+                boolean ok = DriveBackupManager.backup(self,
+                        DriveServiceHelper.getDrive(self, account));
+                runOnUiThread(() -> {
+                    btnDriveBackupNow.setEnabled(true);
+                    updateDriveSection();
+                    DialogUtil.toast(self, ok ? "Backup uploaded to Drive" : "Drive backup failed");
+                });
+            } catch (Exception e) {
+                DriveServiceHelper.log("backup now", e);
+                runOnUiThread(() -> {
+                    btnDriveBackupNow.setEnabled(true);
+                    DialogUtil.toast(self, "Drive backup failed: " + e.getMessage());
+                });
+            }
         }).start();
+    }
+
+    private void driveRestoreLatest() {
+        final BackupSettingsActivity self = this;
+        GoogleSignInAccount account = currentAccount();
+        if (account == null) {
+            DialogUtil.toast(this, "Sign in to Google Drive first");
+            return;
+        }
+        DialogUtil.confirm(this, "Restore latest from Drive",
+                "This will REPLACE all current data with the newest Drive backup, after "
+                        + "uploading a safety copy (slex_db_before_restore_...) of the current data. Continue?",
+                () -> new Thread(() -> {
+                    try {
+                        boolean ok = DriveBackupManager.restoreLatest(self,
+                                DriveServiceHelper.getDrive(self, account));
+                        runOnUiThread(() -> DialogUtil.toast(self,
+                                ok ? "Database restored. Restart the app." : "Restore failed"));
+                    } catch (Exception e) {
+                        DriveServiceHelper.log("restore latest", e);
+                        runOnUiThread(() -> DialogUtil.toast(self, "Restore failed: " + e.getMessage()));
+                    }
+                }).start());
+    }
+
+    private void driveList() {
+        final BackupSettingsActivity self = this;
+        GoogleSignInAccount account = currentAccount();
+        if (account == null) {
+            DialogUtil.toast(this, "Sign in to Google Drive first");
+            return;
+        }
+        DialogUtil.toast(this, "Loading Drive backups...");
+        new Thread(() -> {
+            try {
+                List<DriveBackupEntry> all = DriveBackupManager.listBackups(self,
+                        DriveServiceHelper.getDrive(self, account));
+                runOnUiThread(() -> showDriveList(all));
+            } catch (Exception e) {
+                DriveServiceHelper.log("list", e);
+                runOnUiThread(() -> DialogUtil.toast(self, "Failed to list backups: " + e.getMessage()));
+            }
+        }).start();
+    }
+
+    private void showDriveList(List<DriveBackupEntry> all) {
+        if (all.isEmpty()) {
+            DialogUtil.toast(this, "No Drive backups found");
+            return;
+        }
+        List<String> safeNames = new ArrayList<>();
+        for (DriveBackupEntry e : all) {
+            safeNames.add(e.name + "  (" + formatCreated(e.createdTime) + ")");
+        }
+        String[] options = safeNames.toArray(new String[0]);
+        DialogUtil.pick(this, "Drive backups", options, -1, index -> {
+            if (index < 0 || index >= all.size()) return;
+            restoreNamed(all.get(index).name);
+        });
+    }
+
+    private String formatCreated(long created) {
+        if (created <= 0) return "?";
+        return DateUtil.formatDate(created) + " " + DateUtil.formatTime(created);
+    }
+
+    private void restoreNamed(String name) {
+        final BackupSettingsActivity self = this;
+        GoogleSignInAccount account = currentAccount();
+        if (account == null) return;
+        DialogUtil.confirm(this, "Restore backup",
+                "Restore \"" + name + "\"? A safety copy of the current data will be uploaded first.",
+                () -> new Thread(() -> {
+                    try {
+                        boolean ok = DriveBackupManager.restoreNamed(self,
+                                DriveServiceHelper.getDrive(self, account), name);
+                        runOnUiThread(() -> DialogUtil.toast(self,
+                                ok ? "Database restored. Restart the app." : "Restore failed"));
+                    } catch (Exception e) {
+                        DriveServiceHelper.log("restore named", e);
+                        runOnUiThread(() -> DialogUtil.toast(self, "Restore failed: " + e.getMessage()));
+                    }
+                }).start());
     }
 
     private void restore() {
@@ -167,18 +275,26 @@ public class BackupSettingsActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == StorageUtil.REQ_DRIVE_FOLDER && resultCode == RESULT_OK
-                && data != null && data.getData() != null) {
-            Uri treeUri = data.getData();
-            getContentResolver().takePersistableUriPermission(treeUri,
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-            Prefs.putString(this, Prefs.KEY_BACKUP_DRIVE_URI, treeUri.toString());
-            updateDriveSection();
+        if (requestCode == RC_SIGN_IN) {
+            try {
+                GoogleSignInAccount account = GoogleSignIn.getSignedInAccountFromIntent(data).getResult(ApiException.class);
+                if (account != null && account.getEmail() != null) {
+                    Prefs.putString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, account.getEmail());
+                    updateDriveSection();
+                    DialogUtil.toast(this, "Signed in to Google Drive");
+                } else {
+                    DialogUtil.toast(this, "Drive sign-in failed");
+                }
+            } catch (ApiException e) {
+                DialogUtil.toast(this, "Drive sign-in failed: " + e.getStatusCode());
+            } catch (Exception e) {
+                DialogUtil.toast(this, "Drive sign-in failed");
+            }
             return;
         }
         if (requestCode == StorageUtil.REQ_BACKUP && resultCode == RESULT_OK
                 && data != null && data.getData() != null) {
-            final android.net.Uri uri = data.getData();
+            final Uri uri = data.getData();
             DialogUtil.confirm(this, "Restore database",
                     "This will REPLACE all current data with the backup. Continue?",
                     () -> new Thread(() -> {

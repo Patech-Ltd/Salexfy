@@ -34,6 +34,9 @@ public class PurchaseItem {
 
     public String unitLabel;
 
+    /** Base units contained in 1 of this purchase unit. */
+    public double factor = 1;
+
     public boolean isWholesale;
 
     public double unitPrice;

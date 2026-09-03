@@ -115,25 +115,25 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Backups are also uploaded to a Google Drive folder on your account. Pick the folder, then turn the switch on."
+                        android:text="Backups are uploaded to a fixed Google Drive folder (salexpos_backups) on your Google account. Sign in once, then turn the switch on. No folder picker needed."
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btn_pick_drive_folder"
+                        android:id="@+id/btn_drive_sign_in"
                         style="@style/Widget.Material3.Button.OutlinedButton"
                         android:layout_width="match_parent"
                         android:layout_height="48dp"
                         android:layout_marginTop="10dp"
-                        android:text="Choose Drive folder"
+                        android:text="Sign in to Google Drive"
                         app:icon="@drawable/ic_download" />
 
                     <TextView
-                        android:id="@+id/drive_folder"
+                        android:id="@+id/drive_account"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="No folder selected"
+                        android:text="Not signed in"
                         android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
@@ -162,6 +162,33 @@
                         android:layout_marginTop="10dp"
                         android:text="Upload backup to Drive now"
                         app:icon="@drawable/ic_upload" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_drive_restore_latest"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:text="Restore latest"
+                            app:icon="@drawable/ic_download" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_drive_list"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="6dp"
+                            android:layout_weight="1"
+                            android:text="Drive backups"
+                            app:icon="@drawable/ic_list" />
+                    </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

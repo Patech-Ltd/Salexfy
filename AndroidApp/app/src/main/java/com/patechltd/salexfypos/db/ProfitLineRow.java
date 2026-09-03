@@ -16,6 +16,8 @@ public class ProfitLineRow {
 
     public double qty;
 
+    public double stockQty;
+
     public double unitPrice;
 
     public double costPrice;

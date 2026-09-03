@@ -315,6 +315,7 @@ public class SellFragment extends Fragment {
                     item.unitPrice = price;
                     int factor = wholesaleMode ? Math.max(1, p.wholesaleFactor) : 1;
                     item.factor = factor;
+                    item.costPrice = p.costPrice;
                     item.stockQty = item.qty * factor;
                     item.lineTotal = item.qty * item.unitPrice;
                 }
@@ -463,6 +464,7 @@ public class SellFragment extends Fragment {
                             selectedPrice[0]);
                     item.isWholesale = selectedFactor[0] > 1;
                     item.factor = selectedFactor[0];
+                    item.costPrice = product.costPrice;
                     item.stockQty = item.qty * selectedFactor[0];
                     item.lineTotal = item.qty * item.unitPrice;
                     afterCartChange();

@@ -28,6 +28,7 @@ import com.patechltd.salexfypos.adapter.PurchaseLineAdapter;
 import com.patechltd.salexfypos.db.PurchaseWithItems;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Product;
+import com.patechltd.salexfypos.db.entity.ProductUnit;
 import com.patechltd.salexfypos.db.entity.Purchase;
 import com.patechltd.salexfypos.db.entity.PurchaseItem;
 import com.patechltd.salexfypos.db.entity.Supplier;
@@ -267,7 +268,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
         for (PurchaseItem item : items) {
             if (item.productId.equals(p.uid)) {
                 item.qty += qty;
-                int factor = item.isWholesale ? Math.max(1, p.wholesaleFactor) : 1;
+                double factor = item.factor > 0 ? item.factor : 1;
                 item.stockQty = item.stockQty + qty * factor;
                 item.lineTotal = item.qty * item.unitPrice;
                 afterChange();
@@ -287,6 +288,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
                 : (useWholesale ? p.wholesalePrice : p.retailPrice);
         item.unitPrice = buyPrice;
         item.qty = qty;
+        item.factor = Math.max(0.001, factor);
         item.stockQty = qty * factor;
         item.lineTotal = qty * item.unitPrice;
         items.add(item);
@@ -298,12 +300,14 @@ public class PurchaseEditActivity extends AppCompatActivity {
         if (position < 0 || position >= items.size()) return;
         final PurchaseItem item = items.get(position);
         if (item.productId == null) {
-            showEditLineDialog(item, null);
+            showEditLineDialog(item, null, null);
             return;
         }
         repo.run(() -> {
             Product p = repo.products.getById(item.productId);
-            handler.post(() -> showEditLineDialog(item, p));
+            List<ProductUnit> units = p == null ? null : repo.products.getUnitsByProduct(p.uid);
+            final List<ProductUnit> fUnits = units;
+            handler.post(() -> showEditLineDialog(item, p, fUnits));
         });
     }
 
@@ -333,7 +337,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
         item.unitPrice = NumberUtil.round2(Math.max(0, price));
         item.lineTotal = NumberUtil.round2(item.qty * item.unitPrice);
         afterChange();
-        int factor = (p != null && item.isWholesale && p.wholesaleFactor > 0) ? p.wholesaleFactor : 1;
+        double factor = item.factor > 0 ? item.factor : 1;
         final double unitCost = NumberUtil.round2(item.unitPrice / factor);
         if (p == null) return;
         repo.run(() -> {
@@ -346,18 +350,18 @@ public class PurchaseEditActivity extends AppCompatActivity {
         });
     }
 
-    private void showEditLineDialog(final PurchaseItem item, final Product p) {
+    private void showEditLineDialog(final PurchaseItem item, final Product p,
+                                    final List<ProductUnit> productUnits) {
         View view = getLayoutInflater().inflate(R.layout.dialog_edit_line, null);
         TextView title = view.findViewById(R.id.line_title);
         com.google.android.material.button.MaterialButtonToggleGroup toggle = view.findViewById(R.id.line_unit_toggle);
         com.google.android.material.button.MaterialButton retailBtn = view.findViewById(R.id.line_btn_retail);
         com.google.android.material.button.MaterialButton wholesaleBtn = view.findViewById(R.id.line_btn_wholesale);
+        com.google.android.material.chip.ChipGroup unitChips = view.findViewById(R.id.line_unit_chips);
+        TextView unitLabel = view.findViewById(R.id.line_unit_label);
+        TextView totalView = view.findViewById(R.id.line_total);
         TextInputEditText qtyInput = view.findViewById(R.id.line_qty);
         TextInputEditText priceInput = view.findViewById(R.id.line_price);
-
-        view.findViewById(R.id.line_unit_chips).setVisibility(View.GONE);
-        view.findViewById(R.id.line_unit_label).setVisibility(View.GONE);
-        view.findViewById(R.id.line_total).setVisibility(View.GONE);
 
         title.setText(item.productName);
         qtyInput.setText(String.valueOf(item.qty));
@@ -365,20 +369,102 @@ public class PurchaseEditActivity extends AppCompatActivity {
         if (item.isWholesale) wholesaleBtn.setChecked(true);
         else retailBtn.setChecked(true);
 
+        final double[] selectedFactor = {item.factor > 0 ? item.factor : 1};
+        final String[] selectedUnit = {item.unitLabel};
+        final double[] selectedPrice = {item.unitPrice};
+
+        if (productUnits != null && !productUnits.isEmpty()) {
+            unitLabel.setVisibility(View.VISIBLE);
+            for (ProductUnit pu : productUnits) {
+                com.google.android.material.chip.Chip chip = new com.google.android.material.chip.Chip(this);
+                chip.setText(pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName);
+                chip.setTag(pu);
+                chip.setCheckable(true);
+                chip.setChecked(pu.unitName != null && pu.unitName.equals(item.unitLabel));
+                unitChips.addView(chip);
+            }
+        } else {
+            unitLabel.setVisibility(View.GONE);
+        }
+        totalView.setVisibility(View.VISIBLE);
+
+        Runnable refresh = () -> {
+            double qty = Math.max(0.001, NumberUtil.parse(
+                    qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
+            double price = NumberUtil.parse(
+                    priceInput.getText() == null ? "" : priceInput.getText().toString(), selectedPrice[0]);
+            String unit = selectedUnit[0] == null ? "" : selectedUnit[0];
+            unitLabel.setText("Unit: " + (unit.isEmpty() ? "—" : unit)
+                    + (Math.abs(selectedFactor[0] - 1) > 0.001
+                    ? "  (" + NumberUtil.qty(selectedFactor[0]) + " base units each)" : ""));
+            totalView.setText("Line total: " + NumberUtil.money(qty * price));
+        };
+
+        unitChips.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            if (checkedIds.isEmpty()) return;
+            com.google.android.material.chip.Chip chip = group.findViewById(checkedIds.get(0));
+            if (chip == null) return;
+            Object tag = chip.getTag();
+            if (tag instanceof ProductUnit) {
+                ProductUnit pu = (ProductUnit) tag;
+                selectedUnit[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
+                selectedFactor[0] = Math.max(0.001, pu.factor);
+                selectedPrice[0] = pu.price > 0 ? pu.price : selectedPrice[0];
+                priceInput.setText(String.valueOf(selectedPrice[0]));
+                toggle.clearChecked();
+            }
+            refresh.run();
+        });
+
+        toggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            if (p != null) {
+                if (checkedId == R.id.line_btn_wholesale) {
+                    selectedUnit[0] = p.wholesaleUnit;
+                    selectedFactor[0] = Math.max(1, p.wholesaleFactor);
+                    selectedPrice[0] = p.wholesalePrice > 0 ? p.wholesalePrice : p.retailPrice;
+                } else {
+                    selectedUnit[0] = p.retailUnit;
+                    selectedFactor[0] = 1;
+                    selectedPrice[0] = p.retailPrice > 0 ? p.retailPrice : p.wholesalePrice;
+                }
+                priceInput.setText(String.valueOf(selectedPrice[0]));
+            }
+            unitChips.clearCheck();
+            refresh.run();
+        });
+
+        qtyInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable s) { refresh.run(); }
+        });
+        priceInput.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(android.text.Editable s) { refresh.run(); }
+        });
+
+        refresh.run();
+
         new MaterialAlertDialogBuilder(this)
                 .setTitle("Edit line")
                 .setView(view)
                 .setPositiveButton("Save", (dialog, which) -> {
-                    item.isWholesale = wholesaleBtn.isChecked();
+                    boolean fromChip = !unitChips.getCheckedChipIds().isEmpty();
+                    double price = NumberUtil.parse(
+                            priceInput.getText() == null ? "" : priceInput.getText().toString(),
+                            selectedPrice[0]);
                     item.qty = Math.max(0.001, NumberUtil.parse(
                             qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
-                    double price = NumberUtil.parse(
-                            priceInput.getText() == null ? "" : priceInput.getText().toString(), item.unitPrice);
-                    int factor = item.isWholesale && p != null ? Math.max(1, p.wholesaleFactor) : 1;
-                    item.stockQty = item.qty * factor;
-                    item.unitLabel = p != null
-                            ? (item.isWholesale ? p.wholesaleUnit : p.retailUnit) : item.unitLabel;
-                    applyCostChange(item, p, price);
+                    item.unitLabel = selectedUnit[0];
+                    item.factor = selectedFactor[0];
+                    item.unitPrice = NumberUtil.round2(Math.max(0, price));
+                    item.stockQty = item.qty * item.factor;
+                    item.lineTotal = NumberUtil.round2(item.qty * item.unitPrice);
+                    if (fromChip) item.isWholesale = selectedFactor[0] > 1;
+                    else item.isWholesale = wholesaleBtn.isChecked();
+                    applyCostChange(item, p, item.unitPrice);
                 })
                 .setNegativeButton("Cancel", null)
                 .show();

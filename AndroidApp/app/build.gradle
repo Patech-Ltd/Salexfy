@@ -38,6 +38,11 @@ android {
     buildFeatures {
         viewBinding true
     }
+    packagingOptions {
+        resources {
+            excludes += ["META-INF/INDEX.LIST", "META-INF/io.netty.versions.properties", "META-INF/DEPENDENCIES"]
+        }
+    }
 }
 
 dependencies {
@@ -65,6 +70,10 @@ dependencies {
     implementation libs.work.runtime
     coreLibraryDesugaring libs.desugar.jdk.libs
     implementation libs.biometric
+    implementation libs.play.services.auth
+    implementation libs.google.api.client.android
+    implementation libs.google.api.services.drive
+    implementation libs.google.http.client.gson
 
     testImplementation libs.junit
     androidTestImplementation libs.espresso.core

@@ -6,6 +6,10 @@ import androidx.annotation.NonNull;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.patechltd.salexfypos.drive.DriveBackupManager;
+import com.patechltd.salexfypos.drive.DriveServiceHelper;
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.Prefs;
 
@@ -41,10 +45,20 @@ public class BackupWorker extends Worker {
                 }
             }
             boolean driveOk = true;
-            String driveUri = Prefs.getString(getApplicationContext(), Prefs.KEY_BACKUP_DRIVE_URI, null);
             if (Prefs.getBoolean(getApplicationContext(), Prefs.KEY_BACKUP_DRIVE_ENABLED, false)
-                    && driveUri != null && !driveUri.isEmpty()) {
-                driveOk = BackupManager.backupToDrive(getApplicationContext());
+                    && Prefs.getString(getApplicationContext(), Prefs.KEY_BACKUP_DRIVE_EMAIL, null) != null) {
+                try {
+                    GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(getApplicationContext());
+                    if (account != null && DriveServiceHelper.hasDriveScope(account)) {
+                        driveOk = DriveBackupManager.backup(getApplicationContext(),
+                                DriveServiceHelper.getDrive(getApplicationContext(), account));
+                    } else {
+                        driveOk = false;
+                    }
+                } catch (Exception e) {
+                    AppLogger.e("Auto drive backup failed", e);
+                    driveOk = false;
+                }
             }
             return (ok && driveOk) ? Result.success() : Result.retry();
         } catch (Exception e) {

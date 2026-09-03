@@ -64,7 +64,7 @@ import com.patechltd.salexfypos.db.entity.User;
                 Expense.class,
                 SyncChange.class, SyncLog.class
         },
-        version = 12,
+        version = 13,
         exportSchema = false
 )
 @TypeConverters({Converters.class})
@@ -104,7 +104,7 @@ public abstract class AppDatabase extends RoomDatabase {
                                     AppDatabase.class, DATABASE_NAME)
                             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12)
+                                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
                             .fallbackToDestructiveMigration()
                             .build();
                 }
@@ -336,6 +336,13 @@ public abstract class AppDatabase extends RoomDatabase {
                     + "`active` INTEGER NOT NULL, "
                     + "`sortOrder` INTEGER NOT NULL, "
                     + "PRIMARY KEY(`id`))");
+        }
+    };
+
+    static final Migration MIGRATION_12_13 = new Migration(12, 13) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            database.execSQL("ALTER TABLE `purchase_items` ADD COLUMN `factor` REAL NOT NULL DEFAULT 1");
         }
     };
 
