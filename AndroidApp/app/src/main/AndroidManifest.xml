@@ -97,6 +97,9 @@
             android:name=".ui.sell.SalesHistoryActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.sell.ProfitReportActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.sell.PaymentActivity"
             android:exported="false" />
         <activity

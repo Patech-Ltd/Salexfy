@@ -389,7 +389,7 @@ public class SellFragment extends Fragment {
                     priceInput.getText() == null ? "" : priceInput.getText().toString(), selectedPrice[0]);
             String unit = selectedUnitName[0] == null ? "" : selectedUnitName[0];
             unitLabel.setText("Unit: " + (unit.isEmpty() ? "—" : unit)
-                    + (selectedFactor[0] > 1 ? "  (" + NumberUtil.qty(selectedFactor[0]) + " base units each)" : ""));
+                    + (Math.abs(selectedFactor[0] - 1) > 0.001 ? "  (" + NumberUtil.qty(selectedFactor[0]) + " base units each)" : ""));
             String c = Prefs.currency(requireContext());
             totalView.setText("Line total: " + c + " " + NumberUtil.money(qty * price));
         };
@@ -403,7 +403,7 @@ public class SellFragment extends Fragment {
                 ProductUnit pu = (ProductUnit) tag;
                 selectedUnitName[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
                 selectedPrice[0] = pu.price;
-                selectedFactor[0] = Math.max(1, pu.factor);
+                selectedFactor[0] = Math.max(0.001, pu.factor);
                 priceInput.setText(String.valueOf(pu.price));
             } else if (tag instanceof Boolean) {
                 boolean wholesale = (Boolean) tag;

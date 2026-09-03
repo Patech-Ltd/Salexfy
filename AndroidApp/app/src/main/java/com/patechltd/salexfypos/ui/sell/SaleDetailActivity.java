@@ -43,6 +43,7 @@ public class SaleDetailActivity extends AppCompatActivity {
     private Repository repo;
     private String saleId;
     private SaleWithItems cached;
+    private MaterialButton btnVoid;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -61,7 +62,7 @@ public class SaleDetailActivity extends AppCompatActivity {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
         }
 
-        MaterialButton btnVoid = findViewById(R.id.btn_void);
+        btnVoid = findViewById(R.id.btn_void);
         if (PermissionChecker.has(this, Authority.SALE_VOID)) {
             btnVoid.setVisibility(View.VISIBLE);
             btnVoid.setOnClickListener(v -> voidSale());
@@ -112,6 +113,11 @@ public class SaleDetailActivity extends AppCompatActivity {
         status.setText(voided ? "Voided" : "Complete");
         status.setBackgroundResource(voided ? R.drawable.bg_danger_card : R.drawable.bg_success_card);
         status.setTextColor(getResources().getColor(voided ? R.color.error : R.color.success));
+
+        if (btnVoid != null && voided) {
+            btnVoid.setEnabled(false);
+            btnVoid.setText("Already Voided");
+        }
 
         ((TextView) findViewById(R.id.date)).setText(DateUtil.format(sale.saleDate));
         ((TextView) findViewById(R.id.cashier)).setText("Cashier: " + safe(sale.cashierName));

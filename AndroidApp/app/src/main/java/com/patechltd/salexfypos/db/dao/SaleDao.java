@@ -12,6 +12,7 @@ import com.patechltd.salexfypos.db.CashierReportRow;
 import com.patechltd.salexfypos.db.DayReportRow;
 import com.patechltd.salexfypos.db.MonthReportRow;
 import com.patechltd.salexfypos.db.PaymentMethodTotalRow;
+import com.patechltd.salexfypos.db.ProfitLineRow;
 import com.patechltd.salexfypos.db.SaleWithItems;
 import com.patechltd.salexfypos.db.TopProductRow;
 import com.patechltd.salexfypos.db.entity.Sale;
@@ -236,4 +237,33 @@ public abstract class SaleDao {
             + "               OR barcode LIKE '%' || :q || '%')) "
             + "ORDER BY saleDate DESC")
     public abstract List<SaleWithItems> exportComplete(String q, long from, long to);
+
+    @Query("SELECT s.id AS saleUid, s.saleNo, s.saleDate, s.status, "
+            + "si.productName, si.unitLabel, si.qty, si.unitPrice, si.costPrice, "
+            + "si.unitPrice * si.qty AS revenue, si.costPrice * si.qty AS cost, "
+            + "(si.unitPrice - si.costPrice) * si.qty AS profit "
+            + "FROM sales s JOIN sale_items si ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND (:includeVoided = 1 OR s.status != 'VOID') "
+            + "ORDER BY s.saleDate DESC, s.id LIMIT :limit OFFSET :offset")
+    public abstract List<ProfitLineRow> getProfitLines(long from, long to, boolean includeVoided,
+                                                       int limit, int offset);
+
+    @Query("SELECT COUNT(*) FROM sale_items si "
+            + "JOIN sales s ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND (:includeVoided = 1 OR s.status != 'VOID')")
+    public abstract int profitLineCount(long from, long to, boolean includeVoided);
+
+    @Query("SELECT COALESCE(SUM(si.unitPrice * si.qty), 0) FROM sale_items si "
+            + "JOIN sales s ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND (:includeVoided = 1 OR s.status != 'VOID')")
+    public abstract double getSummaryRevenue(long from, long to, boolean includeVoided);
+
+    @Query("SELECT COALESCE(SUM(si.costPrice * si.qty), 0) FROM sale_items si "
+            + "JOIN sales s ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND (:includeVoided = 1 OR s.status != 'VOID')")
+    public abstract double getSummaryCost(long from, long to, boolean includeVoided);
 }

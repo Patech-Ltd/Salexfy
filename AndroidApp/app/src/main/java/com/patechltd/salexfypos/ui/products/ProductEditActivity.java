@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -60,6 +61,7 @@ public class ProductEditActivity extends AppCompatActivity {
         double price;
         boolean isBase;
         int sortOrder;
+        boolean divideMode;
     }
 
     private Repository repo;
@@ -306,12 +308,12 @@ public class ProductEditActivity extends AppCompatActivity {
 
     private void addUnitRow() {
         UnitRow row = new UnitRow();
-        row.isBase = unitRows.isEmpty();
+        row.isBase = false;
         row.factor = 1;
         row.price = 0;
         row.sortOrder = unitRows.size();
         unitRows.add(row);
-        renderUnitRows();
+        pickUnitForRow(unitRows.size() - 1);
     }
 
     private void pickBaseUnit() {
@@ -330,77 +332,107 @@ public class ProductEditActivity extends AppCompatActivity {
         startActivityForResult(i, REQ_PICK_UNIT_ROW);
     }
 
+    private void assignUnitByName(UnitRow row, String name) {
+        for (Unit u : units) {
+            if (u.name != null && u.name.equalsIgnoreCase(name)) {
+                row.unitId = u.uid;
+                row.unitName = u.name;
+                return;
+            }
+        }
+        row.unitId = null;
+        row.unitName = name;
+    }
+
     private void renderUnitRows() {
         unitsList.removeAllViews();
         for (int i = 0; i < unitRows.size(); i++) {
             final int index = i;
             final UnitRow row = unitRows.get(i);
 
-            LinearLayout container = new LinearLayout(this);
-            container.setOrientation(LinearLayout.HORIZONTAL);
-            container.setGravity(Gravity.CENTER_VERTICAL);
-            int pad = (int) (10 * getResources().getDisplayMetrics().density);
-            container.setPadding(pad, pad, pad, pad);
-            container.setBackgroundResource(R.drawable.bg_search);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            if (i > 0) lp.topMargin = (int) (8 * getResources().getDisplayMetrics().density);
-            container.setLayoutParams(lp);
-
-            TextView name = new TextView(this);
-            name.setText((row.isBase ? "Base: " : "") + (row.unitName == null ? "Pick unit" : row.unitName));
-            name.setTextColor(getResources().getColor(R.color.text_primary));
-            name.setTextSize(14);
-            name.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.2f));
-            name.setOnClickListener(v -> pickUnitForRow(index));
-            container.addView(name);
+            View itemView = LayoutInflater.from(this).inflate(R.layout.item_unit_row, unitsList, false);
+            TextView nameView = itemView.findViewById(R.id.unit_name);
+            TextView baseBadge = itemView.findViewById(R.id.base_badge);
+            android.widget.ImageButton btnRemove = itemView.findViewById(R.id.btn_remove);
+            View body = itemView.findViewById(R.id.body);
+            TextView relationPreview = itemView.findViewById(R.id.relation_preview);
+            EditText factorInput = itemView.findViewById(R.id.factor_input);
+            com.google.android.material.textfield.TextInputLayout factorTil = itemView.findViewById(R.id.factor_til);
+            EditText priceInput = itemView.findViewById(R.id.price_input);
+            com.google.android.material.button.MaterialButton btnToggle = itemView.findViewById(R.id.btn_divide_toggle);
+            com.google.android.material.card.MaterialCardView card = itemView.findViewById(R.id.card);
 
             if (row.isBase) {
-                TextView hint = new TextView(this);
-                hint.setText("price above");
-                hint.setTextColor(getResources().getColor(R.color.text_secondary));
-                hint.setTextSize(12);
-                hint.setPadding(dp(8), 0, 0, 0);
-                container.addView(hint);
+                card.setCardBackgroundColor(getResources().getColor(R.color.brand_primary_container));
+                card.setStrokeColor(getResources().getColor(R.color.brand_primary));
             } else {
-                EditText priceInput = new EditText(this);
-                priceInput.setHint("price");
-                priceInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
-                        | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-                priceInput.setText(NumberUtil.qty(row.price));
-                priceInput.setTextSize(13);
-                priceInput.setMinEms(4);
-                priceInput.setTag(row);
-                priceInput.addTextChangedListener(new SimpleTextWatcher() {
-                    @Override
-                    public void onChanged() {
-                        row.price = NumberUtil.parse(priceInput.getText().toString(), 0);
-                    }
-                });
-                container.addView(priceInput);
+                card.setCardBackgroundColor(getResources().getColor(R.color.surface));
+                card.setStrokeColor(getResources().getColor(R.color.outline));
+            }
 
-                EditText factorInput = new EditText(this);
-                factorInput.setHint("in 1");
+            String displayName = row.unitName == null ? "Tap to pick unit" : row.unitName;
+            nameView.setText(displayName);
+            nameView.setTextColor(getResources().getColor(
+                    row.unitName == null ? R.color.text_disabled : R.color.text_primary));
+
+            if (row.isBase) {
+                baseBadge.setVisibility(View.VISIBLE);
+                btnRemove.setVisibility(View.GONE);
+                body.setVisibility(View.GONE);
+                nameView.setOnClickListener(v -> pickUnitForRow(index));
+            } else {
+                baseBadge.setVisibility(View.GONE);
+                btnRemove.setVisibility(View.VISIBLE);
+                body.setVisibility(View.VISIBLE);
+
+                String baseNameRaw = unitRows.isEmpty() ? "base" : unitRows.get(0).unitName;
+                final String baseName = baseNameRaw == null ? "base" : baseNameRaw;
+
+                btnToggle.setText(row.divideMode ? "÷" : "×");
+                factorTil.setHint(row.divideMode ? "÷ split into" : "× how many");
                 factorInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
                         | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
-                factorInput.setText(NumberUtil.qty(row.factor));
-                factorInput.setTextSize(13);
-                factorInput.setMinEms(4);
-                factorInput.setTag(row);
-                factorInput.addTextChangedListener(new SimpleTextWatcher() {
-                    @Override
-                    public void onChanged() {
-                        row.factor = Math.max(1, NumberUtil.parse(factorInput.getText().toString(), 1));
-                    }
-                });
-                container.addView(factorInput);
 
-                TextView remove = new TextView(this);
-                remove.setText("✕");
-                remove.setTextColor(getResources().getColor(R.color.error));
-                remove.setTextSize(16);
-                remove.setPadding((int) (8 * getResources().getDisplayMetrics().density), 0, 0, 0);
-                remove.setOnClickListener(v -> {
+                if (row.divideMode) {
+                    double displayVal = row.factor > 0 ? Math.round(1.0 / row.factor * 1000.0) / 1000.0 : 1;
+                    factorInput.setText(NumberUtil.qty(displayVal));
+                } else {
+                    factorInput.setText(NumberUtil.qty(row.factor));
+                }
+                priceInput.setText(NumberUtil.qty(row.price));
+
+                Runnable refreshPreview = () -> {
+                    double f;
+                    if (row.divideMode) {
+                        double divisor = NumberUtil.parse(factorInput.getText().toString(), 1);
+                        f = divisor > 0 ? 1.0 / divisor : 1;
+                    } else {
+                        f = NumberUtil.parse(factorInput.getText().toString(), 1);
+                    }
+                    row.factor = Math.max(0.001, f);
+                    if (Math.abs(f - 1) < 0.001) {
+                        relationPreview.setText("1 " + row.unitName + " = 1 " + baseName);
+                    } else {
+                        String frac = toFraction(f);
+                        if (frac != null) {
+                            relationPreview.setText("1 " + row.unitName + " = " + frac + " " + baseName);
+                        } else {
+                            relationPreview.setText("1 " + row.unitName + " = " + NumberUtil.qty(f) + " " + baseName);
+                        }
+                    }
+                    double basePrice = unitRows.isEmpty() ? 0 : unitRows.get(0).price;
+                    row.price = NumberUtil.round2(basePrice * f);
+                    priceInput.setText(NumberUtil.qty(row.price));
+                };
+                refreshPreview.run();
+
+                btnToggle.setOnClickListener(v -> {
+                    row.divideMode = !row.divideMode;
+                    renderUnitRows();
+                });
+
+                nameView.setOnClickListener(v -> pickUnitForRow(index));
+                btnRemove.setOnClickListener(v -> {
                     unitRows.remove(index);
                     for (int j = 0; j < unitRows.size(); j++) {
                         unitRows.get(j).isBase = j == 0;
@@ -408,10 +440,36 @@ public class ProductEditActivity extends AppCompatActivity {
                     }
                     renderUnitRows();
                 });
-                container.addView(remove);
+
+                factorInput.addTextChangedListener(new SimpleTextWatcher() {
+                    @Override
+                    void onChanged() {
+                        refreshPreview.run();
+                    }
+                });
+                priceInput.addTextChangedListener(new SimpleTextWatcher() {
+                    @Override
+                    void onChanged() {
+                        row.price = NumberUtil.parse(priceInput.getText().toString(), 0);
+                    }
+                });
             }
-            unitsList.addView(container);
+            unitsList.addView(itemView);
         }
+    }
+
+    private static final double[][] FRACTIONS = {
+            {1, 8}, {1, 6}, {1, 5}, {1, 4}, {1, 3}, {1, 2}, {2, 3}, {3, 4}
+    };
+
+    private String toFraction(double value) {
+        for (double[] f : FRACTIONS) {
+            if (Math.abs(value - f[0] / f[1]) < 0.001) {
+                if (f[0] == 1) return "1/" + (long) f[1];
+                return (long) f[0] + "/" + (long) f[1];
+            }
+        }
+        return null;
     }
 
     private int dp(int value) {
@@ -464,6 +522,16 @@ public class ProductEditActivity extends AppCompatActivity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (resultCode != RESULT_OK) {
+            if ((requestCode == REQ_PICK_UNIT_ROW || requestCode == REQ_PICK_BASE_UNIT)
+                    && pickRowIndex >= 0 && pickRowIndex < unitRows.size()
+                    && unitRows.get(pickRowIndex).unitName == null) {
+                unitRows.remove(pickRowIndex);
+                renderUnitRows();
+            }
+            pickRowIndex = -1;
+            return;
+        }
         if (resultCode == RESULT_OK) {
             if (requestCode == REQ_IMAGE) {
                 Uri uri = data == null ? null : data.getData();
@@ -675,6 +743,7 @@ public class ProductEditActivity extends AppCompatActivity {
                 row.price = pu.price;
                 row.isBase = pu.isBase;
                 row.sortOrder = pu.sortOrder;
+                row.divideMode = !pu.isBase && pu.factor > 0 && pu.factor < 1;
                 unitRows.add(row);
             }
             boolean hasBase = false;
@@ -705,7 +774,7 @@ public class ProductEditActivity extends AppCompatActivity {
                 UnitRow bulk = new UnitRow();
                 bulk.unitId = p.wholesaleUnitId;
                 bulk.unitName = resolveUnitName(p.wholesaleUnitId, p.wholesaleUnit);
-                bulk.factor = Math.max(1, p.wholesaleFactor);
+                bulk.factor = Math.max(0.001, p.wholesaleFactor);
                 bulk.price = p.wholesalePrice;
                 bulk.isBase = false;
                 bulk.sortOrder = 1;
@@ -808,7 +877,7 @@ public class ProductEditActivity extends AppCompatActivity {
         final double fRetailPrice = base.price;
         final String fWholesaleUnit = bulk == null ? null : bulk.unitName;
         final String fWholesaleUnitId = bulk == null ? null : bulk.unitId;
-        final int fWholesaleFactor = bulk == null ? 1 : (int) Math.max(1, bulk.factor);
+        final int fWholesaleFactor = bulk == null ? 1 : (int) Math.max(0.001, bulk.factor);
         final double fWholesalePrice = bulk == null ? 0 : bulk.price;
 
         final List<UnitRow> rowsSnapshot = new ArrayList<>(unitRows);
@@ -885,7 +954,7 @@ public class ProductEditActivity extends AppCompatActivity {
                 pu.productId = p.uid;
                 pu.unitId = row.unitId;
                 pu.unitName = row.unitName;
-                pu.factor = row.isBase ? 1 : Math.max(1, row.factor);
+                pu.factor = row.isBase ? 1 : Math.max(0.001, row.factor);
                 pu.price = row.price;
                 pu.isBase = row.isBase;
                 pu.sortOrder = order++;

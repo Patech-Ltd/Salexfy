@@ -60,6 +60,8 @@ public class ReportsFragment extends Fragment {
                         .putExtra("exportToday", true)));
         view.findViewById(R.id.btn_sales_history).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), com.patechltd.salexfypos.ui.sell.SalesHistoryActivity.class)));
+        view.findViewById(R.id.btn_profit_report).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), com.patechltd.salexfypos.ui.sell.ProfitReportActivity.class)));
 
         load();
     }

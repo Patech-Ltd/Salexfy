@@ -204,8 +204,15 @@ public class ProductDetailActivity extends AppCompatActivity {
             row.addView(label);
 
             TextView factor = new TextView(this);
-            if (!u.isBase && u.factor > 1) {
-                factor.setText("1 " + unitName + " = " + NumberUtil.qty(u.factor) + " " + baseUnit + "  •  ");
+            if (!u.isBase && u.factor > 0 && Math.abs(u.factor - 1) > 0.001) {
+                String desc;
+                if (u.factor < 1) {
+                    desc = "1 " + unitName + " = " + NumberUtil.qty(u.factor) + " " + baseUnit;
+                } else {
+                    double rounded = Math.round(u.factor * 100.0) / 100.0;
+                    desc = "1 " + unitName + " = " + (rounded == (long) rounded ? String.valueOf((long) rounded) : NumberUtil.qty(u.factor)) + " " + baseUnit;
+                }
+                factor.setText(desc + "  \u00B7  ");
                 factor.setTextColor(getResources().getColor(R.color.text_secondary));
                 factor.setTextSize(12);
                 row.addView(factor);

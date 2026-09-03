@@ -280,6 +280,7 @@ public class Repository {
 
     @Transaction
     public void voidSale(Sale sale) {
+        if ("VOID".equals(sale.status)) return;
         List<SaleItem> items = sales.getItems(sale.uid);
         for (SaleItem item : items) {
             adjustStock(sale.uid, item.productId, item.stockQty, MovementType.SALE_VOID, item.unitLabel,
