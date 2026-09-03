@@ -286,9 +286,9 @@ public class BackupSettingsActivity extends AppCompatActivity {
                     DialogUtil.toast(this, "Drive sign-in failed");
                 }
             } catch (ApiException e) {
-                DialogUtil.toast(this, "Drive sign-in failed: " + e.getStatusCode());
+                showSignInError(e.getStatusCode());
             } catch (Exception e) {
-                DialogUtil.toast(this, "Drive sign-in failed");
+                showSignInError(0);
             }
             return;
         }
@@ -303,5 +303,43 @@ public class BackupSettingsActivity extends AppCompatActivity {
                                 ok ? "Database restored. Restart the app." : "Restore failed"));
                     }).start());
         }
+    }
+
+    private void showSignInError(int statusCode) {
+        String message;
+        switch (statusCode) {
+            case 4:
+                message = "Google Play services needs an update or isn't available on this phone.\n"
+                        + "Open the Play Store and update 'Google Play services', then try again.";
+                break;
+            case 7:
+                message = "No Google account is set up on this phone.\n"
+                        + "Go to Settings → Accounts, add your Google account, then try again.";
+                break;
+            case 8:
+                message = "The Google sign-in screen didn't complete.\nPlease tap 'Sign in to Google Drive' again.";
+                break;
+            case 10:
+                message = "Google couldn't complete the Drive sign-in (code 10).\n"
+                        + "This usually means the app isn't set up for Drive on this phone yet.\n"
+                        + "Update Google Play services, make sure you're signed into a Google account, "
+                        + "and try again. If it keeps failing, contact the app provider.";
+                break;
+            case 12501:
+                message = "You cancelled, or Google rejected the Drive permission.\n"
+                        + "Use the SAME Google account that is on this phone, and approve all permissions.";
+                break;
+            default:
+                message = "Drive sign-in failed (code " + statusCode + ").\n"
+                        + "Update Google Play services, add a Google account to this phone in Settings → Accounts, "
+                        + "then try again.";
+                break;
+        }
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("Drive sign-in failed")
+                .setMessage(message)
+                .setPositiveButton("Try again", (d, w) -> signInDrive())
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 }
