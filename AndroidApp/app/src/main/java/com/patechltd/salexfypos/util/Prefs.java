@@ -109,6 +109,10 @@ public class Prefs {
         putString(context, key, String.valueOf(value));
     }
 
+    public static void remove(Context context, String key) {
+        prefs(context).edit().remove(key).apply();
+    }
+
     public static String currency(Context context) {
         return getString(context, KEY_CURRENCY, "KSh");
     }

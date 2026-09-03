@@ -23,7 +23,7 @@ public final class VersionGate {
     /** New installs are rejected from 2026-09-05 00:00 local (after Friday 2026-09-04). */
     private static final int CUTOFF_YEAR = 2026;
     private static final int CUTOFF_MONTH = 9;      // 1 = January
-    private static final int CUTOFF_DAY = 5;
+    private static final int CUTOFF_DAY = 7;
 
     private VersionGate() {
     }
@@ -55,7 +55,7 @@ public final class VersionGate {
         new AlertDialog.Builder(activity)
                 .setTitle("Update Required")
                 .setMessage("A new version of Salexfy POS has been created.\n\n"
-                        + "Please uninstall this version and install the new version "
+                        + "Please update this version and install the new version "
                         + "to continue using the app.")
                 .setCancelable(false)
                 .setPositiveButton("Exit App", (dialog, which) -> {

@@ -22,7 +22,11 @@ public final class DriveServiceHelper {
 
     /**
      * Builds a {@link Drive} service using the supplied signed-in Google account.
-     * The {@link GoogleAccountCredential} requests/refreshes OAuth tokens via Google Play services.
+     *
+     * <p>{@link GoogleAccountCredential} requests and refreshes OAuth tokens automatically through
+     * Google Play services for the signed-in account. It is the standard Android mechanism for
+     * per-user account access (the API is deprecated but still the only Android path; it is kept
+     * because it is reliable and handles token refresh/expiry natively).</p>
      */
     public static Drive getDrive(Context context, GoogleSignInAccount account) {
         GoogleAccountCredential credential =

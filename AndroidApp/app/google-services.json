@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "278118775511",
-    "project_id": "salexfypos",
-    "storage_bucket": "salexfypos.firebasestorage.app"
+    "project_number": "293554874207",
+    "project_id": "salexfypos-507518",
+    "storage_bucket": "salexfypos-507518.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:278118775511:android:10793f365ae3d3e0664e92",
+        "mobilesdk_app_id": "1:293554874207:android:bc1395d1674e213907b8ea",
         "android_client_info": {
           "package_name": "com.patechltd.salexfypos"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCTBPSpBiuRSzrCTv_CnL6Oa1BChKf0wi8"
+          "current_key": "AIzaSyArfBpOEjfqRS2m1lVD4A6WjSTULUcdQpU"
         }
       ],
       "services": {

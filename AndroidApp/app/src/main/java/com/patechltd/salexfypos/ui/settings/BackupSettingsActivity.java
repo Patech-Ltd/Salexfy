@@ -48,6 +48,8 @@ public class BackupSettingsActivity extends AppCompatActivity {
     private MaterialButton btnDriveBackupNow;
     private MaterialButton btnDriveRestoreLatest;
     private MaterialButton btnDriveList;
+    private MaterialButton btnDriveRemove;
+    private TextView driveRemovalHint;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -67,6 +69,8 @@ public class BackupSettingsActivity extends AppCompatActivity {
         btnDriveBackupNow = findViewById(R.id.btn_drive_backup_now);
         btnDriveRestoreLatest = findViewById(R.id.btn_drive_restore_latest);
         btnDriveList = findViewById(R.id.btn_drive_list);
+        btnDriveRemove = findViewById(R.id.btn_drive_remove);
+        driveRemovalHint = findViewById(R.id.drive_removal_hint);
 
         load();
 
@@ -76,6 +80,7 @@ public class BackupSettingsActivity extends AppCompatActivity {
         ((MaterialButton) findViewById(R.id.btn_drive_backup_now)).setOnClickListener(v -> driveBackupNow());
         ((MaterialButton) findViewById(R.id.btn_drive_restore_latest)).setOnClickListener(v -> driveRestoreLatest());
         ((MaterialButton) findViewById(R.id.btn_drive_list)).setOnClickListener(v -> driveList());
+        ((MaterialButton) findViewById(R.id.btn_drive_remove)).setOnClickListener(v -> removeDrive());
         ((MaterialButton) findViewById(R.id.btn_save)).setOnClickListener(v -> save());
     }
 
@@ -109,6 +114,8 @@ public class BackupSettingsActivity extends AppCompatActivity {
         btnDriveBackupNow.setEnabled(signedIn);
         btnDriveRestoreLatest.setEnabled(signedIn);
         btnDriveList.setEnabled(signedIn);
+        btnDriveRemove.setVisibility(android.view.View.VISIBLE);
+        driveRemovalHint.setVisibility(signedIn ? android.view.View.VISIBLE : android.view.View.GONE);
         long last = Prefs.getLong(this, Prefs.KEY_LAST_DRIVE_BACKUP, 0);
         lastDriveBackup.setText("Last Drive backup: " + (last == 0
                 ? "Never" : DateUtil.formatDate(last) + " " + DateUtil.formatTime(last)));
@@ -133,8 +140,61 @@ public class BackupSettingsActivity extends AppCompatActivity {
     }
 
     private void signInDrive() {
-        GoogleSignInClient client = GoogleSignIn.getClient(this, signInOptions());
+        AppLogger.i("DRIVE: starting sign-in");
+        String sha1 = readSha1();
+        AppLogger.i("DRIVE: package=" + getPackageName() + " sha1=" + sha1);
+        try {
+            int n = getResources().getIdentifier("google_app_id", "string", getPackageName());
+            AppLogger.i("DRIVE: google_app_id=" + (n == 0 ? "MISSING" : getString(n)));
+        } catch (Exception e) {
+            AppLogger.e("DRIVE: google_app_id read failed: " + e.getMessage());
+        }
+        GoogleSignInOptions opts = signInOptions();
+        AppLogger.i("DRIVE: sign-in options method=DEFAULT_SIGN_IN "
+                + "requestIdToken=" + (opts.getServerClientId() != null)
+                + " serverClientId=" + opts.getServerClientId());
+        GoogleSignInClient client = GoogleSignIn.getClient(this, opts);
         startActivityForResult(client.getSignInIntent(), RC_SIGN_IN);
+    }
+
+    private String readSha1() {
+        try {
+            java.security.MessageDigest md =
+                    java.security.MessageDigest.getInstance("SHA-1");
+            android.content.pm.PackageInfo info = getPackageManager()
+                    .getPackageInfo(getPackageName(),
+                            android.content.pm.PackageManager.GET_SIGNATURES);
+            for (android.content.pm.Signature s : info.signatures) {
+                md.update(s.toByteArray());
+            }
+            byte[] digest = md.digest();
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(Character.toUpperCase(Character.forDigit((b >> 4) & 0xf, 16)));
+                sb.append(Character.toUpperCase(Character.forDigit(b & 0xf, 16)));
+                if (sb.length() % 3 == 2) sb.append(':');
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            AppLogger.e("DRIVE: readSha1 failed: " + e.getMessage());
+            return "UNKNOWN";
+        }
+    }
+
+    private void removeDrive() {
+        DialogUtil.confirm(this, "Disconnect Google Drive",
+                "This signs out of Google Drive on this phone and clears the saved account "
+                        + "and the automatic backup setting. Your backups stay in Drive. Continue?",
+                () -> {
+                    GoogleSignInClient client = GoogleSignIn.getClient(this, signInOptions());
+                    client.signOut().addOnCompleteListener(task -> {
+                        Prefs.remove(this, Prefs.KEY_BACKUP_DRIVE_EMAIL);
+                        Prefs.remove(this, Prefs.KEY_BACKUP_DRIVE_ENABLED);
+                        Prefs.remove(this, Prefs.KEY_LAST_DRIVE_BACKUP);
+                        updateDriveSection();
+                        DialogUtil.toast(this, "Google Drive disconnected");
+                    });
+                });
     }
 
     private GoogleSignInAccount currentAccount() {
@@ -277,32 +337,60 @@ public class BackupSettingsActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == RC_SIGN_IN) {
-            AppLogger.i("Drive sign-in result: resultCode=" + resultCode
-                    + " data=" + (data == null ? "null" : data.toString()));
+            AppLogger.i("DRIVE: sign-in result resultCode=" + resultCode
+                    + " data=" + (data == null ? "null" : String.valueOf(data)));
+            if (data != null && data.getExtras() != null) {
+                for (String key : data.getExtras().keySet()) {
+                    try {
+                        Object v = data.getExtras().get(key);
+                        AppLogger.i("DRIVE: intent extra " + key + "=" + v);
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
             try {
                 GoogleSignInAccount account = GoogleSignIn.getSignedInAccountFromIntent(data).getResult(ApiException.class);
                 if (account != null && account.getEmail() != null) {
-                    AppLogger.i("Drive sign-in OK: email=" + account.getEmail());
+                    AppLogger.i("DRIVE: sign-in SUCCESS email=" + account.getEmail()
+                            + " id=" + account.getId()
+                            + " scopes=" + account.getGrantedScopes());
                     Prefs.putString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, account.getEmail());
                     updateDriveSection();
                     DialogUtil.toast(this, "Signed in to Google Drive");
                 } else {
-                    AppLogger.e("Drive sign-in returned null account (resultCode=" + resultCode + ")");
+                    AppLogger.e("DRIVE: sign-in returned null account (resultCode="
+                            + resultCode + " data=" + data + ")");
+                    if (data != null && data.getExtras() != null) {
+                        Object raw = data.getExtras().get("googleSignInAccount");
+                        if (raw instanceof GoogleSignInAccount) {
+                            GoogleSignInAccount acc = (GoogleSignInAccount) raw;
+                            AppLogger.i("DRIVE: raw account email=" + acc.getEmail()
+                                    + " id=" + acc.getId()
+                                    + " scopeStrings=" + acc.getGrantedScopes()
+                                    + " serverAuthCode=" + acc.getServerAuthCode());
+                        } else {
+                            AppLogger.i("DRIVE: raw googleSignInAccount absent/other ("
+                                    + (raw == null ? "null" : raw.getClass().getName()) + ")");
+                        }
+                    }
                     GoogleSignInAccount last = GoogleSignIn.getLastSignedInAccount(this);
                     if (last != null) {
-                        AppLogger.e("  lastSignedIn=" + last.getEmail()
-                                + " grantedScopes=" + last.getGrantedScopes());
+                        AppLogger.i("DRIVE: lastSignedIn email=" + last.getEmail()
+                                + " id=" + last.getId()
+                                + " scopes=" + last.getGrantedScopes());
                     } else {
-                        AppLogger.e("  no last signed-in account");
+                        AppLogger.i("DRIVE: no last signed-in account");
                     }
                     showSignInError(resultCode == RESULT_OK ? 10 : 13);
                 }
             } catch (ApiException e) {
-                AppLogger.e("Drive sign-in ApiException status=" + e.getStatusCode()
-                        + " statusMessage=" + e.getStatusMessage() + " msg=" + e.getMessage(), e);
+                AppLogger.e("DRIVE: ApiException status=" + e.getStatusCode()
+                        + " statusMessage=" + e.getStatusMessage()
+                        + " msg=" + e.getMessage(), e);
                 showSignInError(e.getStatusCode());
             } catch (Exception e) {
-                AppLogger.e("Drive sign-in unexpected exception", e);
+                AppLogger.e("DRIVE: unexpected " + e.getClass().getSimpleName()
+                        + " " + e.getMessage(), e);
                 showSignInError(0);
             }
             return;
