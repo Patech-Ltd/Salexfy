@@ -3,6 +3,7 @@ package com.patechltd.salexfypos.drive;
 import android.content.Context;
 
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+import com.google.android.gms.common.api.Scope;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.http.HttpTransport;
 import com.google.api.client.http.javanet.NetHttpTransport;
@@ -40,9 +41,8 @@ public final class DriveServiceHelper {
     }
 
     public static boolean hasDriveScope(GoogleSignInAccount account) {
-        if (account == null) return false;
-        return account.getGrantedScopes() != null
-                && account.getGrantedScopes().contains(DriveScopes.DRIVE_FILE);
+        if (account == null || account.getGrantedScopes() == null) return false;
+        return account.getGrantedScopes().contains(new Scope(DriveScopes.DRIVE_FILE));
     }
 
     public static void log(String msg, Throwable t) {

@@ -102,10 +102,10 @@ public class BackupManager {
      * Fully commits (checkpoints) the live database into a single, self-contained {@code -wal} /
      * {@code -shm}-free backup file written to {@code target}.
      *
-     * <p>In WAL mode the main db file can be stale until the WAL is checkpointed, so this method
-     * checkpoints ({@code PRAGMA wal_checkpoint(TRUNCATE)}) the shared database, confirms the WAL is
-     * fully flushed, copies the main file, then verifies the copy opens as a valid standalone SQLite
-     * database. The app's Room instance stays open and usable.</p>
+     * <p>Produces the backup with {@code VACUUM INTO}, which writes a complete, consistent, standalone
+     * SQLite file that includes every committed transaction, regardless of the live WAL state. This
+     * avoids the fragile WAL-truncation checks and is safe even while Room keeps the database open and
+     * other connections are attached. Nothing needs to be checkpointed or closed.</p>
      *
      * @return {@code true} if a validated, standalone backup file was written to {@code target}.
      */
@@ -114,26 +114,16 @@ public class BackupManager {
             File parent = target.getParentFile();
             if (parent != null && !parent.exists()) parent.mkdirs();
 
-            File db = context.getDatabasePath(AppDatabase.DATABASE_NAME);
-            File wal = new File(db.getParent(), AppDatabase.DATABASE_NAME + "-wal");
-            File shm = new File(db.getParent(), AppDatabase.DATABASE_NAME + "-shm");
-            if (!db.exists()) return false;
+            if (target.exists()) target.delete();
 
             AppDatabase appDb = AppDatabase.getInstance(context);
-            try (android.database.Cursor ignore = appDb.getOpenHelper()
-                    .getWritableDatabase().query("PRAGMA wal_checkpoint(TRUNCATE)")) {
-            }
+            appDb.getOpenHelper().getWritableDatabase()
+                    .execSQL("VACUUM INTO '" + target.getPath().replace("'", "''") + "'");
 
-            if (wal.exists() && wal.length() > 0) {
-                AppLogger.e("WAL not fully checkpointed before backup; aborting");
+            if (!target.exists() || target.length() == 0) {
+                AppLogger.e("VACUUM INTO produced no file; aborting backup");
                 return false;
             }
-            if (shm.exists() && shm.length() > 0) {
-                AppLogger.e("SHM not cleared before backup; aborting");
-                return false;
-            }
-
-            copy(db, target);
 
             try (android.database.sqlite.SQLiteDatabase check =
                          android.database.sqlite.SQLiteDatabase.openDatabase(

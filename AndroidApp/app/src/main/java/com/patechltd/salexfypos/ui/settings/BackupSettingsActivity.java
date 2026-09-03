@@ -135,6 +135,7 @@ public class BackupSettingsActivity extends AppCompatActivity {
 
     private GoogleSignInOptions signInOptions() {
         return new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
                 .requestScopes(new Scope(com.google.api.services.drive.DriveScopes.DRIVE_FILE))
                 .build();
     }
@@ -197,10 +198,27 @@ public class BackupSettingsActivity extends AppCompatActivity {
                 });
     }
 
-    private GoogleSignInAccount currentAccount() {
+    /*private GoogleSignInAccount currentAccount() {
         GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
         if (account == null || account.getEmail() == null) return null;
         if (!DriveServiceHelper.hasDriveScope(account)) return null;
+        return account;
+    }*/
+
+    private GoogleSignInAccount currentAccount() {
+        GoogleSignInAccount account = GoogleSignIn.getLastSignedInAccount(this);
+        if (account == null) {
+            AppLogger.i("DRIVE: currentAccount -> getLastSignedInAccount is null");
+            return null;
+        }
+        if (account.getEmail() == null) {
+            AppLogger.i("DRIVE: currentAccount -> email null, id=" + account.getId());
+            return null;
+        }
+        if (!DriveServiceHelper.hasDriveScope(account)) {
+            AppLogger.i("DRIVE: currentAccount -> missing drive scope, granted=" + account.getGrantedScopes());
+            return null;
+        }
         return account;
     }
 
@@ -234,6 +252,7 @@ public class BackupSettingsActivity extends AppCompatActivity {
                     DialogUtil.toast(self, ok ? "Backup uploaded to Drive" : "Drive backup failed");
                 });
             } catch (Exception e) {
+                e.printStackTrace();
                 DriveServiceHelper.log("backup now", e);
                 runOnUiThread(() -> {
                     btnDriveBackupNow.setEnabled(true);
