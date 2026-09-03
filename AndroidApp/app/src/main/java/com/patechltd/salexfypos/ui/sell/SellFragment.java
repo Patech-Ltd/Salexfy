@@ -495,7 +495,7 @@ public class SellFragment extends Fragment {
     private void updateTotals() {
         double subtotal = 0;
         for (SaleItem item : cart) subtotal += item.lineTotal;
-        double taxPercent = Prefs.taxPercent(requireContext());
+        double taxPercent = 0;//Prefs.taxPercent(requireContext());
         double tax = subtotal * taxPercent / 100.0;
         double total = subtotal + tax;
         String c = Prefs.currency(requireContext());
@@ -620,7 +620,7 @@ public class SellFragment extends Fragment {
             return;
         }
         double subtotal = cart.stream().mapToDouble(item -> item.lineTotal).sum();
-        double taxPercent = Prefs.taxPercent(requireContext());
+        double taxPercent = 0;//Prefs.taxPercent(requireContext());
         double tax = subtotal * taxPercent / 100.0;
         double total = subtotal + tax;
         checkoutSubtotal = subtotal;
@@ -629,11 +629,17 @@ public class SellFragment extends Fragment {
 
         repo.run(() -> {
             List<SaleItem> low = lowStockItems(snapshot);
+            // Resolve current stock for low items here, in the background, so the
+            // UI-thread dialog code below never has to touch the repo directly.
+            Map<String, Double> stockByProductId = new HashMap<>();
+            for (SaleItem item : low) {
+                stockByProductId.put(item.productId, repo.products.getCurrentQty(item.productId));
+            }
             handler.post(() -> {
                 if (low.isEmpty()) {
                     launchPayment(total);
                 } else {
-                    showLowStockDialog(low, total);
+                    showLowStockDialog(low, total, stockByProductId);
                 }
             });
         });
@@ -648,10 +654,10 @@ public class SellFragment extends Fragment {
         return low;
     }
 
-    private void showLowStockDialog(List<SaleItem> low, double total) {
+    private void showLowStockDialog(List<SaleItem> low, double total, Map<String, Double> stockByProductId) {
         StringBuilder sb = new StringBuilder();
         for (SaleItem item : low) {
-            double stock = repo.products.getCurrentQty(item.productId);
+            double stock = stockByProductId.getOrDefault(item.productId, 0.0);
             String unit = item.unitLabel == null || item.unitLabel.isEmpty() ? "" : " " + item.unitLabel;
             sb.append("• ").append(item.productName)
                     .append("  (have ").append(NumberUtil.qty(stock))
@@ -662,12 +668,12 @@ public class SellFragment extends Fragment {
                 .setMessage("You are selling more than you have:\n\n" + sb
                         + "\nIt's fine to sell anyway - stock will go negative, or top it up first.")
                 .setNeutralButton("Cancel", null)
-                .setNegativeButton("Quick add stock", (d, w) -> openQuickStock(low))
+                .setNegativeButton("Quick add stock", (d, w) -> openQuickStock(low, stockByProductId))
                 .setPositiveButton("Sell anyway", (d, w) -> launchPayment(total))
                 .show();
     }
 
-    private void openQuickStock(List<SaleItem> low) {
+    private void openQuickStock(List<SaleItem> low, Map<String, Double> stockByProductId) {
         int n = low.size();
         String[] ids = new String[n];
         String[] names = new String[n];
@@ -679,7 +685,7 @@ public class SellFragment extends Fragment {
             ids[i] = item.productId;
             names[i] = item.productName;
             units[i] = item.unitLabel == null ? "" : item.unitLabel;
-            current[i] = repo.products.getCurrentQty(item.productId);
+            current[i] = stockByProductId.getOrDefault(item.productId, 0.0);
             needed[i] = item.stockQty;
         }
         Intent i = new Intent(requireContext(), com.patechltd.salexfypos.ui.stock.QuickStockActivity.class);

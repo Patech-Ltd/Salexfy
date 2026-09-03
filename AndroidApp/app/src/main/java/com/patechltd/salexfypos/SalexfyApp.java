@@ -3,6 +3,7 @@ package com.patechltd.salexfypos;
 import android.app.Application;
 import android.content.Context;
 
+import androidx.appcompat.app.AppCompatDelegate;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
@@ -36,6 +37,10 @@ public class SalexfyApp extends Application {
         scheduleAutoBackup(context);
         scheduleSync(context);
         validateLicenseInBackground(context);
+
+        AppCompatDelegate.setDefaultNightMode(
+                AppCompatDelegate.MODE_NIGHT_NO
+        );
     }
 
     /**
