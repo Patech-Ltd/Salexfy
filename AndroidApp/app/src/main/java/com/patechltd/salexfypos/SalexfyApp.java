@@ -1,9 +1,16 @@
 package com.patechltd.salexfypos;
 
+import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.os.Bundle;
+import android.view.View;
 
 import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.work.ExistingPeriodicWorkPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
@@ -40,6 +47,46 @@ public class SalexfyApp extends Application {
 
         AppCompatDelegate.setDefaultNightMode(
                 AppCompatDelegate.MODE_NIGHT_NO
+        );
+
+
+        registerActivityLifecycleCallbacks(
+                new ActivityLifecycleCallbacks() {
+
+                    @Override
+                    public void onActivityCreated(
+                            Activity activity,
+                            Bundle savedInstanceState) {
+
+                        View content = activity.findViewById(android.R.id.content);
+
+                        ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
+
+                            Insets bars = insets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                            );
+
+                            v.setPadding(
+                                    bars.left,
+                                    bars.top,
+                                    bars.right,
+                                    bars.bottom
+                            );
+
+                            return insets;
+                        });
+
+                        ViewCompat.requestApplyInsets(content);
+                    }
+
+                    // other methods can remain empty
+                    @Override public void onActivityStarted(Activity a) {}
+                    @Override public void onActivityResumed(Activity a) {}
+                    @Override public void onActivityPaused(Activity a) {}
+                    @Override public void onActivityStopped(Activity a) {}
+                    @Override public void onActivitySaveInstanceState(Activity a, Bundle b) {}
+                    @Override public void onActivityDestroyed(Activity a) {}
+                }
         );
     }
 
