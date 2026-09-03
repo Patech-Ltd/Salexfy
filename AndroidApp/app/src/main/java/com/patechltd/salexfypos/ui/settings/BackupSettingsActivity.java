@@ -25,6 +25,7 @@ import com.patechltd.salexfypos.drive.DriveConfig;
 import com.patechltd.salexfypos.drive.DriveServiceHelper;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
+import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.NumberUtil;
 import com.patechltd.salexfypos.util.Prefs;
 import com.patechltd.salexfypos.util.StorageUtil;
@@ -276,18 +277,32 @@ public class BackupSettingsActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == RC_SIGN_IN) {
+            AppLogger.i("Drive sign-in result: resultCode=" + resultCode
+                    + " data=" + (data == null ? "null" : data.toString()));
             try {
                 GoogleSignInAccount account = GoogleSignIn.getSignedInAccountFromIntent(data).getResult(ApiException.class);
                 if (account != null && account.getEmail() != null) {
+                    AppLogger.i("Drive sign-in OK: email=" + account.getEmail());
                     Prefs.putString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, account.getEmail());
                     updateDriveSection();
                     DialogUtil.toast(this, "Signed in to Google Drive");
                 } else {
-                    DialogUtil.toast(this, "Drive sign-in failed");
+                    AppLogger.e("Drive sign-in returned null account (resultCode=" + resultCode + ")");
+                    GoogleSignInAccount last = GoogleSignIn.getLastSignedInAccount(this);
+                    if (last != null) {
+                        AppLogger.e("  lastSignedIn=" + last.getEmail()
+                                + " grantedScopes=" + last.getGrantedScopes());
+                    } else {
+                        AppLogger.e("  no last signed-in account");
+                    }
+                    showSignInError(resultCode == RESULT_OK ? 10 : 13);
                 }
             } catch (ApiException e) {
+                AppLogger.e("Drive sign-in ApiException status=" + e.getStatusCode()
+                        + " statusMessage=" + e.getStatusMessage() + " msg=" + e.getMessage(), e);
                 showSignInError(e.getStatusCode());
             } catch (Exception e) {
+                AppLogger.e("Drive sign-in unexpected exception", e);
                 showSignInError(0);
             }
             return;
