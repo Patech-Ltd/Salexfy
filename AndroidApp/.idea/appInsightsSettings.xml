@@ -9,9 +9,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="com.patechltd.salexfypos" />
-                  <option name="mobileSdkAppId" value="1:278118775511:android:10793f365ae3d3e0664e92" />
-                  <option name="projectId" value="salexfypos" />
-                  <option name="projectNumber" value="278118775511" />
+                  <option name="mobileSdkAppId" value="1:293554874207:android:bc1395d1674e213907b8ea" />
+                  <option name="projectId" value="salexfypos-507518" />
+                  <option name="projectNumber" value="293554874207" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
