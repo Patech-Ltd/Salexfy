@@ -48,6 +48,8 @@ public class SalesHistoryActivity extends AppCompatActivity {
     private int page;
     private boolean loading;
     private boolean endReached;
+    private int wholesaleFilter;
+    private final List<View> wholesaleChips = new ArrayList<>();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -113,6 +115,7 @@ public class SalesHistoryActivity extends AppCompatActivity {
         });
 
         buildRangeChips();
+        buildWholesaleChips();
 
         SyncEvents.addListener(syncListener);
     }
@@ -158,6 +161,40 @@ public class SalesHistoryActivity extends AppCompatActivity {
         for (int i = 0; i < rangeChips.size(); i++) {
             rangeChips.get(i).setBackgroundResource(i == idx ? R.drawable.bg_chip_selected : R.drawable.bg_chip);
             ((TextView) rangeChips.get(i)).setTextColor(i == idx ? 0xFFFFFFFF : getResources().getColor(R.color.text_primary));
+        }
+    }
+
+    private static final String[] WHOLESALE_FILTERS = {"All sales", "Wholesale", "Retail"};
+
+    private void buildWholesaleChips() {
+        LinearLayout host = findViewById(R.id.wholesale_chips);
+        for (int i = 0; i < WHOLESALE_FILTERS.length; i++) {
+            TextView chip = new TextView(this);
+            chip.setText(WHOLESALE_FILTERS[i]);
+            chip.setTextSize(13);
+            chip.setTextColor(getResources().getColor(R.color.text_primary));
+            chip.setBackgroundResource(R.drawable.bg_chip);
+            chip.setPadding(dp(14), dp(6), dp(14), dp(6));
+            final int idx = i;
+            chip.setOnClickListener(v -> {
+                wholesaleFilter = idx;
+                selectWholesaleChip(idx);
+                resetAndLoad();
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            lp.setMarginEnd(dp(8));
+            lp.bottomMargin = dp(6);
+            host.addView(chip, lp);
+            wholesaleChips.add(chip);
+        }
+        selectWholesaleChip(0);
+    }
+
+    private void selectWholesaleChip(int idx) {
+        for (int i = 0; i < wholesaleChips.size(); i++) {
+            wholesaleChips.get(i).setBackgroundResource(i == idx ? R.drawable.bg_chip_selected : R.drawable.bg_chip);
+            ((TextView) wholesaleChips.get(i)).setTextColor(i == idx ? 0xFFFFFFFF : getResources().getColor(R.color.text_primary));
         }
     }
 
@@ -228,7 +265,7 @@ public class SalesHistoryActivity extends AppCompatActivity {
     private void exportSales(android.net.Uri uri) {
         repo.run(() -> {
             final List<SaleWithItems> list =
-                    repo.sales.exportComplete(query, from, to);
+                    repo.sales.exportComplete(query, from, to, wholesaleFilter);
             boolean ok = com.patechltd.salexfypos.util.ExcelUtil.export(this, uri,
                     "Sales", list, new com.patechltd.salexfypos.util.ExcelUtil.RowWriter() {
                         @Override public Object[] header() {
@@ -268,7 +305,7 @@ public class SalesHistoryActivity extends AppCompatActivity {
         final int pageNo = page;
         repo.run(() -> {
             final List<SaleWithItems> rows =
-                    repo.sales.searchCompletePage(query, from, to, PAGE_SIZE, pageNo * PAGE_SIZE);
+                    repo.sales.searchCompletePage(query, from, to, wholesaleFilter, PAGE_SIZE, pageNo * PAGE_SIZE);
             handler.post(() -> {
                 if (rows.size() < PAGE_SIZE) endReached = true;
                 sales.addAll(rows);
@@ -288,7 +325,17 @@ public class SalesHistoryActivity extends AppCompatActivity {
             if (sw == null || sw.sale == null) continue;
             int count = sw.items == null ? 0 : sw.items.size();
             boolean voided = "VOID".equals(sw.sale.status);
-            String sub = DateUtil.formatDate(sw.sale.saleDate) + " " + DateUtil.formatTime(sw.sale.saleDate)
+            boolean hasWholesale = false;
+            if (sw.items != null) {
+                for (com.patechltd.salexfypos.db.entity.SaleItem it : sw.items) {
+                    if (it.isWholesale) {
+                        hasWholesale = true;
+                        break;
+                    }
+                }
+            }
+            String sub = (hasWholesale ? "Wholesale · " : "")
+                    + DateUtil.formatDate(sw.sale.saleDate) + " " + DateUtil.formatTime(sw.sale.saleDate)
                     + " · " + count + " item" + (count == 1 ? "" : "s")
                     + " · " + com.patechltd.salexfypos.model.PaymentMethod.labelOf(sw.sale.paymentMethod);
             if (voided) sub = "VOIDED — " + sub;

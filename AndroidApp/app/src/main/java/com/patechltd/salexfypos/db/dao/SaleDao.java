@@ -219,24 +219,28 @@ public abstract class SaleDao {
     @Transaction
     @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
             + "AND saleDate >= :from AND saleDate <= :to "
+            + "AND (:filter = 0 OR (:filter = 1 AND id IN (SELECT saleId FROM sale_items WHERE isWholesale = 1)) "
+            + "          OR (:filter = 2 AND id NOT IN (SELECT saleId FROM sale_items WHERE isWholesale = 1))) "
             + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
             + "     OR customerName LIKE '%' || :q || '%' "
             + "     OR id IN (SELECT saleId FROM sale_items "
             + "               WHERE productName LIKE '%' || :q || '%' "
             + "               OR barcode LIKE '%' || :q || '%')) "
             + "ORDER BY saleDate DESC LIMIT :limit OFFSET :offset")
-    public abstract List<SaleWithItems> searchCompletePage(String q, long from, long to, int limit, int offset);
+    public abstract List<SaleWithItems> searchCompletePage(String q, long from, long to, int filter, int limit, int offset);
 
     @Transaction
     @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
             + "AND saleDate >= :from AND saleDate <= :to "
+            + "AND (:filter = 0 OR (:filter = 1 AND id IN (SELECT saleId FROM sale_items WHERE isWholesale = 1)) "
+            + "          OR (:filter = 2 AND id NOT IN (SELECT saleId FROM sale_items WHERE isWholesale = 1))) "
             + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
             + "     OR customerName LIKE '%' || :q || '%' "
             + "     OR id IN (SELECT saleId FROM sale_items "
             + "               WHERE productName LIKE '%' || :q || '%' "
             + "               OR barcode LIKE '%' || :q || '%')) "
             + "ORDER BY saleDate DESC")
-    public abstract List<SaleWithItems> exportComplete(String q, long from, long to);
+    public abstract List<SaleWithItems> exportComplete(String q, long from, long to, int filter);
 
     @Query("SELECT s.id AS saleUid, s.saleNo, s.saleDate, s.status, "
             + "si.productName, si.unitLabel, si.qty, si.stockQty, si.unitPrice, si.costPrice, "

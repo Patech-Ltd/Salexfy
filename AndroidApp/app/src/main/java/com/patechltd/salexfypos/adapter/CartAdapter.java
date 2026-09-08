@@ -108,9 +108,10 @@ public class CartAdapter extends RecyclerView.Adapter<CartAdapter.VH> {
     public void onBindViewHolder(@NonNull VH holder, int position) {
         SaleItem item = items.get(position);
         holder.name.setText(item.productName);
+        String wholesaleTag = item.isWholesale ? "Wholesale • " : "";
         String unit = item.unitLabel == null || item.unitLabel.isEmpty() ? "" : " • " + item.unitLabel;
         String barcode = item.barcode == null || item.barcode.isEmpty() ? "" : " • " + item.barcode;
-        holder.sub.setText(unit + barcode);
+        holder.sub.setText(wholesaleTag + unit + barcode);
         holder.qty.setText(NumberUtil.qty(item.qty));
         holder.lineTotal.setText(NumberUtil.money(item.lineTotal));
         holder.unitPrice.setText("@" + NumberUtil.money(item.unitPrice));

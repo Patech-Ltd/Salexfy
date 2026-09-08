@@ -75,7 +75,7 @@ public class ProductEditActivity extends AppCompatActivity {
     private String categoryId;
     private String brandId;
     private TextInputEditText nameInput, barcodeInput, skuInput, costInput, taxInput, notesInput,
-            reorderInput, openingStockInput, retailInput;
+            reorderInput, openingStockInput, retailInput, wholesaleInput;
     private TextView retailUnitRow, categoryRow, brandRow, currentStockRow;
     private SwitchMaterial activeSwitch;
     private LinearLayout unitsList;
@@ -116,6 +116,7 @@ public class ProductEditActivity extends AppCompatActivity {
         reorderInput = findViewById(R.id.reorder_level);
         openingStockInput = findViewById(R.id.opening_stock);
         retailInput = findViewById(R.id.retail_price);
+        wholesaleInput = findViewById(R.id.wholesale_price);
         retailUnitRow = findViewById(R.id.retail_unit_row);
         categoryRow = findViewById(R.id.category_row);
         brandRow = findViewById(R.id.brand_row);
@@ -783,6 +784,7 @@ public class ProductEditActivity extends AppCompatActivity {
         }
         syncingPrice = true;
         retailInput.setText(unitRows.isEmpty() ? "" : String.valueOf(unitRows.get(0).price));
+        wholesaleInput.setText(p.wholesalePrice > 0 ? String.valueOf(p.wholesalePrice) : "");
         syncingPrice = false;
         renderUnitRows();
     }
@@ -878,7 +880,7 @@ public class ProductEditActivity extends AppCompatActivity {
         final String fWholesaleUnit = bulk == null ? null : bulk.unitName;
         final String fWholesaleUnitId = bulk == null ? null : bulk.unitId;
         final int fWholesaleFactor = bulk == null ? 1 : (int) Math.max(0.001, bulk.factor);
-        final double fWholesalePrice = bulk == null ? 0 : bulk.price;
+        final double fWholesalePrice = NumberUtil.parse(text(wholesaleInput), 0);
 
         final List<UnitRow> rowsSnapshot = new ArrayList<>(unitRows);
 

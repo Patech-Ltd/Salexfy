@@ -274,7 +274,8 @@ public class SaleDetailActivity extends AppCompatActivity {
             SaleItem item = items.get(position);
             holder.name.setText(item.productName);
             String unit = item.unitLabel == null || item.unitLabel.isEmpty() ? "" : " " + item.unitLabel;
-            holder.sub.setText(NumberUtil.qty(item.qty) + unit + "  ×  " + NumberUtil.money(item.unitPrice));
+            holder.sub.setText((item.isWholesale ? "Wholesale • " : "")
+                    + NumberUtil.qty(item.qty) + unit + "  ×  " + NumberUtil.money(item.unitPrice));
             holder.total.setText(NumberUtil.money(item.lineTotal));
             if (item.costPrice > 0) {
                 double buy = item.stockQty * item.costPrice;

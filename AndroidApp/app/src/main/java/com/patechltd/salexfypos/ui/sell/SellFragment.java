@@ -346,17 +346,14 @@ public class SellFragment extends Fragment {
         TextView unitLabel = view.findViewById(R.id.line_unit_label);
         TextInputEditText priceInput = view.findViewById(R.id.line_price);
         TextView totalView = view.findViewById(R.id.line_total);
-
-        view.findViewById(R.id.line_unit_toggle).setVisibility(View.GONE);
+        TextView lossWarn = view.findViewById(R.id.line_loss_warn);
 
         title.setText(item.productName);
         qtyInput.setText(String.valueOf(item.qty));
         priceInput.setText(String.valueOf(item.unitPrice));
-        priceInput.setEnabled(false);
-        priceInput.setFocusable(false);
-        TextInputLayout priceLayout = view.findViewById(R.id.line_price_layout);
+        TextInputLayout priceLayout = view.findViewById(R.id.line_price_input_layout);
         if (priceLayout != null) {
-            priceLayout.setHelperText("Price is fixed at the saved product price");
+            priceLayout.setHelperText("Adjust the price to discount this line");
         }
 
         if (productUnits != null && !productUnits.isEmpty()) {
@@ -368,22 +365,23 @@ public class SellFragment extends Fragment {
                 chip.setChecked(pu.unitName != null && pu.unitName.equals(item.unitLabel));
                 unitChips.addView(chip);
             }
-        } else {
-            for (boolean wholesale : new boolean[]{false, true}) {
-                Chip chip = new Chip(requireContext());
-                chip.setText(wholesale ? "Wholesale" : "Retail");
-                chip.setTag(wholesale);
-                chip.setCheckable(true);
-                chip.setChecked(item.isWholesale == wholesale);
-                unitChips.addView(chip);
-            }
         }
 
         final String[] selectedUnitName = {item.unitLabel};
         final double[] selectedPrice = {item.unitPrice};
         final double[] selectedFactor = {1};
+        final boolean[] selectedWholesale = {item.isWholesale};
 
         Runnable refreshPrice = () -> {
+            boolean wholesaleModeOn = selectedWholesale[0];
+            priceInput.setEnabled(wholesaleModeOn);
+            priceInput.setFocusable(wholesaleModeOn);
+            priceInput.setClickable(wholesaleModeOn);
+            if (priceLayout != null) {
+                priceLayout.setHelperText(wholesaleModeOn
+                        ? "Wholesale price - you can discount this line further"
+                        : "Price is fixed at the saved retail price");
+            }
             double qty = Math.max(0.001, NumberUtil.parse(
                     qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
             double price = NumberUtil.parse(
@@ -392,8 +390,41 @@ public class SellFragment extends Fragment {
             unitLabel.setText("Unit: " + (unit.isEmpty() ? "—" : unit)
                     + (Math.abs(selectedFactor[0] - 1) > 0.001 ? "  (" + NumberUtil.qty(selectedFactor[0]) + " base units each)" : ""));
             String c = Prefs.currency(requireContext());
-            totalView.setText("Line total: " + c + " " + NumberUtil.money(qty * price));
+            double lineTotal = qty * price;
+            double cost = item.costPrice > 0 ? item.costPrice * qty * selectedFactor[0] : 0;
+            StringBuilder sb = new StringBuilder("Line total: ").append(c).append(" ").append(NumberUtil.money(lineTotal));
+            double discount = Math.max(0, selectedPrice[0] - price);
+            if (discount > 0.001) {
+                double pct = selectedPrice[0] > 0 ? discount / selectedPrice[0] * 100 : 0;
+                sb.append("  Discount: -").append(c).append(" ").append(NumberUtil.money(discount))
+                        .append(" (").append(NumberUtil.qty(pct)).append("%)");
+            }
+            totalView.setText(sb.toString());
+            if (lossWarn != null) {
+                if (cost > 0 && lineTotal + 0.001 < cost) {
+                    lossWarn.setText("Selling below cost - this line loses " + c + " " + NumberUtil.money(cost - lineTotal));
+                    lossWarn.setVisibility(View.VISIBLE);
+                } else {
+                    lossWarn.setVisibility(View.GONE);
+                }
+            }
         };
+
+        MaterialButtonToggleGroup unitToggle = view.findViewById(R.id.line_unit_toggle);
+        unitToggle.setVisibility(View.VISIBLE);
+        final boolean[] initializingToggle = {true};
+        unitToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked || initializingToggle[0] || product == null) return;
+            boolean wholesale = checkedId == R.id.line_btn_wholesale;
+            selectedWholesale[0] = wholesale;
+            double forced = wholesale ? product.wholesalePrice : product.retailPrice;
+            if (forced <= 0) forced = product.retailPrice;
+            selectedPrice[0] = forced;
+            priceInput.setText(String.valueOf(forced));
+            refreshPrice.run();
+        });
+        unitToggle.check(item.isWholesale ? R.id.line_btn_wholesale : R.id.line_btn_retail);
+        initializingToggle[0] = false;
 
         unitChips.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds.isEmpty()) return;
@@ -403,19 +434,15 @@ public class SellFragment extends Fragment {
             if (tag instanceof ProductUnit) {
                 ProductUnit pu = (ProductUnit) tag;
                 selectedUnitName[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
-                selectedPrice[0] = pu.price;
                 selectedFactor[0] = Math.max(0.001, pu.factor);
-                priceInput.setText(String.valueOf(pu.price));
-            } else if (tag instanceof Boolean) {
-                boolean wholesale = (Boolean) tag;
-                if (product != null) {
-                    selectedUnitName[0] = resolveUnitLabel(product, wholesale);
-                    selectedPrice[0] = wholesale ? product.wholesalePrice : product.retailPrice;
-                    if (selectedPrice[0] <= 0) {
-                        selectedPrice[0] = wholesale ? product.retailPrice : product.wholesalePrice;
-                    }
-                    selectedFactor[0] = wholesale ? Math.max(1, product.wholesaleFactor) : 1;
-                    priceInput.setText(String.valueOf(selectedPrice[0]));
+                if (selectedWholesale[0] && product != null) {
+                    double forced = product.wholesalePrice > 0 ? product.wholesalePrice : product.retailPrice;
+                    if (forced <= 0) forced = pu.price;
+                    selectedPrice[0] = forced;
+                    priceInput.setText(String.valueOf(forced));
+                } else {
+                    selectedPrice[0] = pu.price;
+                    priceInput.setText(String.valueOf(pu.price));
                 }
             }
             refreshPrice.run();
@@ -462,9 +489,9 @@ public class SellFragment extends Fragment {
                     item.unitPrice = NumberUtil.parse(
                             priceInput.getText() == null ? "" : priceInput.getText().toString(),
                             selectedPrice[0]);
-                    item.isWholesale = selectedFactor[0] > 1;
+                    item.isWholesale = selectedWholesale[0];
                     item.factor = selectedFactor[0];
-                    item.costPrice = product.costPrice;
+                    item.costPrice = product != null ? product.costPrice : item.costPrice;
                     item.stockQty = item.qty * selectedFactor[0];
                     item.lineTotal = item.qty * item.unitPrice;
                     afterCartChange();
