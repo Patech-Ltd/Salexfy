@@ -232,10 +232,17 @@ public class SellFragment extends Fragment {
 
     private void addToCart(Product product) {
         double qty = 1;
-        double unitPrice = wholesaleMode ? product.wholesalePrice : product.retailPrice;
-        if (unitPrice <= 0) unitPrice = wholesaleMode ? product.retailPrice : product.wholesalePrice;
         String unitLabel = resolveUnitLabel(product, wholesaleMode);
-        int factor = wholesaleMode ? Math.max(1, product.wholesaleFactor) : 1;
+        int factor;
+        double unitPrice;
+        if (wholesaleMode) {
+            factor = Math.max(1, product.wholesaleFactor);
+            unitPrice = wholesaleUnitPrice(product, factor);
+        } else {
+            factor = 1;
+            unitPrice = product.retailPrice > 0 ? product.retailPrice : product.wholesalePrice;
+        }
+        if (unitPrice <= 0) unitPrice = Math.max(product.retailPrice, product.wholesalePrice);
         double stockQty = qty * factor;
 
         for (SaleItem item : cart) {
@@ -279,6 +286,11 @@ public class SellFragment extends Fragment {
         return "Pcs";
     }
 
+    private double wholesaleUnitPrice(Product p, int factor) {
+        double base = p.wholesalePrice > 0 ? p.wholesalePrice : p.retailPrice;
+        return base <= 0 ? base : base * Math.max(1, factor);
+    }
+
     private void adjustQty(int position, int delta) {
         SaleItem item = cart.get(position);
         item.qty += delta;
@@ -310,10 +322,11 @@ public class SellFragment extends Fragment {
                     changed = true;
                     item.isWholesale = wholesaleMode;
                     item.unitLabel = resolveUnitLabel(p, wholesaleMode);
-                    double price = wholesaleMode ? p.wholesalePrice : p.retailPrice;
-                    if (price <= 0) price = wholesaleMode ? p.retailPrice : p.wholesalePrice;
-                    item.unitPrice = price;
                     int factor = wholesaleMode ? Math.max(1, p.wholesaleFactor) : 1;
+                    double price = wholesaleMode
+                            ? wholesaleUnitPrice(p, factor)
+                            : (p.retailPrice > 0 ? p.retailPrice : p.wholesalePrice);
+                    item.unitPrice = price;
                     item.factor = factor;
                     item.costPrice = p.costPrice;
                     item.stockQty = item.qty * factor;
@@ -371,6 +384,7 @@ public class SellFragment extends Fragment {
         final double[] selectedPrice = {item.unitPrice};
         final double[] selectedFactor = {1};
         final boolean[] selectedWholesale = {item.isWholesale};
+        final ProductUnit[] selectedUnit = {null};
 
         Runnable refreshPrice = () -> {
             boolean wholesaleModeOn = selectedWholesale[0];
@@ -417,8 +431,17 @@ public class SellFragment extends Fragment {
             if (!isChecked || initializingToggle[0] || product == null) return;
             boolean wholesale = checkedId == R.id.line_btn_wholesale;
             selectedWholesale[0] = wholesale;
-            double forced = wholesale ? product.wholesalePrice : product.retailPrice;
-            if (forced <= 0) forced = product.retailPrice;
+            double forced;
+            if (wholesale && product != null) {
+                forced = wholesaleUnitPrice(product, (int) Math.round(selectedFactor[0]));
+            } else if (!wholesale && product != null) {
+                forced = selectedUnit[0] != null && selectedUnit[0].price > 0
+                        ? selectedUnit[0].price
+                        : product.retailPrice;
+            } else {
+                forced = selectedPrice[0];
+            }
+            if (forced <= 0) forced = product != null ? product.retailPrice : selectedPrice[0];
             selectedPrice[0] = forced;
             priceInput.setText(String.valueOf(forced));
             refreshPrice.run();
@@ -433,11 +456,13 @@ public class SellFragment extends Fragment {
             Object tag = chip.getTag();
             if (tag instanceof ProductUnit) {
                 ProductUnit pu = (ProductUnit) tag;
+                selectedUnit[0] = pu;
                 selectedUnitName[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
                 selectedFactor[0] = Math.max(0.001, pu.factor);
                 if (selectedWholesale[0] && product != null) {
-                    double forced = product.wholesalePrice > 0 ? product.wholesalePrice : product.retailPrice;
-                    if (forced <= 0) forced = pu.price;
+                    double forced = product.wholesalePrice > 0
+                            ? product.wholesalePrice * pu.factor
+                            : product.retailPrice > 0 ? product.retailPrice * pu.factor : pu.price;
                     selectedPrice[0] = forced;
                     priceInput.setText(String.valueOf(forced));
                 } else {
