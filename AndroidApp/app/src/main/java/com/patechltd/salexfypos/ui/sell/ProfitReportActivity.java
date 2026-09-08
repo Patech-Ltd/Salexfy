@@ -97,7 +97,7 @@ public class ProfitReportActivity extends AppCompatActivity {
             TextView chip = new TextView(this);
             chip.setText(names[i]);
             chip.setTextSize(13);
-            chip.setTextColor(0xFF2F3E46);
+            chip.setTextColor(getResources().getColor(R.color.text_primary));
             chip.setBackgroundResource(R.drawable.bg_chip);
             chip.setPadding(dp(14), dp(6), dp(14), dp(6));
             final int idx = i;
@@ -118,7 +118,7 @@ public class ProfitReportActivity extends AppCompatActivity {
     private void selectChip(int idx) {
         for (int i = 0; i < rangeChips.size(); i++) {
             rangeChips.get(i).setBackgroundResource(i == idx ? R.drawable.bg_chip_selected : R.drawable.bg_chip);
-            ((TextView) rangeChips.get(i)).setTextColor(i == idx ? 0xFFFFFFFF : 0xFF2F3E46);
+            ((TextView) rangeChips.get(i)).setTextColor(i == idx ? 0xFFFFFFFF : getResources().getColor(R.color.text_primary));
         }
     }
 

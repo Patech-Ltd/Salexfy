@@ -61,7 +61,8 @@ public class PartnerAdapter extends RecyclerView.Adapter<PartnerAdapter.VH> {
         if (row.amount != null && !row.amount.isEmpty()) {
             holder.amount.setVisibility(View.VISIBLE);
             holder.amount.setText(row.amount);
-            holder.amount.setTextColor(row.amountColor != 0 ? row.amountColor : 0xFF1565C0);
+            holder.amount.setTextColor(row.amountColor != 0 ? row.amountColor
+                    : holder.itemView.getContext().getResources().getColor(R.color.accent_positive));
         } else {
             holder.amount.setVisibility(View.GONE);
         }

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Neutral page/card surfaces toggled for dark mode. -->
+    <color name="bg">#0F172A</color>
+    <color name="surface">#1E293B</color>
+    <color name="surface_variant">#334155</color>
+    <color name="outline">#475569</color>
+
+    <color name="text_primary">#F1F5F9</color>
+    <color name="text_secondary">#94A3B8</color>
+    <color name="text_disabled">#64748B</color>
+
+    <!-- Status colors: background + foreground toggled together to keep contrast. -->
+    <color name="success">#4ADE80</color>
+    <color name="success_container">#14532D</color>
+    <color name="error">#F87171</color>
+    <color name="error_container">#7F1D1D</color>
+    <color name="warning">#FBBF24</color>
+    <color name="warning_container">#78350F</color>
+    <color name="info">#38BDF8</color>
+    <color name="info_container">#0C4A6E</color>
+
+    <!-- Brand accent used for monetary amounts/totals in list rows. -->
+    <color name="amount_text">#2DD4BF</color>
+
+    <!-- Amounts in report/profit lists: brighten for readability on dark surfaces. -->
+    <color name="accent_positive">#4FC3F7</color>
+    <color name="accent_negative">#EF5350</color>
+
+    <!-- Base-unit card background (dark container in night so card text stays readable). -->
+    <color name="brand_card_base">#164E63</color>
+</resources>

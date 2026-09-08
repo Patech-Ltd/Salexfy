@@ -206,7 +206,7 @@ public class SaleDetailActivity extends AppCompatActivity {
 
         TextView v = new TextView(this);
         v.setText(value);
-        v.setTextColor(getResources().getColor(emphasized ? R.color.brand_primary_dark : R.color.text_primary));
+        v.setTextColor(getResources().getColor(emphasized ? R.color.amount_text : R.color.text_primary));
         v.setTextSize(emphasized ? 16 : 14);
         if (emphasized) v.setTypeface(v.getTypeface(), Typeface.BOLD);
         v.setGravity(Gravity.END);

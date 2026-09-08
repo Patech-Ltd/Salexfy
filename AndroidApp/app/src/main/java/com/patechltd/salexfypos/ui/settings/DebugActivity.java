@@ -96,7 +96,7 @@ public class DebugActivity extends AppCompatActivity {
 
         TextView text = new TextView(this);
         text.setTextSize(12);
-        text.setTextColor(0xFF0F172A);
+        text.setTextColor(getResources().getColor(R.color.text_primary));
         text.setTypeface(android.graphics.Typeface.MONOSPACE);
         text.setTextIsSelectable(true);
         int pad = (int) (16 * getResources().getDisplayMetrics().density);

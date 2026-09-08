@@ -41,7 +41,7 @@ public class StockAdapter extends RecyclerView.Adapter<StockAdapter.VH> {
         holder.qty.setText(NumberUtil.qty(row.currentQty) + " " + (row.unitLabel == null ? "" : row.unitLabel));
         holder.reorder.setText("Reorder at " + NumberUtil.qty(row.reorderLevel));
         holder.qty.setTextColor(holder.itemView.getContext().getColor(
-                row.currentQty <= row.reorderLevel ? R.color.error : R.color.brand_primary_dark));
+                row.currentQty <= row.reorderLevel ? R.color.error : R.color.amount_text));
     }
 
     @Override

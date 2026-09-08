@@ -285,7 +285,7 @@ public class ProductEditActivity extends AppCompatActivity {
 
             TextView label = new TextView(this);
             label.setText(code);
-            label.setTextColor(0xFF0F172A);
+            label.setTextColor(getResources().getColor(R.color.text_primary));
             label.setTextSize(14);
             label.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
             row.addView(label);
@@ -363,7 +363,7 @@ public class ProductEditActivity extends AppCompatActivity {
             com.google.android.material.card.MaterialCardView card = itemView.findViewById(R.id.card);
 
             if (row.isBase) {
-                card.setCardBackgroundColor(getResources().getColor(R.color.brand_primary_container));
+                card.setCardBackgroundColor(getResources().getColor(R.color.brand_card_base));
                 card.setStrokeColor(getResources().getColor(R.color.brand_primary));
             } else {
                 card.setCardBackgroundColor(getResources().getColor(R.color.surface));

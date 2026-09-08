@@ -133,7 +133,7 @@ public class ReportsFragment extends Fragment {
 
             TextView amount = new TextView(requireContext());
             amount.setText(currency + " " + NumberUtil.money(pm.total));
-            amount.setTextColor(requireContext().getResources().getColor(R.color.brand_primary_dark));
+            amount.setTextColor(requireContext().getResources().getColor(R.color.amount_text));
             amount.setTextSize(16);
             amount.setTypeface(amount.getTypeface(), android.graphics.Typeface.BOLD);
             row.addView(amount);

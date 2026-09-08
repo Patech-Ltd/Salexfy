@@ -139,7 +139,7 @@ public class ReportsActivity extends AppCompatActivity {
             TextView chip = new TextView(this);
             chip.setText(names[i]);
             chip.setTextSize(13);
-            chip.setTextColor(0xFF2F3E46);
+            chip.setTextColor(getResources().getColor(R.color.text_primary));
             chip.setBackgroundResource(R.drawable.bg_chip);
             chip.setPadding(dp(14), dp(6), dp(14), dp(6));
             final int idx = i;
@@ -159,7 +159,7 @@ public class ReportsActivity extends AppCompatActivity {
     private void selectChip(int idx) {
         for (int i = 0; i < rangeChips.size(); i++) {
             rangeChips.get(i).setBackgroundResource(i == idx ? R.drawable.bg_chip_selected : R.drawable.bg_chip);
-            ((TextView) rangeChips.get(i)).setTextColor(i == idx ? 0xFFFFFFFF : 0xFF2F3E46);
+            ((TextView) rangeChips.get(i)).setTextColor(i == idx ? 0xFFFFFFFF : getResources().getColor(R.color.text_primary));
         }
     }
 
@@ -257,6 +257,8 @@ public class ReportsActivity extends AppCompatActivity {
             List<com.patechltd.salexfypos.db.PaymentMethodTotalRow> pmts =
                     repo.sales.paymentTotalsBetween(from, to);
             handler.post(() -> {
+                int posColor = getResources().getColor(R.color.accent_positive);
+                int negColor = getResources().getColor(R.color.accent_negative);
                 double profit = sales - cost;
                 totalSales.setText(currency + " " + NumberUtil.money(sales));
                 totalCount.setText(count + (count == 1 ? " sale" : " sales"));
@@ -280,7 +282,7 @@ public class ReportsActivity extends AppCompatActivity {
                             d.saleCount + " sales • " + d.itemCount + " items • Profit "
                                     + currency + " " + NumberUtil.money(d.profit),
                             currency + " " + NumberUtil.money(d.totalSales),
-                            d.profit >= 0 ? 0xFF1565C0 : 0xFFB00020));
+                            d.profit >= 0 ? posColor : negColor));
                 }
                 if (dailyRows.isEmpty()) dailyRows.add(new KeyValueAdapter.Row("No sales", "in this period", "", 0));
                 dailyAdapter.submit(dailyRows);
@@ -291,7 +293,7 @@ public class ReportsActivity extends AppCompatActivity {
                             c.cashierName,
                             c.saleCount + " sales",
                             currency + " " + NumberUtil.money(c.totalSales),
-                            0xFF1565C0));
+                            posColor));
                 }
                 if (cashierRows.isEmpty()) cashierRows.add(new KeyValueAdapter.Row("No activity", "", "", 0));
                 cashierAdapter.submit(cashierRows);
@@ -302,7 +304,7 @@ public class ReportsActivity extends AppCompatActivity {
                             t.name,
                             NumberUtil.qty(t.totalQty) + " sold",
                             currency + " " + NumberUtil.money(t.totalSales),
-                            0xFF1565C0));
+                            posColor));
                 }
                 if (topRows.isEmpty()) topRows.add(new KeyValueAdapter.Row("No products sold", "", "", 0));
                 topAdapter.submit(topRows);
@@ -313,7 +315,7 @@ public class ReportsActivity extends AppCompatActivity {
                             com.patechltd.salexfypos.model.PaymentMethod.labelOf(pm.method),
                             "",
                             currency + " " + NumberUtil.money(pm.total),
-                            0xFF1565C0));
+                            posColor));
                 }
                 if (paymentRows.isEmpty()) {
                     paymentRows.add(new KeyValueAdapter.Row("No payments", "in this period", "", 0));
@@ -328,7 +330,7 @@ public class ReportsActivity extends AppCompatActivity {
                             e.description == null || e.description.isEmpty() ? "Expense" : e.description,
                             sub,
                             currency + " " + NumberUtil.money(e.amount),
-                            0xFFB00020));
+                            negColor));
                 }
                 if (expenseRows.isEmpty()) {
                     expenseRows.add(new KeyValueAdapter.Row("No expenses", "in this period", "", 0));

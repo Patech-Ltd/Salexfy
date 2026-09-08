@@ -46,7 +46,7 @@ public class SalexfyApp extends Application {
         validateLicenseInBackground(context);
 
         AppCompatDelegate.setDefaultNightMode(
-                AppCompatDelegate.MODE_NIGHT_NO
+                AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         );
 
 

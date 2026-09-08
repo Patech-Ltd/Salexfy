@@ -76,7 +76,7 @@
                 android:id="@+id/retail_price"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/brand_primary_dark"
+                android:textColor="@color/amount_text"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 

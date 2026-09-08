@@ -401,7 +401,7 @@ public class PaymentActivity extends AppCompatActivity {
 
             TextView amount = new TextView(this);
             amount.setText(NumberUtil.money(line.amount));
-            amount.setTextColor(getResources().getColor(R.color.brand_primary_dark));
+            amount.setTextColor(getResources().getColor(R.color.amount_text));
             amount.setTextSize(16);
             amount.setGravity(android.view.Gravity.END);
             texts.addView(amount);

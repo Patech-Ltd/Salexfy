@@ -43,7 +43,7 @@
                     android:layout_height="wrap_content"
                     android:fontFamily="monospace"
                     android:padding="16dp"
-                    android:textColor="@color/text_primary"
+                    android:textColor="@color/receipt_text"
                     android:textIsSelectable="true"
                     android:textSize="13sp" />
             </com.google.android.material.card.MaterialCardView>

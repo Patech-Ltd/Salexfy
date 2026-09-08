@@ -30,6 +30,12 @@
     <color name="info">#0284C7</color>
     <color name="info_container">#E0F2FE</color>
 
+    <color name="amount_text">#164E63</color>
+    <color name="receipt_text">#1F2937</color>
+    <color name="accent_positive">#1565C0</color>
+    <color name="accent_negative">#B00020</color>
+    <color name="brand_card_base">#CFFAFE</color>
+
     <color name="dark_bg">#0F172A</color>
     <color name="dark_surface">#1E293B</color>
     <color name="dark_text_primary">#F1F5F9</color>

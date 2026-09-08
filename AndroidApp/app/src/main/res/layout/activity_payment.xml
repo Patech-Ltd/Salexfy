@@ -33,7 +33,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="center"
                 android:text="KSh 0.00"
-                android:textColor="@color/brand_primary_dark"
+                android:textColor="@color/amount_text"
                 android:textSize="34sp"
                 android:textStyle="bold" />
 
@@ -293,7 +293,7 @@
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
                 android:text="Cash + Complete"
-                android:textColor="@color/brand_primary_dark"
+                android:textColor="@color/amount_text"
                 android:textSize="17sp"
                 android:textStyle="bold" />
 

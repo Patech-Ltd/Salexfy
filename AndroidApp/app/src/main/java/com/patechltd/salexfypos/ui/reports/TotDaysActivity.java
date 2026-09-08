@@ -83,13 +83,14 @@ public class TotDaysActivity extends AppCompatActivity {
                 emptyHint.setVisibility(this.days.isEmpty() ? View.VISIBLE : View.GONE);
 
                 List<KeyValueAdapter.Row> out = new ArrayList<>();
+                int negColor = TotDaysActivity.this.getResources().getColor(R.color.accent_negative);
                 for (DayReportRow d : this.days) {
                     out.add(new KeyValueAdapter.Row(
                             DateUtil.formatDate(DateUtil.startOfDay(d.dayStart)),
                             d.saleCount + (d.saleCount == 1 ? " sale" : " sales")
                                     + " · Profit " + currency + " " + NumberUtil.money(d.profit),
                             "TOT " + currency + " " + NumberUtil.money(TaxUtil.tot(d.subtotal)),
-                            0xFFB00020));
+                            negColor));
                 }
                 adapter.submit(out);
             });

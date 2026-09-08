@@ -95,6 +95,8 @@ public class CustomerDetailActivity extends AppCompatActivity {
             List<DebtPayment> payments = repo.suppliers.getPayments(customerId);
             String currency = Prefs.currency(this);
             handler.post(() -> {
+                int posColor = CustomerDetailActivity.this.getResources().getColor(R.color.accent_positive);
+                int successColor = CustomerDetailActivity.this.getResources().getColor(R.color.success);
                 name.setText(customer.name);
                 phone.setText(customer.phone == null || customer.phone.isEmpty() ? "" : customer.phone);
                 double outstandingVal = debt - paid;
@@ -110,7 +112,7 @@ public class CustomerDetailActivity extends AppCompatActivity {
                             DateUtil.formatDate(s.saleDate) + " · "
                                     + com.patechltd.salexfypos.model.PaymentMethod.labelOf(s.paymentMethod),
                             currency + " " + NumberUtil.money(s.total),
-                            0xFF1565C0));
+                            posColor));
                 }
                 if (sRows.isEmpty()) sRows.add(new KeyValueAdapter.Row("No sales yet", "", "", 0));
                 salesAdapter.submit(sRows);
@@ -121,7 +123,7 @@ public class CustomerDetailActivity extends AppCompatActivity {
                             DateUtil.formatDate(p.paymentDate),
                             p.method == null ? "" : p.method,
                             "+ " + currency + " " + NumberUtil.money(p.amount),
-                            0xFF16A34A));
+                            successColor));
                 }
                 if (pRows.isEmpty()) pRows.add(new KeyValueAdapter.Row("No payments yet", "", "", 0));
                 paymentsAdapter.submit(pRows);

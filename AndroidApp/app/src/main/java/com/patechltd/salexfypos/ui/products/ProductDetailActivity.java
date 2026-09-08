@@ -220,7 +220,7 @@ public class ProductDetailActivity extends AppCompatActivity {
 
             TextView priceView = new TextView(this);
             priceView.setText(NumberUtil.money(u.price, currency));
-            priceView.setTextColor(getResources().getColor(R.color.brand_primary_dark));
+            priceView.setTextColor(getResources().getColor(R.color.amount_text));
             priceView.setTextSize(15);
             priceView.setTypeface(priceView.getTypeface(), android.graphics.Typeface.BOLD);
             row.addView(priceView);

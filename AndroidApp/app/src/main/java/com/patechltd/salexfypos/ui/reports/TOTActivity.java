@@ -111,13 +111,14 @@ public class TOTActivity extends AppCompatActivity {
                 findViewById(R.id.empty_hint).setVisibility(months.isEmpty() ? View.VISIBLE : View.GONE);
 
                 List<KeyValueAdapter.Row> out = new ArrayList<>();
+                int negColor = getResources().getColor(R.color.accent_negative);
                 for (MonthReportRow m : months) {
                     out.add(new KeyValueAdapter.Row(
                             DateUtil.monthName(m.monthStart),
                             m.saleCount + (m.saleCount == 1 ? " sale" : " sales")
                                     + " · Profit " + currency + " " + NumberUtil.money(m.profit),
                             "TOT " + currency + " " + NumberUtil.money(TaxUtil.tot(m.subtotal)),
-                            0xFFB00020));
+                            negColor));
                 }
                 if (out.isEmpty()) out.add(new KeyValueAdapter.Row("No sales", "recorded yet", "", 0));
                 adapter.submit(out);
