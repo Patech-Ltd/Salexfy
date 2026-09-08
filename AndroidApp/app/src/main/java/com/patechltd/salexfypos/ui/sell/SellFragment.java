@@ -286,9 +286,10 @@ public class SellFragment extends Fragment {
         return "Pcs";
     }
 
-    private double wholesaleUnitPrice(Product p, int factor) {
-        double base = p.wholesalePrice > 0 ? p.wholesalePrice : p.retailPrice;
-        return base <= 0 ? base : base * Math.max(1, factor);
+    private double wholesaleUnitPrice(Product p, int factorBeingSold) {
+        int sold = Math.max(1, factorBeingSold);
+        double perUnit = p.wholesalePrice > 0 ? p.wholesalePrice : p.retailPrice;
+        return perUnit > 0 ? perUnit * sold : 0;
     }
 
     private void adjustQty(int position, int delta) {
@@ -369,6 +370,10 @@ public class SellFragment extends Fragment {
             priceLayout.setHelperText("Adjust the price to discount this line");
         }
 
+        TextView modeLabel = view.findViewById(R.id.line_mode_label);
+        modeLabel.setText(wholesaleMode ? "Wholesale pricing" : "Retail pricing");
+        view.findViewById(R.id.line_unit_toggle).setVisibility(View.GONE);
+
         if (productUnits != null && !productUnits.isEmpty()) {
             for (ProductUnit pu : productUnits) {
                 Chip chip = new Chip(requireContext());
@@ -383,17 +388,14 @@ public class SellFragment extends Fragment {
         final String[] selectedUnitName = {item.unitLabel};
         final double[] selectedPrice = {item.unitPrice};
         final double[] selectedFactor = {1};
-        final boolean[] selectedWholesale = {item.isWholesale};
-        final ProductUnit[] selectedUnit = {null};
 
         Runnable refreshPrice = () -> {
-            boolean wholesaleModeOn = selectedWholesale[0];
-            priceInput.setEnabled(wholesaleModeOn);
-            priceInput.setFocusable(wholesaleModeOn);
-            priceInput.setClickable(wholesaleModeOn);
+            priceInput.setEnabled(wholesaleMode);
+            priceInput.setFocusable(wholesaleMode);
+            priceInput.setClickable(wholesaleMode);
             if (priceLayout != null) {
-                priceLayout.setHelperText(wholesaleModeOn
-                        ? "Wholesale price - you can discount this line further"
+                priceLayout.setHelperText(wholesaleMode
+                        ? "Wholesale price – you can discount this line further"
                         : "Price is fixed at the saved retail price");
             }
             double qty = Math.max(0.001, NumberUtil.parse(
@@ -424,31 +426,6 @@ public class SellFragment extends Fragment {
             }
         };
 
-        MaterialButtonToggleGroup unitToggle = view.findViewById(R.id.line_unit_toggle);
-        unitToggle.setVisibility(View.VISIBLE);
-        final boolean[] initializingToggle = {true};
-        unitToggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (!isChecked || initializingToggle[0] || product == null) return;
-            boolean wholesale = checkedId == R.id.line_btn_wholesale;
-            selectedWholesale[0] = wholesale;
-            double forced;
-            if (wholesale && product != null) {
-                forced = wholesaleUnitPrice(product, (int) Math.round(selectedFactor[0]));
-            } else if (!wholesale && product != null) {
-                forced = selectedUnit[0] != null && selectedUnit[0].price > 0
-                        ? selectedUnit[0].price
-                        : product.retailPrice;
-            } else {
-                forced = selectedPrice[0];
-            }
-            if (forced <= 0) forced = product != null ? product.retailPrice : selectedPrice[0];
-            selectedPrice[0] = forced;
-            priceInput.setText(String.valueOf(forced));
-            refreshPrice.run();
-        });
-        unitToggle.check(item.isWholesale ? R.id.line_btn_wholesale : R.id.line_btn_retail);
-        initializingToggle[0] = false;
-
         unitChips.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds.isEmpty()) return;
             Chip chip = group.findViewById(checkedIds.get(0));
@@ -456,13 +433,11 @@ public class SellFragment extends Fragment {
             Object tag = chip.getTag();
             if (tag instanceof ProductUnit) {
                 ProductUnit pu = (ProductUnit) tag;
-                selectedUnit[0] = pu;
                 selectedUnitName[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
                 selectedFactor[0] = Math.max(0.001, pu.factor);
-                if (selectedWholesale[0] && product != null) {
-                    double forced = product.wholesalePrice > 0
-                            ? product.wholesalePrice * pu.factor
-                            : product.retailPrice > 0 ? product.retailPrice * pu.factor : pu.price;
+                if (wholesaleMode && product != null) {
+                    double forced = wholesaleUnitPrice(product, (int) Math.round(pu.factor));
+                    if (forced <= 0) forced = pu.price;
                     selectedPrice[0] = forced;
                     priceInput.setText(String.valueOf(forced));
                 } else {
@@ -514,7 +489,7 @@ public class SellFragment extends Fragment {
                     item.unitPrice = NumberUtil.parse(
                             priceInput.getText() == null ? "" : priceInput.getText().toString(),
                             selectedPrice[0]);
-                    item.isWholesale = selectedWholesale[0];
+                    item.isWholesale = wholesaleMode;
                     item.factor = selectedFactor[0];
                     item.costPrice = product != null ? product.costPrice : item.costPrice;
                     item.stockQty = item.qty * selectedFactor[0];

@@ -6,11 +6,13 @@ public class StockValuationRow {
 
     public String name;
 
+    public String unitLabel;
+
     public double qty;
 
-    public double costPrice;
+    public double assets;
 
-    public double retailPrice;
+    public double retailSales;
 
-    public double wholesalePrice;
+    public double wholesaleSales;
 }

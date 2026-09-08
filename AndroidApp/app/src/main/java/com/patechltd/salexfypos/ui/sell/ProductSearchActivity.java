@@ -242,11 +242,22 @@ public class ProductSearchActivity extends AppCompatActivity {
             holder.barcode.setVisibility(View.GONE);
             holder.image.setTag(p.imagePath);
             ImageUtil.load(holder.image, p.imagePath, 128);
-            double price = wholesale ? p.wholesalePrice : p.retailPrice;
-            if (price <= 0) price = wholesale ? p.retailPrice : p.wholesalePrice;
-            String unit = ps.unitLabel == null ? "" : " / " + ps.unitLabel;
+            double price;
+            String unit;
+            if (wholesale) {
+                int wf = Math.max(1, p.wholesaleFactor);
+                price = p.wholesalePrice > 0 ? p.wholesalePrice * wf
+                        : (p.retailPrice > 0 ? p.retailPrice * wf : 0);
+                unit = (p.wholesaleUnit != null && !p.wholesaleUnit.isEmpty())
+                        ? " / " + p.wholesaleUnit
+                        : (ps.unitLabel == null ? "" : " / " + ps.unitLabel);
+            } else {
+                price = p.retailPrice > 0 ? p.retailPrice : p.wholesalePrice;
+                unit = ps.unitLabel == null ? "" : " / " + ps.unitLabel;
+            }
             holder.price.setText(NumberUtil.money(price, Prefs.currency(ProductSearchActivity.this)));
-            holder.stock.setText("Stock: " + NumberUtil.qty(ps.currentQty) + unit);
+            holder.stock.setText("Stock: " + NumberUtil.qty(ps.currentQty)
+                    + (ps.unitLabel == null ? "" : " / " + ps.unitLabel));
             holder.stock.setVisibility(View.VISIBLE);
             holder.itemView.setOnClickListener(v -> pick(ps));
         }

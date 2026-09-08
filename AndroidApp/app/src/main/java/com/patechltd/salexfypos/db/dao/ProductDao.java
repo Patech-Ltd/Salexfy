@@ -11,6 +11,7 @@ import androidx.room.Update;
 import com.patechltd.salexfypos.db.ProductQty;
 import com.patechltd.salexfypos.db.ProductStock;
 import com.patechltd.salexfypos.db.StockRow;
+import com.patechltd.salexfypos.db.StockValuationRow;
 import com.patechltd.salexfypos.db.StockValuationSummary;
 import com.patechltd.salexfypos.db.entity.PendingProduct;
 import com.patechltd.salexfypos.db.entity.Product;
@@ -265,12 +266,40 @@ public abstract class ProductDao {
             + "COALESCE(SUM(v.qty), 0) AS totalQty, "
             + "COALESCE(SUM(v.qty * v.costPrice), 0) AS assets, "
             + "COALESCE(SUM(v.qty * v.retailPrice), 0) AS retailSales, "
-            + "COALESCE(SUM(v.qty * CASE WHEN v.wholesalePrice > 0 THEN v.wholesalePrice ELSE v.retailPrice END), 0) AS wholesaleSales "
+            + "COALESCE(SUM(v.qty * v.wPerBase), 0) AS wholesaleSales "
             + "FROM (SELECT p.costPrice AS costPrice, p.retailPrice AS retailPrice, "
-            + "p.wholesalePrice AS wholesalePrice, "
-            + "COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) AS qty "
+            + "COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) AS qty, "
+            + "CASE WHEN p.wholesalePrice > 0 THEN p.wholesalePrice "
+            + "ELSE COALESCE((SELECT pu.price / NULLIF(pu.factor, 0) FROM product_units pu "
+            + "WHERE pu.productId = p.id AND pu.factor > 1 "
+            + "AND (pu.unitName = p.wholesaleUnit OR pu.unitId = p.wholesaleUnitId) "
+            + "ORDER BY pu.isBase ASC, pu.factor DESC LIMIT 1), "
+            + "(SELECT pu.price / NULLIF(pu.factor, 0) FROM product_units pu "
+            + "WHERE pu.productId = p.id AND pu.factor > 1 "
+            + "ORDER BY pu.isBase ASC, pu.factor DESC LIMIT 1), p.retailPrice) "
+            + "END AS wPerBase "
             + "FROM products p WHERE p.isActive = 1) v WHERE v.qty > 0")
     public abstract LiveData<StockValuationSummary> observeValuationSummary();
+
+    @Query("SELECT v.productId AS productId, v.name AS name, v.unitLabel AS unitLabel, v.qty AS qty, "
+            + "v.qty * v.costPrice AS assets, v.qty * v.retailPrice AS retailSales, "
+            + "v.qty * v.wPerBase AS wholesaleSales "
+            + "FROM (SELECT p.id AS productId, p.name AS name, COALESCE(p.retailUnit, 'Pcs') AS unitLabel, "
+            + "p.costPrice AS costPrice, p.retailPrice AS retailPrice, "
+            + "COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) AS qty, "
+            + "CASE WHEN p.wholesalePrice > 0 THEN p.wholesalePrice "
+            + "ELSE COALESCE((SELECT pu.price / NULLIF(pu.factor, 0) FROM product_units pu "
+            + "WHERE pu.productId = p.id AND pu.factor > 1 "
+            + "AND (pu.unitName = p.wholesaleUnit OR pu.unitId = p.wholesaleUnitId) "
+            + "ORDER BY pu.isBase ASC, pu.factor DESC LIMIT 1), "
+            + "(SELECT pu.price / NULLIF(pu.factor, 0) FROM product_units pu "
+            + "WHERE pu.productId = p.id AND pu.factor > 1 "
+            + "ORDER BY pu.isBase ASC, pu.factor DESC LIMIT 1), p.retailPrice) "
+            + "END AS wPerBase "
+            + "FROM products p WHERE p.isActive = 1 "
+            + "AND (:query = '' OR LOWER(p.name) LIKE '%' || LOWER(:query) || '%')) v "
+            + "WHERE v.qty > 0 ORDER BY v.name ASC LIMIT :limit OFFSET :offset")
+    public abstract List<StockValuationRow> getValuationRows(String query, int limit, int offset);
 
     @Query("SELECT COUNT(*) FROM products WHERE isActive = 1")
     public abstract LiveData<Integer> observeActiveCount();

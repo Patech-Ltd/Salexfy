@@ -209,20 +209,12 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="When the Wholesale tab is selected on the sell screen, this discounted price is used regardless of unit. Leave empty to use the retail price in wholesale mode too."
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp" />
-
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/til_wholesale_price"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:hint="Wholesale price"
+                    android:hint="Wholesale price (per 1 unit)"
                     app:boxBackgroundMode="outline">
 
                     <com.google.android.material.textfield.TextInputEditText
