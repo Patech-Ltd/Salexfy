@@ -137,10 +137,19 @@
             android:layout_height="match_parent"
             android:orientation="vertical">
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btn_stock_summary"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_margin="10dp"
+                android:text="Stock Summary"
+                app:icon="@drawable/ic_stock" />
+
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/stock_list"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:clipToPadding="false"
                 android:padding="10dp" />
         </LinearLayout>

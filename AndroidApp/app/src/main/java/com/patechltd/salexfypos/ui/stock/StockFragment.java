@@ -69,6 +69,9 @@ public class StockFragment extends Fragment {
         lowStockCount = view.findViewById(R.id.low_stock_count);
         lowStockCount.setOnClickListener(v -> startActivity(new Intent(requireContext(),
                 com.patechltd.salexfypos.ui.stock.LowStockActivity.class)));
+        view.findViewById(R.id.btn_stock_summary).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(),
+                        com.patechltd.salexfypos.ui.stock.StockSummaryActivity.class)));
         EditText search = view.findViewById(R.id.stock_search);
 
         RecyclerView stockList = view.findViewById(R.id.stock_list);

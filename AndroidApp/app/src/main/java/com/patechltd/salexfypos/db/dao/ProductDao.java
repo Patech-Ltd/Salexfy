@@ -11,6 +11,7 @@ import androidx.room.Update;
 import com.patechltd.salexfypos.db.ProductQty;
 import com.patechltd.salexfypos.db.ProductStock;
 import com.patechltd.salexfypos.db.StockRow;
+import com.patechltd.salexfypos.db.StockValuationSummary;
 import com.patechltd.salexfypos.db.entity.PendingProduct;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.db.entity.ProductBarcode;
@@ -259,6 +260,17 @@ public abstract class ProductDao {
             + "AND COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) <= p.reorderLevel "
             + "ORDER BY COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) ASC, p.name ASC")
     public abstract LiveData<List<StockRow>> observeLowStockRows();
+
+    @Query("SELECT COUNT(*) AS products, "
+            + "COALESCE(SUM(v.qty), 0) AS totalQty, "
+            + "COALESCE(SUM(v.qty * v.costPrice), 0) AS assets, "
+            + "COALESCE(SUM(v.qty * v.retailPrice), 0) AS retailSales, "
+            + "COALESCE(SUM(v.qty * CASE WHEN v.wholesalePrice > 0 THEN v.wholesalePrice ELSE v.retailPrice END), 0) AS wholesaleSales "
+            + "FROM (SELECT p.costPrice AS costPrice, p.retailPrice AS retailPrice, "
+            + "p.wholesalePrice AS wholesalePrice, "
+            + "COALESCE((SELECT SUM(m.qty) FROM stock_movements m WHERE m.productId = p.id), 0) AS qty "
+            + "FROM products p WHERE p.isActive = 1) v WHERE v.qty > 0")
+    public abstract LiveData<StockValuationSummary> observeValuationSummary();
 
     @Query("SELECT COUNT(*) FROM products WHERE isActive = 1")
     public abstract LiveData<Integer> observeActiveCount();

@@ -123,6 +123,9 @@
             android:name=".ui.stock.LowStockActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.stock.StockSummaryActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.stock.QuickStockActivity"
             android:exported="false" />
         <activity
