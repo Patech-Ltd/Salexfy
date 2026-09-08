@@ -244,30 +244,41 @@ public abstract class SaleDao {
 
     @Query("SELECT s.id AS saleUid, s.saleNo, s.saleDate, s.status, "
             + "si.productName, si.unitLabel, si.qty, si.stockQty, si.unitPrice, si.costPrice, "
+            + "si.isWholesale AS isWholesale, "
+            + "s.cashierName AS cashierName, s.customerName AS customerName, s.paymentMethod AS paymentMethod, "
+            + "(p.id IS NULL OR p.isActive = 0) AS productDeleted, "
             + "si.qty * si.unitPrice AS revenue, si.stockQty * si.costPrice AS cost, "
             + "(si.qty * si.unitPrice) - (si.stockQty * si.costPrice) AS profit "
             + "FROM sales s JOIN sale_items si ON s.id = si.saleId "
+            + "LEFT JOIN products p ON p.id = si.productId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
-            + "AND (:includeVoided = 1 OR s.status != 'VOID') "
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:showDeleted = 1 OR (p.id IS NOT NULL AND p.isActive = 1)) "
             + "ORDER BY s.saleDate DESC, s.id LIMIT :limit OFFSET :offset")
-    public abstract List<ProfitLineRow> getProfitLines(long from, long to, boolean includeVoided,
+    public abstract List<ProfitLineRow> getProfitLines(long from, long to, boolean showDeleted,
                                                        int limit, int offset);
 
     @Query("SELECT COUNT(*) FROM sale_items si "
             + "JOIN sales s ON s.id = si.saleId "
+            + "LEFT JOIN products p ON p.id = si.productId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
-            + "AND (:includeVoided = 1 OR s.status != 'VOID')")
-    public abstract int profitLineCount(long from, long to, boolean includeVoided);
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:showDeleted = 1 OR (p.id IS NOT NULL AND p.isActive = 1))")
+    public abstract int profitLineCount(long from, long to, boolean showDeleted);
 
     @Query("SELECT COALESCE(SUM(si.qty * si.unitPrice), 0) FROM sale_items si "
             + "JOIN sales s ON s.id = si.saleId "
+            + "LEFT JOIN products p ON p.id = si.productId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
-            + "AND (:includeVoided = 1 OR s.status != 'VOID')")
-    public abstract double getSummaryRevenue(long from, long to, boolean includeVoided);
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:showDeleted = 1 OR (p.id IS NOT NULL AND p.isActive = 1))")
+    public abstract double getSummaryRevenue(long from, long to, boolean showDeleted);
 
     @Query("SELECT COALESCE(SUM(si.stockQty * si.costPrice), 0) FROM sale_items si "
             + "JOIN sales s ON s.id = si.saleId "
+            + "LEFT JOIN products p ON p.id = si.productId "
             + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
-            + "AND (:includeVoided = 1 OR s.status != 'VOID')")
-    public abstract double getSummaryCost(long from, long to, boolean includeVoided);
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:showDeleted = 1 OR (p.id IS NOT NULL AND p.isActive = 1))")
+    public abstract double getSummaryCost(long from, long to, boolean showDeleted);
 }

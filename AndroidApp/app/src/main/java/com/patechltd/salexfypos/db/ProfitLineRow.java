@@ -27,4 +27,14 @@ public class ProfitLineRow {
     public double cost;
 
     public double profit;
+
+    public boolean isWholesale;
+
+    public String cashierName;
+
+    public String customerName;
+
+    public String paymentMethod;
+
+    public boolean productDeleted;
 }

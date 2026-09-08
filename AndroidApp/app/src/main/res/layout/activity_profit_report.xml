@@ -29,12 +29,13 @@
     </HorizontalScrollView>
 
     <com.google.android.material.switchmaterial.SwitchMaterial
-        android:id="@+id/switch_voided"
+        android:id="@+id/switch_deleted"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:checked="true"
         android:paddingHorizontal="14dp"
         android:paddingBottom="4dp"
-        android:text="Show voided transactions"
+        android:text="Show sales of deleted products"
         android:textColor="@color/text_secondary"
         android:textSize="13sp" />
 

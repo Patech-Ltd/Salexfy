@@ -40,7 +40,7 @@ public class ProfitReportActivity extends AppCompatActivity {
     private Repository repo;
     private LineAdapter adapter;
     private TextView emptyText;
-    private SwitchMaterial switchVoided;
+    private SwitchMaterial switchDeleted;
     private TextView revenueVal, costVal, profitVal;
     private long from = 0L;
     private long to = Long.MAX_VALUE;
@@ -69,8 +69,8 @@ public class ProfitReportActivity extends AppCompatActivity {
         costVal = findViewById(R.id.summary_cost_val);
         profitVal = findViewById(R.id.summary_profit_val);
 
-        switchVoided = findViewById(R.id.switch_voided);
-        switchVoided.setOnCheckedChangeListener((btn, checked) -> resetAndLoad());
+        switchDeleted = findViewById(R.id.switch_deleted);
+        switchDeleted.setOnCheckedChangeListener((btn, checked) -> resetAndLoad());
 
         adapter = new LineAdapter();
         RecyclerView list = findViewById(R.id.profit_list);
@@ -185,12 +185,12 @@ public class ProfitReportActivity extends AppCompatActivity {
         if (loading || endReached) return;
         loading = true;
         final int pageNo = page;
-        final boolean includeVoided = switchVoided.isChecked();
+        final boolean showDeleted = switchDeleted.isChecked();
         repo.run(() -> {
-            List<ProfitLineRow> rows = repo.sales.getProfitLines(from, to, includeVoided,
+            List<ProfitLineRow> rows = repo.sales.getProfitLines(from, to, showDeleted,
                     PAGE_SIZE, pageNo * PAGE_SIZE);
-            final double totalRevenue = repo.sales.getSummaryRevenue(from, to, includeVoided);
-            final double totalCost = repo.sales.getSummaryCost(from, to, includeVoided);
+            final double totalRevenue = repo.sales.getSummaryRevenue(from, to, showDeleted);
+            final double totalCost = repo.sales.getSummaryCost(from, to, showDeleted);
             final double totalProfit = totalRevenue - totalCost;
             handler.post(() -> {
                 if (rows.size() < PAGE_SIZE) endReached = true;
@@ -234,16 +234,24 @@ public class ProfitReportActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull VH holder, int position) {
             ProfitLineRow row = lines.get(position);
-            boolean voided = "VOID".equals(row.status);
 
-            holder.product.setText(row.productName);
+            String name = row.productName == null ? "(no product)" : row.productName;
             if (row.unitLabel != null && !row.unitLabel.isEmpty()) {
-                holder.product.setText(row.productName + " (" + row.unitLabel + ")");
+                name += " (" + row.unitLabel + ")";
             }
+            if (row.productDeleted) name += "  [deleted]";
+            holder.product.setText(name);
+            holder.product.setTextColor(getResources().getColor(
+                    row.productDeleted ? R.color.error : R.color.text_primary));
+            holder.product.setPaintFlags(holder.product.getPaintFlags()
+                    & ~android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
 
-            holder.qty.setText("Qty " + NumberUtil.qty(row.qty)
-                    + "  ·  #" + row.saleNo
-                    + "  ·  " + DateUtil.formatDate(row.saleDate));
+            StringBuilder qty = new StringBuilder("Qty ").append(NumberUtil.qty(row.qty))
+                    .append("  ·  #").append(row.saleNo)
+                    .append("  ·  ").append(DateUtil.formatDate(row.saleDate))
+                    .append(" ").append(DateUtil.formatTime(row.saleDate));
+            if (row.isWholesale) qty.append("  ·  Wholesale");
+            holder.qty.setText(qty.toString());
 
             String unitStr = currency + " " + NumberUtil.money(row.unitPrice) + " / unit";
             double perUnitCost = row.qty > 0
@@ -254,19 +262,25 @@ public class ProfitReportActivity extends AppCompatActivity {
             holder.priceInfo.setText(unitStr + costStr);
 
             String profitStr = currency + " " + NumberUtil.money(row.profit);
-            holder.profit.setText(voided ? "VOID" : profitStr);
+            holder.profit.setText(profitStr);
+            holder.profit.setTextColor(getResources().getColor(
+                    row.profit < 0 ? R.color.error : R.color.success));
 
-            if (voided) {
-                holder.product.setPaintFlags(holder.product.getPaintFlags()
-                        | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-                holder.product.setTextColor(getResources().getColor(R.color.error));
-                holder.profit.setTextColor(getResources().getColor(R.color.error));
-            } else {
-                holder.product.setPaintFlags(holder.product.getPaintFlags()
-                        & ~android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
-                holder.product.setTextColor(getResources().getColor(R.color.text_primary));
-                holder.profit.setTextColor(getResources().getColor(R.color.success));
+            StringBuilder extra = new StringBuilder();
+            String customer = row.customerName;
+            if (customer != null && !customer.isEmpty()) {
+                extra.append("Customer: ").append(customer);
             }
+            String cashier = row.cashierName;
+            if (cashier != null && !cashier.isEmpty()) {
+                if (extra.length() > 0) extra.append("  ·  ");
+                extra.append("Cashier: ").append(cashier);
+            }
+            if (row.paymentMethod != null && !row.paymentMethod.isEmpty()) {
+                if (extra.length() > 0) extra.append("  ·  ");
+                extra.append(com.patechltd.salexfypos.model.PaymentMethod.labelOf(row.paymentMethod));
+            }
+            holder.extra.setText(extra.toString());
         }
 
         @Override
@@ -275,7 +289,7 @@ public class ProfitReportActivity extends AppCompatActivity {
         }
 
         class VH extends RecyclerView.ViewHolder {
-            final TextView product, qty, priceInfo, profit;
+            final TextView product, qty, priceInfo, profit, extra;
 
             VH(View v) {
                 super(v);
@@ -283,6 +297,7 @@ public class ProfitReportActivity extends AppCompatActivity {
                 qty = v.findViewById(R.id.line_qty);
                 priceInfo = v.findViewById(R.id.line_price_info);
                 profit = v.findViewById(R.id.line_profit);
+                extra = v.findViewById(R.id.line_extra);
             }
         }
     }
