@@ -48,15 +48,13 @@ public class ReceiptPreviewActivity extends AppCompatActivity {
         repo.run(() -> {
             SaleWithItems sw = repo.sales.getSaleWithItems(saleId);
             cached = sw;
-            runOnUiThread(() -> {
-                if (sw == null || sw.sale == null) {
-                    finish();
-                    return;
-                }
-                double balance = repo.outstandingDebt(sw.sale.customerId);
-                String text = ReceiptPrinter.buildReceiptText(this, sw.sale, sw.items, sw.payments, balance);
-                ((TextView) findViewById(R.id.receipt)).setText(text);
-            });
+            if (sw == null || sw.sale == null) {
+                runOnUiThread(this::finish);
+                return;
+            }
+            double balance = repo.outstandingDebt(sw.sale.customerId);
+            String text = ReceiptPrinter.buildReceiptText(this, sw.sale, sw.items, sw.payments, balance);
+            runOnUiThread(() -> ((TextView) findViewById(R.id.receipt)).setText(text));
         });
     }
 
