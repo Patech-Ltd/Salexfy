@@ -54,6 +54,7 @@ public class Prefs {
     public static final String KEY_LICENSE_KEY = "license_key";
     public static final String KEY_LICENSE_EXPIRY = "license_expiry";
     public static final String KEY_SHOP_ID = "shop_id";
+    public static final String KEY_THEME_MODE = "theme_mode";
 
     private static final String PREFS = "salexfy_prefs";
 

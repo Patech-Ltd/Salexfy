@@ -45,9 +45,7 @@ public class SalexfyApp extends Application {
         scheduleSync(context);
         validateLicenseInBackground(context);
 
-        AppCompatDelegate.setDefaultNightMode(
-                AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
-        );
+        applyThemeMode(context);
 
 
         registerActivityLifecycleCallbacks(
@@ -104,6 +102,24 @@ public class SalexfyApp extends Application {
                 AppLogger.d("License background check failed: " + t.getMessage());
             }
         }).start();
+    }
+
+    /**
+     * Applies the user-selected theme mode (system / light / dark) stored in prefs.
+     */
+    private void applyThemeMode(Context context) {
+        int nightMode;
+        switch (Prefs.getString(context, Prefs.KEY_THEME_MODE, "system")) {
+            case "light":
+                nightMode = AppCompatDelegate.MODE_NIGHT_NO;
+                break;
+            case "dark":
+                nightMode = AppCompatDelegate.MODE_NIGHT_YES;
+                break;
+            default:
+                nightMode = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode);
     }
 
     private void seedIfNeeded(Context context) {

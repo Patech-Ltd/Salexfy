@@ -29,4 +29,7 @@
 
     <!-- Base-unit card background (dark container in night so card text stays readable). -->
     <color name="brand_card_base">#164E63</color>
+
+    <!-- Brand teal accent used as text on info cards; brightened for dark surfaces. -->
+    <color name="brand_accent_text">#2DD4BF</color>
 </resources>

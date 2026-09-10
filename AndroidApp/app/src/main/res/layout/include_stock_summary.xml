@@ -14,7 +14,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Stock Summary"
-        android:textColor="@color/brand_primary"
+        android:textColor="@color/brand_accent_text"
         android:textSize="15sp"
         android:textStyle="bold" />
 
@@ -189,7 +189,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="If sold wholesale"
-                android:textColor="@color/brand_primary"
+                android:textColor="@color/brand_accent_text"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -228,7 +228,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0.00"
-                    android:textColor="@color/brand_primary"
+                    android:textColor="@color/brand_accent_text"
                     android:textSize="16sp"
                     android:textStyle="bold" />
             </LinearLayout>

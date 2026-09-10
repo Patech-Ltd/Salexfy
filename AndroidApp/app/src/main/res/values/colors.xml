@@ -35,6 +35,7 @@
     <color name="accent_positive">#1565C0</color>
     <color name="accent_negative">#B00020</color>
     <color name="brand_card_base">#CFFAFE</color>
+    <color name="brand_accent_text">#0E7490</color>
 
     <color name="dark_bg">#0F172A</color>
     <color name="dark_surface">#1E293B</color>

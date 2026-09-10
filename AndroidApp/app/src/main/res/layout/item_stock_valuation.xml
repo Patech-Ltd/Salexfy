@@ -105,7 +105,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="If sold wholesale"
-                android:textColor="@color/brand_primary"
+                android:textColor="@color/brand_accent_text"
                 android:textSize="10sp" />
 
             <TextView
@@ -113,7 +113,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:textColor="@color/brand_primary"
+                android:textColor="@color/brand_accent_text"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>

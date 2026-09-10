@@ -5,6 +5,7 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
@@ -15,6 +16,8 @@ public class SettingsActivity extends AppCompatActivity {
 
     private static final long[] TIMEOUT_OPTIONS = {0, 30_000, 60_000, 2 * 60_000, 5 * 60_000, 10 * 60_000, 30 * 60_000};
     private static final String[] TIMEOUT_LABELS = {"Immediately", "30 seconds", "1 minute", "2 minutes", "5 minutes", "10 minutes", "30 minutes"};
+    private static final String[] THEME_LABELS = {"Pick from system", "Light", "Dark"};
+    private static final String[] THEME_VALUES = {"system", "light", "dark"};
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -52,6 +55,9 @@ public class SettingsActivity extends AppCompatActivity {
 
         updateTimeoutLabel();
         findViewById(R.id.row_lock_timeout).setOnClickListener(v -> showTimeoutPicker());
+
+        updateThemeSubtitle();
+        findViewById(R.id.row_theme).setOnClickListener(v -> showThemePicker());
     }
 
     private void updateTimeoutLabel() {
@@ -84,5 +90,53 @@ public class SettingsActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private void updateThemeSubtitle() {
+        String current = Prefs.getString(this, Prefs.KEY_THEME_MODE, "system");
+        String label = THEME_LABELS[0];
+        for (int i = 0; i < THEME_VALUES.length; i++) {
+            if (THEME_VALUES[i].equals(current)) {
+                label = THEME_LABELS[i];
+                break;
+            }
+        }
+        ((android.widget.TextView) findViewById(R.id.theme_subtitle)).setText(label);
+    }
+
+    private void showThemePicker() {
+        String current = Prefs.getString(this, Prefs.KEY_THEME_MODE, "system");
+        int selected = 0;
+        for (int i = 0; i < THEME_VALUES.length; i++) {
+            if (THEME_VALUES[i].equals(current)) {
+                selected = i;
+                break;
+            }
+        }
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Theme")
+                .setSingleChoiceItems(THEME_LABELS, selected, (dialog, which) -> {
+                    Prefs.putString(this, Prefs.KEY_THEME_MODE, THEME_VALUES[which]);
+                    dialog.dismiss();
+                    applyThemeMode(THEME_VALUES[which]);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void applyThemeMode(String mode) {
+        int nightMode;
+        switch (mode) {
+            case "light":
+                nightMode = AppCompatDelegate.MODE_NIGHT_NO;
+                break;
+            case "dark":
+                nightMode = AppCompatDelegate.MODE_NIGHT_YES;
+                break;
+            default:
+                nightMode = AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM;
+        }
+        AppCompatDelegate.setDefaultNightMode(nightMode);
+        updateThemeSubtitle();
     }
 }
