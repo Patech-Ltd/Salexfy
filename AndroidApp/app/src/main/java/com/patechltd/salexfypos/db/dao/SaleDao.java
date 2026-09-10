@@ -10,6 +10,7 @@ import androidx.room.Update;
 
 import com.patechltd.salexfypos.db.CashierReportRow;
 import com.patechltd.salexfypos.db.DayReportRow;
+import com.patechltd.salexfypos.db.DeletedSaleItemRow;
 import com.patechltd.salexfypos.db.MonthReportRow;
 import com.patechltd.salexfypos.db.PaymentMethodTotalRow;
 import com.patechltd.salexfypos.db.ProfitLineRow;
@@ -219,6 +220,9 @@ public abstract class SaleDao {
     @Transaction
     @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
             + "AND saleDate >= :from AND saleDate <= :to "
+            + "AND (:deletedFilter = 0 OR id IN (SELECT si.saleId FROM sale_items si "
+            + "     LEFT JOIN products p ON p.id = si.productId "
+            + "     WHERE p.id IS NULL OR p.isActive = 0)) "
             + "AND (:filter = 0 OR (:filter = 1 AND id IN (SELECT saleId FROM sale_items WHERE isWholesale = 1)) "
             + "          OR (:filter = 2 AND id NOT IN (SELECT saleId FROM sale_items WHERE isWholesale = 1))) "
             + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
@@ -227,11 +231,15 @@ public abstract class SaleDao {
             + "               WHERE productName LIKE '%' || :q || '%' "
             + "               OR barcode LIKE '%' || :q || '%')) "
             + "ORDER BY saleDate DESC LIMIT :limit OFFSET :offset")
-    public abstract List<SaleWithItems> searchCompletePage(String q, long from, long to, int filter, int limit, int offset);
+    public abstract List<SaleWithItems> searchCompletePage(String q, long from, long to, int filter,
+                                                           int deletedFilter, int limit, int offset);
 
     @Transaction
     @Query("SELECT * FROM sales WHERE status != 'DRAFT' AND status != 'HELD' "
             + "AND saleDate >= :from AND saleDate <= :to "
+            + "AND (:deletedFilter = 0 OR id IN (SELECT si.saleId FROM sale_items si "
+            + "     LEFT JOIN products p ON p.id = si.productId "
+            + "     WHERE p.id IS NULL OR p.isActive = 0)) "
             + "AND (:filter = 0 OR (:filter = 1 AND id IN (SELECT saleId FROM sale_items WHERE isWholesale = 1)) "
             + "          OR (:filter = 2 AND id NOT IN (SELECT saleId FROM sale_items WHERE isWholesale = 1))) "
             + "AND (:q = '' OR saleNo LIKE '%' || :q || '%' "
@@ -240,7 +248,12 @@ public abstract class SaleDao {
             + "               WHERE productName LIKE '%' || :q || '%' "
             + "               OR barcode LIKE '%' || :q || '%')) "
             + "ORDER BY saleDate DESC")
-    public abstract List<SaleWithItems> exportComplete(String q, long from, long to, int filter);
+    public abstract List<SaleWithItems> exportComplete(String q, long from, long to, int filter, int deletedFilter);
+
+    @Query("SELECT DISTINCT si.saleId FROM sale_items si "
+            + "LEFT JOIN products p ON p.id = si.productId "
+            + "WHERE p.id IS NULL OR p.isActive = 0")
+    public abstract List<String> saleIdsWithDeletedItems();
 
     @Query("SELECT s.id AS saleUid, s.saleNo, s.saleDate, s.status, "
             + "si.productName, si.unitLabel, si.qty, si.stockQty, si.unitPrice, si.costPrice, "
@@ -281,4 +294,21 @@ public abstract class SaleDao {
             + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
             + "AND (:showDeleted = 1 OR (p.id IS NOT NULL AND p.isActive = 1))")
     public abstract double getSummaryCost(long from, long to, boolean showDeleted);
+
+    @Query("SELECT si.id AS saleItemId, si.saleId, s.saleNo, s.saleDate, s.status AS saleStatus, "
+            + "si.productId, si.productName, si.qty, si.unitPrice, si.lineTotal, si.unitLabel, "
+            + "si.isWholesale, s.cashierName "
+            + "FROM sale_items si "
+            + "JOIN sales s ON s.id = si.saleId "
+            + "LEFT JOIN products p ON p.id = si.productId "
+            + "WHERE (p.id IS NULL OR p.isActive = 0) "
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' "
+            + "ORDER BY s.saleDate DESC")
+    public abstract List<DeletedSaleItemRow> getDeletedSaleItems();
+
+    @Query("DELETE FROM sale_items WHERE id = :itemId")
+    public abstract void deleteSaleItemById(String itemId);
+
+    @Query("SELECT saleId FROM sale_items WHERE id = :itemId")
+    public abstract String getSaleIdForItem(String itemId);
 }

@@ -26,6 +26,8 @@ playServicesAuth = "21.2.0"
 googleApiClient = "2.8.0"
 googleApiServicesDrive = "v3-rev20260428-2.0.0"
 googleHttpGson = "1.45.1"
+firebaseCrashlytics = "20.1.1"
+googleFirebaseCrashlytics = "3.0.8"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -59,7 +61,9 @@ play-services-auth = { group = "com.google.android.gms", name = "play-services-a
 google-api-client-android = { group = "com.google.api-client", name = "google-api-client-android", version.ref = "googleApiClient" }
 google-api-services-drive = { group = "com.google.apis", name = "google-api-services-drive", version.ref = "googleApiServicesDrive" }
 google-http-client-gson = { group = "com.google.http-client", name = "google-http-client-gson", version.ref = "googleHttpGson" }
+firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics", version.ref = "firebaseCrashlytics" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGmsGoogleServices" }
+google-firebase-crashlytics = { id = "com.google.firebase.crashlytics", version.ref = "googleFirebaseCrashlytics" }

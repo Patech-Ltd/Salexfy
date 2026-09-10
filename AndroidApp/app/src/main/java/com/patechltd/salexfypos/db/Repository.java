@@ -341,6 +341,41 @@ public class Repository {
     }
 
     @Transaction
+    public void removeDeletedSaleItem(String itemId) {
+        String saleId = sales.getSaleIdForItem(itemId);
+        if (saleId == null) return;
+
+        Sale sale = sales.getSale(saleId);
+        if (sale == null) return;
+
+        SaleItem item = null;
+        List<SaleItem> items = sales.getItems(saleId);
+        for (SaleItem si : items) {
+            if (si.uid.equals(itemId)) {
+                item = si;
+                break;
+            }
+        }
+        if (item == null) return;
+
+        sales.rawDeleteItem(itemId);
+        adjustStock(sale.uid, item.productId, item.stockQty, MovementType.SALE_VOID,
+                item.unitLabel, sale.cashierId, "Removed deleted-item line", System.currentTimeMillis());
+
+        List<SaleItem> remaining = sales.getItems(sale.uid);
+        double newSubtotal = 0;
+        for (SaleItem r : remaining) newSubtotal += r.lineTotal;
+        double ratio = sale.subtotal > 0 ? newSubtotal / sale.subtotal : 0;
+        sale.subtotal = Math.round(newSubtotal * 100.0) / 100.0;
+        sale.taxAmount = Math.round(sale.taxAmount * ratio * 100.0) / 100.0;
+        sale.discount = Math.round(sale.discount * ratio * 100.0) / 100.0;
+        sale.total = Math.round((sale.subtotal + sale.taxAmount - sale.discount) * 100.0) / 100.0;
+        sale.paidAmount = Math.min(sale.paidAmount, sale.total);
+        sale.changeAmount = Math.max(0, sale.paidAmount - sale.total);
+        sales.updateSale(sale);
+    }
+
+    @Transaction
     public void updatePurchase(Purchase purchase, List<PurchaseItem> items, boolean updateCost) {
         if (purchase.uid == null) return;
         stock.deleteMovementsForRef(purchase.uid, MovementType.PURCHASE.name());
