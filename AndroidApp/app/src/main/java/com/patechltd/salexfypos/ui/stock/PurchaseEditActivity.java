@@ -6,11 +6,18 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.view.KeyEvent;
+import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -20,9 +27,13 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.datepicker.MaterialDatePicker;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.PurchaseLineAdapter;
 import com.patechltd.salexfypos.db.PurchaseWithItems;
@@ -38,8 +49,10 @@ import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.NumberUtil;
+import com.patechltd.salexfypos.util.Prefs;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class PurchaseEditActivity extends AppCompatActivity {
@@ -54,13 +67,25 @@ public class PurchaseEditActivity extends AppCompatActivity {
     private ScannerView scanner;
     private FrameLayout scannerContainer;
     private PurchaseLineAdapter adapter;
+    private SearchResultsAdapter resultsAdapter;
     private TextView supplierRow, subtotalView, totalView;
-    private TextInputEditText invoiceNo, paid, notes, dateField;
+    private TextInputEditText invoiceNo, paid, notes, dateField, searchBox;
+    private RecyclerView searchResults;
     private MaterialButton save, delete, toggleScanner, batchAdd, btnEdit, btnPreview, btnPrint;
     private boolean editingExisting;
     private boolean editing;
     private boolean paidTouched;
     private String existingSupplierName;
+
+    private static class UnitOption {
+        final String label;
+        final double factor;
+
+        UnitOption(String label, double factor) {
+            this.label = label;
+            this.factor = factor;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -127,6 +152,8 @@ public class PurchaseEditActivity extends AppCompatActivity {
 
         adapter.setShowProfit(editingExisting);
 
+        initSearch();
+
         repo.run(() -> {
             final java.util.Map<String, Product> map = new java.util.HashMap<>();
             for (Product p : repo.products.getAllActive()) map.put(p.uid, p);
@@ -141,6 +168,7 @@ public class PurchaseEditActivity extends AppCompatActivity {
             save.setVisibility(View.GONE);
             toggleScanner.setVisibility(View.GONE);
             batchAdd.setVisibility(View.GONE);
+            findViewById(R.id.search_layout).setVisibility(View.GONE);
             delete.setVisibility(View.VISIBLE);
             loadExisting(editId);
         } else {
@@ -197,6 +225,97 @@ public class PurchaseEditActivity extends AppCompatActivity {
         });
     }
 
+    private void initSearch() {
+        searchBox = findViewById(R.id.search_box);
+        searchResults = findViewById(R.id.search_results);
+        resultsAdapter = new SearchResultsAdapter();
+        searchResults.setLayoutManager(new LinearLayoutManager(this));
+        searchResults.setAdapter(resultsAdapter);
+
+        Runnable debounce = () -> runSearch(
+                searchBox.getText() == null ? "" : searchBox.getText().toString());
+        searchBox.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(Editable s) {
+                handler.removeCallbacks(debounce);
+                handler.postDelayed(debounce, 300);
+            }
+        });
+        searchBox.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE
+                    || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                runSearch(searchBox.getText() == null ? "" : searchBox.getText().toString());
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private void runSearch(String query) {
+        String q = query == null ? "" : query.trim();
+        if (q.isEmpty()) {
+            resultsAdapter.submit(Collections.emptyList());
+            searchResults.setVisibility(View.GONE);
+            return;
+        }
+        repo.run(() -> {
+            List<Product> found = repo.products.searchActivePage(q, null, 8, 0);
+            handler.post(() -> {
+                resultsAdapter.submit(found);
+                searchResults.setVisibility(found.isEmpty() ? View.GONE : View.VISIBLE);
+            });
+        });
+    }
+
+    private class SearchResultsAdapter extends RecyclerView.Adapter<SearchResultsAdapter.VH> {
+
+        private final List<Product> rows = new ArrayList<>();
+
+        void submit(List<Product> list) {
+            rows.clear();
+            rows.addAll(list);
+            notifyDataSetChanged();
+        }
+
+        @NonNull
+        @Override
+        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            return new VH(LayoutInflater.from(parent.getContext())
+                    .inflate(R.layout.item_search_product, parent, false));
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull VH holder, int position) {
+            final Product p = rows.get(position);
+            holder.name.setText(p.name);
+            String unit = defaultUnitLabel(p);
+            double b = buyPriceFor(p, 1);
+            holder.sub.setText((p.barcode == null || p.barcode.isEmpty()
+                    ? (p.sku == null || p.sku.isEmpty() ? "No barcode" : p.sku) : p.barcode)
+                    + "  ·  Buy " + (b > 0 ? NumberUtil.money(b) : "—") + "/" + unit);
+            holder.itemView.setOnClickListener(v -> promptAddProduct(p));
+            holder.buy.setOnClickListener(v -> promptAddProduct(p));
+        }
+
+        @Override
+        public int getItemCount() {
+            return rows.size();
+        }
+
+        class VH extends RecyclerView.ViewHolder {
+            final TextView name, sub;
+            final View buy;
+
+            VH(@NonNull View itemView) {
+                super(itemView);
+                name = itemView.findViewById(R.id.search_name);
+                sub = itemView.findViewById(R.id.search_sub);
+                buy = itemView.findViewById(R.id.search_buy);
+            }
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -246,8 +365,8 @@ public class PurchaseEditActivity extends AppCompatActivity {
         save.setVisibility(View.VISIBLE);
         toggleScanner.setVisibility(View.VISIBLE);
         batchAdd.setVisibility(View.VISIBLE);
+        findViewById(R.id.search_layout).setVisibility(View.GONE);
         delete.setVisibility(View.VISIBLE);
-        supplierRow.setText(supplierRow.getText());
     }
 
     private void handleScan(String code) {
@@ -259,18 +378,33 @@ public class PurchaseEditActivity extends AppCompatActivity {
                     Toast.makeText(this, "Product not found", Toast.LENGTH_SHORT).show();
                     return;
                 }
-                addPurchaseItem(p, 1);
+                addPurchaseItem(p, 1, defaultUnitLabel(p), 1);
             });
         });
     }
 
-    private void addPurchaseItem(Product p, double qty) {
+    private String defaultUnitLabel(Product p) {
+        if (p != null && p.retailUnit != null && !p.retailUnit.trim().isEmpty()) return p.retailUnit.trim();
+        return "Pcs";
+    }
+
+    private double buyPriceFor(Product p, double factor) {
+        if (p == null) return 0;
+        double f = factor > 0 ? factor : 1;
+        return NumberUtil.round2(p.costPrice * f);
+    }
+
+    private void addPurchaseItem(Product p, double qty, String unitLabel, double factor) {
+        double f = factor > 0 ? factor : 1;
+        String unit = (unitLabel == null || unitLabel.isEmpty()) ? defaultUnitLabel(p) : unitLabel;
         for (PurchaseItem item : items) {
-            if (item.productId.equals(p.uid)) {
-                item.qty += qty;
-                double factor = item.factor > 0 ? item.factor : 1;
-                item.stockQty = item.stockQty + qty * factor;
-                item.lineTotal = item.qty * item.unitPrice;
+            if (item.productId != null && item.productId.equals(p.uid)
+                    && unit.equals(item.unitLabel)) {
+                item.qty = NumberUtil.round2(item.qty + qty);
+                item.factor = f;
+                item.stockQty = NumberUtil.round2(item.qty * f);
+                item.unitPrice = item.unitPrice > 0 ? item.unitPrice : buyPriceFor(p, f);
+                item.lineTotal = NumberUtil.round2(item.qty * item.unitPrice);
                 afterChange();
                 return;
             }
@@ -279,35 +413,49 @@ public class PurchaseEditActivity extends AppCompatActivity {
         item.productId = p.uid;
         item.productName = p.name;
         item.barcode = p.barcode;
-        boolean useWholesale = p.wholesalePrice > 0;
-        int factor = useWholesale ? Math.max(1, p.wholesaleFactor) : 1;
-        item.isWholesale = useWholesale;
-        item.unitLabel = useWholesale ? p.wholesaleUnit : p.retailUnit;
-        double buyPrice = p.costPrice > 0
-                ? (useWholesale ? p.costPrice * factor : p.costPrice)
-                : (useWholesale ? p.wholesalePrice : p.retailPrice);
-        item.unitPrice = buyPrice;
+        item.unitLabel = unit;
+        item.factor = f;
         item.qty = qty;
-        item.factor = Math.max(0.001, factor);
-        item.stockQty = qty * factor;
-        item.lineTotal = qty * item.unitPrice;
+        item.stockQty = NumberUtil.round2(qty * f);
+        item.unitPrice = buyPriceFor(p, f);
+        item.lineTotal = NumberUtil.round2(qty * item.unitPrice);
+        item.isWholesale = f > 1;
         items.add(item);
         afterChange();
         com.patechltd.salexfypos.util.SoundUtil.beep();
+    }
+
+    private void promptAddProduct(final Product p) {
+        if (p == null) return;
+        repo.run(() -> {
+            List<ProductUnit> units = p == null ? null : repo.products.getUnitsByProduct(p.uid);
+            handler.post(() -> {
+                PurchaseItem draft = new PurchaseItem();
+                draft.productId = p.uid;
+                draft.productName = p.name;
+                draft.barcode = p.barcode;
+                draft.unitLabel = defaultUnitLabel(p);
+                draft.factor = 1;
+                draft.qty = 1;
+                draft.unitPrice = buyPriceFor(p, 1);
+                draft.stockQty = 1;
+                draft.lineTotal = draft.unitPrice;
+                showEditLineDialog(draft, p, units, true);
+            });
+        });
     }
 
     private void editLine(int position) {
         if (position < 0 || position >= items.size()) return;
         final PurchaseItem item = items.get(position);
         if (item.productId == null) {
-            showEditLineDialog(item, null, null);
+            showEditLineDialog(item, null, null, false);
             return;
         }
         repo.run(() -> {
             Product p = repo.products.getById(item.productId);
             List<ProductUnit> units = p == null ? null : repo.products.getUnitsByProduct(p.uid);
-            final List<ProductUnit> fUnits = units;
-            handler.post(() -> showEditLineDialog(item, p, fUnits));
+            handler.post(() -> showEditLineDialog(item, p, units, false));
         });
     }
 
@@ -350,108 +498,125 @@ public class PurchaseEditActivity extends AppCompatActivity {
         });
     }
 
+    private List<UnitOption> unitOptions(Product p, List<ProductUnit> productUnits) {
+        List<UnitOption> opts = new ArrayList<>();
+        String base = defaultUnitLabel(p);
+        if (productUnits != null) {
+            for (ProductUnit pu : productUnits) {
+                String name = (pu.unitName == null || pu.unitName.isEmpty()) ? "Unit" : pu.unitName;
+                double f = Math.max(0.001, pu.factor);
+                if (!hasOption(opts, name, f)) opts.add(new UnitOption(name, f));
+            }
+        }
+        if (p != null && p.wholesaleFactor > 1) {
+            String name = (p.wholesaleUnit == null || p.wholesaleUnit.isEmpty()) ? "Wholesale" : p.wholesaleUnit;
+            if (!hasOption(opts, name, Math.max(0.001, p.wholesaleFactor))) {
+                opts.add(new UnitOption(name, Math.max(0.001, p.wholesaleFactor)));
+            }
+        }
+        if (!hasOption(opts, base, 1)) opts.add(0, new UnitOption(base, 1));
+        return opts;
+    }
+
+    private boolean hasOption(List<UnitOption> opts, String label, double factor) {
+        for (UnitOption o : opts) {
+            if (o.label.equals(label) && Math.abs(o.factor - factor) < 0.001) return true;
+        }
+        return false;
+    }
+
     private void showEditLineDialog(final PurchaseItem item, final Product p,
-                                    final List<ProductUnit> productUnits) {
+                                    final List<ProductUnit> productUnits, final boolean isNew) {
         View view = getLayoutInflater().inflate(R.layout.dialog_edit_line, null);
         TextView title = view.findViewById(R.id.line_title);
-        com.google.android.material.button.MaterialButtonToggleGroup toggle = view.findViewById(R.id.line_unit_toggle);
-        com.google.android.material.button.MaterialButton retailBtn = view.findViewById(R.id.line_btn_retail);
-        com.google.android.material.button.MaterialButton wholesaleBtn = view.findViewById(R.id.line_btn_wholesale);
-        com.google.android.material.chip.ChipGroup unitChips = view.findViewById(R.id.line_unit_chips);
+        MaterialButtonToggleGroup toggle = view.findViewById(R.id.line_unit_toggle);
+        ChipGroup unitChips = view.findViewById(R.id.line_unit_chips);
         TextView unitLabel = view.findViewById(R.id.line_unit_label);
         TextView totalView = view.findViewById(R.id.line_total);
         TextInputEditText qtyInput = view.findViewById(R.id.line_qty);
         TextInputEditText priceInput = view.findViewById(R.id.line_price);
+        TextInputLayout priceLayout = view.findViewById(R.id.line_price_input_layout);
+        TextInputLayout qtyLayout = view.findViewById(R.id.line_price_layout);
 
         title.setText(item.productName);
-        qtyInput.setText(String.valueOf(item.qty));
-        priceInput.setText(String.valueOf(item.unitPrice));
-        if (item.isWholesale) wholesaleBtn.setChecked(true);
-        else retailBtn.setChecked(true);
+        toggle.setVisibility(View.GONE);
+        view.findViewById(R.id.line_mode_label).setVisibility(View.GONE);
+        qtyLayout.setHint(isNew ? "Quantity to buy" : "Quantity");
+        priceLayout.setHint("Buying price per unit");
+        priceLayout.setHelperText("This becomes the product's buying price when you save");
+        qtyInput.setText(NumberUtil.qty(item.qty));
+        priceInput.setText(item.unitPrice > 0 ? String.valueOf(item.unitPrice) : "");
+        qtyInput.setSelectAllOnFocus(true);
+        priceInput.setSelectAllOnFocus(true);
 
+        final String baseUnit = item.productId == null ? defaultUnitLabel(null)
+                : defaultUnitLabel(p);
         final double[] selectedFactor = {item.factor > 0 ? item.factor : 1};
-        final String[] selectedUnit = {item.unitLabel};
+        final String[] selectedUnit = {item.unitLabel == null ? baseUnit : item.unitLabel};
         final double[] selectedPrice = {item.unitPrice};
 
-        if (productUnits != null && !productUnits.isEmpty()) {
-            unitLabel.setVisibility(View.VISIBLE);
-            for (ProductUnit pu : productUnits) {
-                com.google.android.material.chip.Chip chip = new com.google.android.material.chip.Chip(this);
-                chip.setText(pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName);
-                chip.setTag(pu);
-                chip.setCheckable(true);
-                chip.setChecked(pu.unitName != null && pu.unitName.equals(item.unitLabel));
-                unitChips.addView(chip);
-            }
-        } else {
-            unitLabel.setVisibility(View.GONE);
-        }
-        totalView.setVisibility(View.VISIBLE);
-
-        Runnable refresh = () -> {
+        final Runnable refreshDialog = () -> {
             double qty = Math.max(0.001, NumberUtil.parse(
                     qtyInput.getText() == null ? "" : qtyInput.getText().toString(), item.qty));
             double price = NumberUtil.parse(
                     priceInput.getText() == null ? "" : priceInput.getText().toString(), selectedPrice[0]);
-            String unit = selectedUnit[0] == null ? "" : selectedUnit[0];
-            unitLabel.setText("Unit: " + (unit.isEmpty() ? "—" : unit)
+            String unit = selectedUnit[0] == null ? baseUnit : selectedUnit[0];
+            unitLabel.setText("Buying " + NumberUtil.qty(qty) + " " + unit
                     + (Math.abs(selectedFactor[0] - 1) > 0.001
-                    ? "  (" + NumberUtil.qty(selectedFactor[0]) + " base units each)" : ""));
-            totalView.setText("Line total: " + NumberUtil.money(qty * price));
+                    ? "  (" + NumberUtil.qty(selectedFactor[0]) + " " + baseUnit + " each)" : ""));
+            String c = Prefs.currency(this);
+            totalView.setText("Line total: " + c + " " + NumberUtil.money(qty * price));
         };
 
-        unitChips.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty()) return;
-            com.google.android.material.chip.Chip chip = group.findViewById(checkedIds.get(0));
-            if (chip == null) return;
-            Object tag = chip.getTag();
-            if (tag instanceof ProductUnit) {
-                ProductUnit pu = (ProductUnit) tag;
-                selectedUnit[0] = pu.unitName == null || pu.unitName.isEmpty() ? "Unit" : pu.unitName;
-                selectedFactor[0] = Math.max(0.001, pu.factor);
-                selectedPrice[0] = pu.price > 0 ? pu.price : selectedPrice[0];
+        List<UnitOption> opts = unitOptions(p, productUnits);
+        Chip selectedChip = null;
+        for (UnitOption uo : opts) {
+            Chip chip = new Chip(this);
+            chip.setText(uo.label + (uo.factor > 1.001
+                    ? "  ·  " + NumberUtil.qty(uo.factor) + " " + baseUnit
+                    : ""));
+            chip.setTag(uo);
+            chip.setCheckable(true);
+            chip.setOnCheckedChangeListener((btn, checked) -> {
+                if (!checked) return;
+                UnitOption u = (UnitOption) btn.getTag();
+                double oldFactor = Math.max(0.001, selectedFactor[0]);
+                double base = selectedPrice[0] / oldFactor;
+                selectedUnit[0] = u.label;
+                selectedFactor[0] = u.factor;
+                selectedPrice[0] = NumberUtil.round2(base * u.factor);
                 priceInput.setText(String.valueOf(selectedPrice[0]));
-                toggle.clearChecked();
+                refreshDialog.run();
+            });
+            unitChips.addView(chip);
+            if (uo.label.equals(selectedUnit[0]) && Math.abs(uo.factor - selectedFactor[0]) < 0.001) {
+                selectedChip = chip;
             }
-            refresh.run();
-        });
+        }
+        if (selectedChip == null && unitChips.getChildCount() > 0) {
+            selectedChip = (Chip) unitChips.getChildAt(0);
+        }
+        if (selectedChip != null) {
+            selectedChip.setChecked(true);
+        }
 
-        toggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (!isChecked) return;
-            if (p != null) {
-                if (checkedId == R.id.line_btn_wholesale) {
-                    selectedUnit[0] = p.wholesaleUnit;
-                    selectedFactor[0] = Math.max(1, p.wholesaleFactor);
-                    selectedPrice[0] = p.wholesalePrice > 0 ? p.wholesalePrice : p.retailPrice;
-                } else {
-                    selectedUnit[0] = p.retailUnit;
-                    selectedFactor[0] = 1;
-                    selectedPrice[0] = p.retailPrice > 0 ? p.retailPrice : p.wholesalePrice;
-                }
-                priceInput.setText(String.valueOf(selectedPrice[0]));
-            }
-            unitChips.clearCheck();
-            refresh.run();
-        });
-
-        qtyInput.addTextChangedListener(new android.text.TextWatcher() {
+        qtyInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
-            @Override public void afterTextChanged(android.text.Editable s) { refresh.run(); }
+            @Override public void afterTextChanged(Editable s) { refreshDialog.run(); }
         });
-        priceInput.addTextChangedListener(new android.text.TextWatcher() {
+        priceInput.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
-            @Override public void afterTextChanged(android.text.Editable s) { refresh.run(); }
+            @Override public void afterTextChanged(Editable s) { refreshDialog.run(); }
         });
 
-        refresh.run();
+        refreshDialog.run();
 
         new MaterialAlertDialogBuilder(this)
-                .setTitle("Edit line")
+                .setTitle(isNew ? "Add product to purchase" : "Edit line")
                 .setView(view)
                 .setPositiveButton("Save", (dialog, which) -> {
-                    boolean fromChip = !unitChips.getCheckedChipIds().isEmpty();
                     double price = NumberUtil.parse(
                             priceInput.getText() == null ? "" : priceInput.getText().toString(),
                             selectedPrice[0]);
@@ -460,14 +625,41 @@ public class PurchaseEditActivity extends AppCompatActivity {
                     item.unitLabel = selectedUnit[0];
                     item.factor = selectedFactor[0];
                     item.unitPrice = NumberUtil.round2(Math.max(0, price));
-                    item.stockQty = item.qty * item.factor;
+                    item.stockQty = NumberUtil.round2(item.qty * item.factor);
                     item.lineTotal = NumberUtil.round2(item.qty * item.unitPrice);
-                    if (fromChip) item.isWholesale = selectedFactor[0] > 1;
-                    else item.isWholesale = wholesaleBtn.isChecked();
+                    item.isWholesale = selectedFactor[0] > 1;
+                    if (isNew) {
+                        mergeAddedItem(item);
+                    }
                     applyCostChange(item, p, item.unitPrice);
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private void mergeAddedItem(PurchaseItem added) {
+        for (PurchaseItem item : items) {
+            if (added.productId != null && item.productId != null
+                    && item.productId.equals(added.productId)
+                    && added.unitLabel != null && added.unitLabel.equals(item.unitLabel)
+                    && Math.abs(item.factor - added.factor) < 0.001) {
+                item.qty = added.qty;
+                item.factor = added.factor;
+                item.stockQty = NumberUtil.round2(item.qty * item.factor);
+                item.unitPrice = added.unitPrice;
+                item.lineTotal = NumberUtil.round2(item.qty * item.unitPrice);
+                item.isWholesale = selectedFactorOrDefault(added) > 1;
+                afterChange();
+                return;
+            }
+        }
+        items.add(added);
+        afterChange();
+        com.patechltd.salexfypos.util.SoundUtil.beep();
+    }
+
+    private double selectedFactorOrDefault(PurchaseItem item) {
+        return item.factor > 0 ? item.factor : 1;
     }
 
     private void afterChange() {
@@ -558,15 +750,15 @@ public class PurchaseEditActivity extends AppCompatActivity {
             try {
                 if (purchase.invoiceNo.isEmpty()) purchase.invoiceNo = repo.nextInvoiceNo();
                 if (editingExisting) {
-                    repo.updatePurchase(purchase, copy, false);
+                    repo.updatePurchase(purchase, copy, true);
                 } else {
-                    repo.savePurchase(purchase, copy, false);
+                    repo.savePurchase(purchase, copy, true);
                 }
                 AppLogger.i("Purchase " + purchase.invoiceNo + (editingExisting ? " updated" : " saved"));
                 handler.post(() -> {
                     Toast.makeText(this, editingExisting
-                            ? "Purchase updated. Stock re-adjusted."
-                            : "Purchase saved. Stock updated.", Toast.LENGTH_SHORT).show();
+                            ? "Purchase updated. Products' buying prices updated."
+                            : "Purchase saved. Products' buying prices updated.", Toast.LENGTH_SHORT).show();
                     finish();
                 });
             } catch (Exception e) {
@@ -655,9 +847,13 @@ public class PurchaseEditActivity extends AppCompatActivity {
         if (requestCode == REQ_BATCH && resultCode == RESULT_OK && data != null) {
             String[] ids = data.getStringArrayExtra(PurchasePickerActivity.EXTRA_IDS);
             String[] qtys = data.getStringArrayExtra(PurchasePickerActivity.EXTRA_QTYS);
+            String[] units = data.getStringArrayExtra(PurchasePickerActivity.EXTRA_UNITS);
+            String[] factors = data.getStringArrayExtra(PurchasePickerActivity.EXTRA_FACTORS);
             if (ids == null || ids.length == 0) return;
             List<Product> products = new ArrayList<>();
             List<Double> quantities = new ArrayList<>();
+            List<String> labels = new ArrayList<>();
+            List<Double> unitFactors = new ArrayList<>();
             repo.run(() -> {
                 for (int i = 0; i < ids.length; i++) {
                     Product prod = repo.products.getById(ids[i]);
@@ -666,13 +862,20 @@ public class PurchaseEditActivity extends AppCompatActivity {
                         double q = qtys != null && i < qtys.length && qtys[i] != null
                                 ? NumberUtil.parse(qtys[i], 1) : 1;
                         quantities.add(Math.max(0.001, q));
+                        labels.add(units != null && i < units.length && units[i] != null
+                                ? units[i] : defaultUnitLabel(prod));
+                        double f = factors != null && i < factors.length && factors[i] != null
+                                ? NumberUtil.parse(factors[i], 1) : 1;
+                        unitFactors.add(Math.max(0.001, f));
                     }
                 }
                 final List<Product> prods = new ArrayList<>(products);
                 final List<Double> qtysList = new ArrayList<>(quantities);
+                final List<String> unitList = new ArrayList<>(labels);
+                final List<Double> factorList = new ArrayList<>(unitFactors);
                 handler.post(() -> {
                     for (int i = 0; i < prods.size(); i++) {
-                        addPurchaseItem(prods.get(i), qtysList.get(i));
+                        addPurchaseItem(prods.get(i), qtysList.get(i), unitList.get(i), factorList.get(i));
                     }
                     Toast.makeText(this, prods.size() + " product" + (prods.size() == 1 ? "" : "s")
                             + " added", Toast.LENGTH_SHORT).show();

@@ -310,28 +310,35 @@ public class Repository {
             if (item.uid == null) item.uid = UUID.randomUUID().toString();
             item.purchaseId = purchase.uid;
             purchases.insertPurchaseItem(item);
+            if (updateCost) {
+                updateProductBuyingPrice(item);
+            }
             adjustStock(purchase.uid, item.productId, item.stockQty, MovementType.PURCHASE, item.unitLabel,
                     purchase.createdBy, "Purchase " + purchase.invoiceNo, purchase.purchaseDate);
-            if (updateCost) {
-                Product p = products.getById(item.productId);
-                if (p != null) {
-                    double current = stock.currentQty(item.productId);
-                    double newQty = current + item.stockQty;
-                    double newCost;
-                    if (newQty > 0 && item.stockQty > 0) {
-                        double costPerRetail = (item.qty > 0)
-                                ? (item.unitPrice * item.qty / item.stockQty)
-                                : item.unitPrice;
-                        newCost = ((current * p.costPrice) + (item.stockQty * costPerRetail)) / newQty;
-                    } else {
-                        newCost = item.unitPrice;
-                    }
-                    p.costPrice = Math.round(newCost * 100.0) / 100.0;
-                    p.updatedAt = System.currentTimeMillis();
-                    products.update(p);
-                }
-            }
         }
+    }
+
+    /** Refresh a product's buying price from the purchase line, weighted with existing stock. */
+    private void updateProductBuyingPrice(PurchaseItem item) {
+        if (item.productId == null) return;
+        Product p = products.getById(item.productId);
+        if (p == null) return;
+        double current = stock.currentQty(item.productId);
+        double added = Math.max(0, item.stockQty);
+        double newQty = current + added;
+        double costPerRetail = (item.stockQty > 0 && item.qty > 0)
+                ? (item.unitPrice * item.qty / item.stockQty)
+                : item.unitPrice;
+        double newCost;
+        if (newQty > 0 && added > 0) {
+            newCost = ((current * p.costPrice) + (added * costPerRetail)) / newQty;
+        } else {
+            newCost = costPerRetail;
+        }
+        if (newCost < 0) newCost = 0;
+        p.costPrice = Math.round(newCost * 100.0) / 100.0;
+        p.updatedAt = System.currentTimeMillis();
+        products.update(p);
     }
 
     @Transaction
