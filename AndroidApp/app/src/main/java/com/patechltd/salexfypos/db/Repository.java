@@ -491,6 +491,7 @@ public class Repository {
         m.productId = productId;
         m.movementType = MovementType.OPENING_STOCK.name();
         m.qty = qty;
+        m.stockBefore = 0;
         m.stockAfter = qty;
         m.refId = null;
         m.unitLabel = unitLabel;
@@ -507,7 +508,8 @@ public class Repository {
         m.productId = productId;
         m.movementType = type.name();
         m.qty = qty;
-        m.stockAfter = stock.currentQty(productId) + qty;
+        m.stockBefore = stock.currentQty(productId);
+        m.stockAfter = m.stockBefore + qty;
         m.refId = refId;
         m.unitLabel = unitLabel;
         m.note = note;

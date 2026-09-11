@@ -15,7 +15,7 @@ import com.patechltd.salexfypos.util.NumberUtil;
 import java.util.ArrayList;
 import java.util.List;
 
-public class StockAdapter extends RecyclerView.Adapter<StockAdapter.VH> {
+public class AddStockAdapter extends RecyclerView.Adapter<AddStockAdapter.VH> {
 
     public interface OnRowClick {
         void onRowClick(StockRow row);
@@ -24,36 +24,33 @@ public class StockAdapter extends RecyclerView.Adapter<StockAdapter.VH> {
     private final List<StockRow> items = new ArrayList<>();
     private final OnRowClick listener;
 
-    public StockAdapter(OnRowClick listener) {
+    public AddStockAdapter(OnRowClick listener) {
         this.listener = listener;
     }
 
     public void submit(List<StockRow> list) {
         items.clear();
-        items.addAll(list);
+        if (list != null) items.addAll(list);
         notifyDataSetChanged();
     }
 
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_stock, parent, false);
+        View view = LayoutInflater.from(parent.getContext())
+                .inflate(R.layout.item_add_stock, parent, false);
         return new VH(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull VH holder, int position) {
-        StockRow row = items.get(position);
+        final StockRow row = items.get(position);
+        String unit = row.unitLabel == null ? "" : row.unitLabel;
         holder.name.setText(row.name);
-        String bc = row.barcode == null || row.barcode.isEmpty() ? "No barcode" : row.barcode;
-        holder.barcode.setText(bc);
-        holder.qty.setText(NumberUtil.qty(row.currentQty) + " " + (row.unitLabel == null ? "" : row.unitLabel));
-        holder.reorder.setText("Reorder at " + NumberUtil.qty(row.reorderLevel));
-        holder.qty.setTextColor(holder.itemView.getContext().getColor(
-                row.currentQty <= row.reorderLevel ? R.color.error : R.color.amount_text));
-        holder.itemView.setOnClickListener(v -> {
-            if (listener != null) listener.onRowClick(row);
-        });
+        holder.current.setText("Current " + NumberUtil.qty(row.currentQty)
+                + (unit.isEmpty() ? "" : " " + unit));
+        holder.itemView.setOnClickListener(v -> listener.onRowClick(row));
+        holder.btn.setOnClickListener(v -> listener.onRowClick(row));
     }
 
     @Override
@@ -62,14 +59,14 @@ public class StockAdapter extends RecyclerView.Adapter<StockAdapter.VH> {
     }
 
     static class VH extends RecyclerView.ViewHolder {
-        final TextView name, barcode, qty, reorder;
+        final TextView name, current;
+        final View btn;
 
         VH(@NonNull View itemView) {
             super(itemView);
-            name = itemView.findViewById(R.id.product_name);
-            barcode = itemView.findViewById(R.id.product_barcode);
-            qty = itemView.findViewById(R.id.qty);
-            reorder = itemView.findViewById(R.id.reorder);
+            name = itemView.findViewById(R.id.add_name);
+            current = itemView.findViewById(R.id.add_current);
+            btn = itemView.findViewById(R.id.btn_add_row);
         }
     }
 }

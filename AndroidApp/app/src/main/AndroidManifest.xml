@@ -132,6 +132,18 @@
             android:name=".ui.stock.StockTakeActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.stock.AddStockActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.stock.AddStockAdjustActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".ui.stock.StockHistoryActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
             android:name=".ui.suppliers.SupplierEditActivity"
             android:exported="false" />
         <activity
@@ -151,6 +163,9 @@
             android:exported="false" />
         <activity
             android:name=".ui.reports.ReportsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.reports.ProductSalesReportActivity"
             android:exported="false" />
         <activity
             android:name=".ui.reports.TOTActivity"

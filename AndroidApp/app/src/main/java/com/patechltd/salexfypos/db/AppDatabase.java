@@ -64,7 +64,7 @@ import com.patechltd.salexfypos.db.entity.User;
                 Expense.class,
                 SyncChange.class, SyncLog.class
         },
-        version = 13,
+        version = 15,
         exportSchema = false
 )
 @TypeConverters({Converters.class})
@@ -104,7 +104,8 @@ public abstract class AppDatabase extends RoomDatabase {
                                     AppDatabase.class, DATABASE_NAME)
                             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                                     MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
-                                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13)
+                                    MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13,
+                                    MIGRATION_13_14, MIGRATION_14_15)
                             .fallbackToDestructiveMigration()
                             .build();
                 }
@@ -345,6 +346,52 @@ public abstract class AppDatabase extends RoomDatabase {
             database.execSQL("ALTER TABLE `purchase_items` ADD COLUMN `factor` REAL NOT NULL DEFAULT 1");
         }
     };
+
+    /** v14: record the previous balance on every stock movement so history always shows
+     *  prev -> added/removed -> new. Backfill existing rows from the stored delta, and add
+     *  a composite index so per-product history (pagination + running balance) is fast on
+     *  very large datasets. */
+    static final Migration MIGRATION_13_14 = new Migration(13, 14) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            if (!hasColumn(database, "stock_movements", "stockBefore")) {
+                database.execSQL("ALTER TABLE `stock_movements` ADD COLUMN `stockBefore` REAL NOT NULL DEFAULT 0");
+            }
+            database.execSQL("UPDATE `stock_movements` SET `stockBefore` = `stockAfter` - `qty`");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_stock_movements_productId_createdAt` "
+                    + "ON `stock_movements` (`productId`, `createdAt`)");
+        }
+    };
+
+    /** v15: guarantee the composite (productId, createdAt) index that the v14 schema expects.
+     *  Some devices reached version 14 without it (the index was added to the entity after the
+     *  v14 migration shipped/dev-builds were installed), so Room's open-time validation fails.
+     *  Since migrations only run when the version increases, this repair ships as 14->15 and
+     *  is fully idempotent for every path (13->14->15 and already-v14 devices). */
+    static final Migration MIGRATION_14_15 = new Migration(14, 15) {
+        @Override
+        public void migrate(@NonNull SupportSQLiteDatabase database) {
+            if (!hasColumn(database, "stock_movements", "stockBefore")) {
+                database.execSQL("ALTER TABLE `stock_movements` ADD COLUMN `stockBefore` REAL NOT NULL DEFAULT 0");
+                database.execSQL("UPDATE `stock_movements` SET `stockBefore` = `stockAfter` - `qty`");
+            }
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_stock_movements_productId` "
+                    + "ON `stock_movements` (`productId`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_stock_movements_createdAt` "
+                    + "ON `stock_movements` (`createdAt`)");
+            database.execSQL("CREATE INDEX IF NOT EXISTS `index_stock_movements_productId_createdAt` "
+                    + "ON `stock_movements` (`productId`, `createdAt`)");
+        }
+    };
+
+    private static boolean hasColumn(@NonNull SupportSQLiteDatabase db, String table, String column) {
+        android.database.Cursor c = db.query("SELECT 1 FROM pragma_table_info('" + table + "') WHERE name = '" + column + "'");
+        try {
+            return c.moveToFirst();
+        } finally {
+            c.close();
+        }
+    }
 
     /** Builds the database instance on a background thread so first real
      *  access is fast. Safe to call from Application.onCreate. */

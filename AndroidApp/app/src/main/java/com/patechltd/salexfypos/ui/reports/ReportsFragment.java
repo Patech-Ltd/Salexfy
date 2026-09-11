@@ -62,6 +62,8 @@ public class ReportsFragment extends Fragment {
                 startActivity(new Intent(requireContext(), com.patechltd.salexfypos.ui.sell.SalesHistoryActivity.class)));
         view.findViewById(R.id.btn_profit_report).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(), com.patechltd.salexfypos.ui.sell.ProfitReportActivity.class)));
+        view.findViewById(R.id.btn_product_sales).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), ProductSalesReportActivity.class)));
 
         load();
     }

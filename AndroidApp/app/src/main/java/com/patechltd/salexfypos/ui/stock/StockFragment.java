@@ -72,10 +72,17 @@ public class StockFragment extends Fragment {
         view.findViewById(R.id.btn_stock_summary).setOnClickListener(v ->
                 startActivity(new Intent(requireContext(),
                         com.patechltd.salexfypos.ui.stock.StockSummaryActivity.class)));
+        view.findViewById(R.id.btn_add_stock).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(),
+                        com.patechltd.salexfypos.ui.stock.AddStockActivity.class)));
         EditText search = view.findViewById(R.id.stock_search);
 
         RecyclerView stockList = view.findViewById(R.id.stock_list);
-        stockAdapter = new StockAdapter();
+        stockAdapter = new StockAdapter(row -> {
+            Intent i = new Intent(requireContext(), StockHistoryActivity.class);
+            i.putExtra(StockHistoryActivity.EXTRA_PRODUCT_ID, row.productId);
+            startActivity(i);
+        });
         stockList.setLayoutManager(new LinearLayoutManager(requireContext()));
         stockList.setAdapter(stockAdapter);
 

@@ -13,6 +13,8 @@ import com.patechltd.salexfypos.db.DayReportRow;
 import com.patechltd.salexfypos.db.DeletedSaleItemRow;
 import com.patechltd.salexfypos.db.MonthReportRow;
 import com.patechltd.salexfypos.db.PaymentMethodTotalRow;
+import com.patechltd.salexfypos.db.ProductSalesRow;
+import com.patechltd.salexfypos.db.ProductSalesSummaryRow;
 import com.patechltd.salexfypos.db.ProfitLineRow;
 import com.patechltd.salexfypos.db.SaleWithItems;
 import com.patechltd.salexfypos.db.TopProductRow;
@@ -168,6 +170,46 @@ public abstract class SaleDao {
             + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
             + "GROUP BY item.productId ORDER BY totalQty DESC LIMIT :limit")
     public abstract List<TopProductRow> getTopProducts(long from, long to, int limit);
+
+    @Query("SELECT si.productId AS productId, "
+            + "COALESCE((SELECT p.name FROM products p WHERE p.id = si.productId), si.productName) AS name, "
+            + "COALESCE((SELECT p.retailUnit FROM products p WHERE p.id = si.productId), si.unitLabel, 'Pcs') AS unitLabel, "
+            + "SUM(si.qty) AS qty, "
+            + "SUM(si.stockQty) AS stockQty, "
+            + "SUM(si.lineTotal) AS revenue, "
+            + "SUM(si.stockQty * si.costPrice) AS cost, "
+            + "SUM(si.lineTotal) - SUM(si.stockQty * si.costPrice) AS profit, "
+            + "COUNT(DISTINCT s.id) AS saleCount "
+            + "FROM sale_items si JOIN sales s ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:productId IS NULL OR si.productId = :productId) "
+            + "AND (:customerId IS NULL OR s.customerId = :customerId) "
+            + "GROUP BY si.productId "
+            + "ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    public abstract List<ProductSalesRow> getProductSales(long from, long to,
+                                                          String productId, String customerId,
+                                                          int limit, int offset);
+
+    @Query("SELECT COUNT(DISTINCT si.productId) FROM sale_items si JOIN sales s ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:productId IS NULL OR si.productId = :productId) "
+            + "AND (:customerId IS NULL OR s.customerId = :customerId)")
+    public abstract int countProductSales(long from, long to, String productId, String customerId);
+
+    @Query("SELECT COALESCE(SUM(si.qty), 0) AS qty, "
+            + "COALESCE(SUM(si.stockQty), 0) AS stockQty, "
+            + "COALESCE(SUM(si.lineTotal), 0) AS revenue, "
+            + "COALESCE(SUM(si.stockQty * si.costPrice), 0) AS cost, "
+            + "COUNT(DISTINCT s.id) AS saleCount "
+            + "FROM sale_items si JOIN sales s ON s.id = si.saleId "
+            + "WHERE s.saleDate >= :from AND s.saleDate <= :to "
+            + "AND s.status != 'DRAFT' AND s.status != 'HELD' AND s.status != 'VOID' "
+            + "AND (:productId IS NULL OR si.productId = :productId) "
+            + "AND (:customerId IS NULL OR s.customerId = :customerId)")
+    public abstract ProductSalesSummaryRow getProductSalesSummary(long from, long to,
+                                                                  String productId, String customerId);
 
     @Query("SELECT (strftime('%s', date(saleDate / 1000, 'unixepoch', 'localtime', 'start of month')) * 1000) AS monthStart, "
             + "COUNT(*) AS saleCount, "

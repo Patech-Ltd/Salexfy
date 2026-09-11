@@ -7,7 +7,11 @@ import androidx.room.Entity;
 import androidx.room.Index;
 import androidx.room.PrimaryKey;
 
-@Entity(tableName = "stock_movements", indices = {@Index("productId"), @Index("createdAt")})
+@Entity(tableName = "stock_movements", indices = {
+        @Index("productId"),
+        @Index("createdAt"),
+        @Index(value = {"productId", "createdAt"})
+})
 public class StockMovement {
 
     @PrimaryKey
@@ -20,6 +24,8 @@ public class StockMovement {
     public String movementType;
 
     public double qty;
+
+    public double stockBefore;
 
     public double stockAfter;
 

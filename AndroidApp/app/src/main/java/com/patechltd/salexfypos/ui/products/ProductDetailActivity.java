@@ -73,6 +73,11 @@ public class ProductDetailActivity extends AppCompatActivity {
         });
         findViewById(R.id.btn_delete).setOnClickListener(v -> deleteProduct());
         findViewById(R.id.btn_adjust_stock).setOnClickListener(v -> adjustStock());
+        findViewById(R.id.btn_stock_history).setOnClickListener(v -> {
+            Intent i = new Intent(this, com.patechltd.salexfypos.ui.stock.StockHistoryActivity.class);
+            i.putExtra(com.patechltd.salexfypos.ui.stock.StockHistoryActivity.EXTRA_PRODUCT_ID, productId);
+            startActivity(i);
+        });
 
         boolean canEdit = PermissionChecker.has(this, Authority.PRODUCT_EDIT);
         findViewById(R.id.btn_edit).setEnabled(canEdit);
@@ -251,27 +256,7 @@ public class ProductDetailActivity extends AppCompatActivity {
     }
 
     private void adjustStock() {
-        repo.run(() -> {
-            Product p = repo.products.getById(productId);
-            if (p == null) return;
-            double qty = repo.products.getCurrentQty(productId);
-            runOnUiThread(() -> {
-                Intent i = new Intent(this, com.patechltd.salexfypos.ui.stock.QuickStockActivity.class);
-                i.putExtra(com.patechltd.salexfypos.ui.stock.QuickStockActivity.EXTRA_IDS,
-                        new String[]{p.uid});
-                i.putExtra(com.patechltd.salexfypos.ui.stock.QuickStockActivity.EXTRA_NAMES,
-                        new String[]{p.name});
-                i.putExtra(com.patechltd.salexfypos.ui.stock.QuickStockActivity.EXTRA_UNITS,
-                        new String[]{resolveUnitName(p.retailUnitId, p.retailUnit)});
-                i.putExtra(com.patechltd.salexfypos.ui.stock.QuickStockActivity.EXTRA_CURRENT,
-                        new double[]{qty});
-                i.putExtra(com.patechltd.salexfypos.ui.stock.QuickStockActivity.EXTRA_NEEDED,
-                        new double[]{qty});
-                i.putExtra(com.patechltd.salexfypos.ui.stock.QuickStockActivity.EXTRA_HINT,
-                        "Set the stock you actually have for \"" + p.name + "\".");
-                startActivity(i);
-            });
-        });
+        startActivity(new Intent(this, com.patechltd.salexfypos.ui.stock.AddStockActivity.class));
     }
 
     private void copyUid() {

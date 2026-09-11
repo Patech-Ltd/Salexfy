@@ -34,6 +34,22 @@ public abstract class StockDao {
     @Query("SELECT * FROM stock_movements WHERE productId = :productId ORDER BY createdAt DESC LIMIT :limit")
     public abstract LiveData<List<StockMovement>> observeMovementsForProduct(String productId, int limit);
 
+    @Query("SELECT COUNT(*) FROM stock_movements WHERE productId = :productId")
+    public abstract int countMovementsForProduct(String productId);
+
+    /** Keyset-paginated fetch (runs on a worker thread, not the UI thread). Pass
+     *  beforeCreatedAt == 0 for the newest page; afterwards pass the last seen
+     *  row's createdAt + id so deep pages stay O(log n). */
+    @Query("SELECT * FROM stock_movements "
+            + "WHERE productId = :productId "
+            + "AND (:beforeCreatedAt = 0 OR createdAt < :beforeCreatedAt "
+            + "OR (createdAt = :beforeCreatedAt AND id < :beforeId)) "
+            + "ORDER BY createdAt DESC, id DESC LIMIT :limit")
+    public abstract List<StockMovement> getMovementsPage(String productId,
+                                                         long beforeCreatedAt,
+                                                         String beforeId,
+                                                         int limit);
+
     @Query("SELECT * FROM stock_movements WHERE createdAt >= :from AND createdAt <= :to ORDER BY createdAt DESC")
     public abstract LiveData<List<StockMovement>> observeMovementsBetween(long from, long to);
 
