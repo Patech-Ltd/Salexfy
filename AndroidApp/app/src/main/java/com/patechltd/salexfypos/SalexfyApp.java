@@ -11,11 +11,9 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
-import androidx.work.ExistingPeriodicWorkPolicy;
-import androidx.work.PeriodicWorkRequest;
-import androidx.work.WorkManager;
 
 import com.patechltd.salexfypos.backup.BackupWorker;
+import com.patechltd.salexfypos.backup.DriveBackupWorker;
 import com.patechltd.salexfypos.db.AppDatabase;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.license.LicenseManager;
@@ -25,8 +23,6 @@ import com.patechltd.salexfypos.util.CrashHandler;
 import com.patechltd.salexfypos.util.Notifier;
 import com.patechltd.salexfypos.util.Prefs;
 import com.patechltd.salexfypos.util.SoundUtil;
-
-import java.util.concurrent.TimeUnit;
 
 public class SalexfyApp extends Application {
 
@@ -136,21 +132,12 @@ public class SalexfyApp extends Application {
     }
 
     private void scheduleAutoBackup(Context context) {
-        int hours = Math.max(1, Prefs.getInt(context, Prefs.KEY_BACKUP_INTERVAL_HOURS, 6));
-        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(BackupWorker.class,
-                hours, TimeUnit.HOURS)
-                .build();
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                BackupWorker.UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);
+        BackupWorker.schedule(context);
+        DriveBackupWorker.schedule(context);
     }
 
     private void scheduleSync(Context context) {
-        long minutes = Math.max(15, Prefs.getLong(context, Prefs.KEY_SYNC_INTERVAL_MINUTES, 30));
-        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(SyncWorker.class,
-                minutes, TimeUnit.MINUTES)
-                .build();
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-                SyncWorker.UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);
+        SyncWorker.schedule(context);
     }
 
     @Override

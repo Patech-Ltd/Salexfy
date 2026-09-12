@@ -3,11 +3,19 @@ package com.patechltd.salexfypos.sync;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.work.BackoffPolicy;
+import androidx.work.Constraints;
+import androidx.work.ExistingPeriodicWorkPolicy;
+import androidx.work.NetworkType;
+import androidx.work.PeriodicWorkRequest;
+import androidx.work.WorkManager;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
 import com.patechltd.salexfypos.util.AppLogger;
 import com.patechltd.salexfypos.util.Prefs;
+
+import java.util.concurrent.TimeUnit;
 
 public class SyncWorker extends Worker {
 
@@ -15,6 +23,24 @@ public class SyncWorker extends Worker {
 
     public SyncWorker(@NonNull Context context, @NonNull WorkerParameters params) {
         super(context, params);
+    }
+
+    /**
+     * (Re)schedules the periodic sync with the current interval from prefs. Only runs when the
+     * device has network. Safe to call after the user changes the frequency.
+     */
+    public static void schedule(Context context) {
+        long minutes = Math.max(15, Prefs.getLong(context, Prefs.KEY_SYNC_INTERVAL_MINUTES, 30));
+        Constraints constraints = new Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build();
+        PeriodicWorkRequest request = new PeriodicWorkRequest.Builder(SyncWorker.class,
+                minutes, TimeUnit.MINUTES)
+                .setConstraints(constraints)
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 5, TimeUnit.MINUTES)
+                .build();
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                UNIQUE_NAME, ExistingPeriodicWorkPolicy.UPDATE, request);
     }
 
     @NonNull

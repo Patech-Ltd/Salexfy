@@ -94,14 +94,18 @@ public final class DriveBackupManager {
         return tmp;
     }
 
-    /** Keeps only the newest {@code keep} backups in the folder. */
+    /** Keeps only the newest {@code keep} backups in the folder. Prune errors never fail a backup. */
     private static void prune(Context context, Drive drive, String folderId, int keep) throws Exception {
-        List<DriveBackupEntry> all = listBackups(context, drive);
-        for (int i = keep; i < all.size(); i++) {
-            try {
-                drive.files().delete(all.get(i).fileId).execute();
-            } catch (Exception ignored) {
+        try {
+            List<DriveBackupEntry> all = listBackups(context, drive);
+            for (int i = keep; i < all.size(); i++) {
+                try {
+                    drive.files().delete(all.get(i).fileId).execute();
+                } catch (Exception ignored) {
+                }
             }
+        } catch (Exception e) {
+            DriveServiceHelper.log("prune backups", e);
         }
     }
 
@@ -170,19 +174,24 @@ public final class DriveBackupManager {
             log(context, "DRIVE_RESTORE", "FAILED", null, "No Drive backup found");
             return false;
         }
-        uploadSafetyCopyBeforeRestore(context, drive);
-        return restoreFile(context, drive, latest);
+        return restoreEntry(context, drive, latest);
     }
 
     /** Restores a specific named backup from Drive. */
     public static boolean restoreNamed(Context context, Drive drive, String name) throws Exception {
         for (DriveBackupEntry e : listBackups(context, drive)) {
             if (name.equals(e.name)) {
-                return restoreFile(context, drive, e);
+                return restoreEntry(context, drive, e);
             }
         }
         log(context, "DRIVE_RESTORE", "FAILED", name, "Backup not found");
         return false;
+    }
+
+    /** Restores a known Drive backup entry (uploads a safety copy of current data first). */
+    public static boolean restoreEntry(Context context, Drive drive, DriveBackupEntry entry) throws Exception {
+        uploadSafetyCopyBeforeRestore(context, drive);
+        return restoreFile(context, drive, entry);
     }
 
     private static boolean restoreFile(Context context, Drive drive, DriveBackupEntry entry) throws Exception {

@@ -12,6 +12,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.sync.SyncManager;
+import com.patechltd.salexfypos.sync.SyncWorker;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.Prefs;
@@ -84,14 +85,7 @@ public class SyncSettingsActivity extends AppCompatActivity {
     }
 
     private void save() {
-        Prefs.putBoolean(this, Prefs.KEY_SYNC_ENABLED, syncSwitch.isChecked());
-        Prefs.putString(this, Prefs.KEY_SYNC_SERVER_URL,
-                textOf(serverUrl));
-        Prefs.putString(this, Prefs.KEY_SYNC_USERNAME, textOf(username));
-        Prefs.putString(this, Prefs.KEY_SYNC_PASSWORD, textOf(password));
-        Prefs.putString(this, Prefs.KEY_LICENSE_KEY, textOf(licenseKey));
-        long minutes = parseLong(interval);
-        Prefs.putLong(this, Prefs.KEY_SYNC_INTERVAL_MINUTES, Math.max(15, minutes));
+        saveToPrefs();
         DialogUtil.toast(this, "Settings saved");
         finish();
     }
@@ -124,14 +118,20 @@ public class SyncSettingsActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void saveToPrefsSilently() {
+    private void saveToPrefs() {
         Prefs.putBoolean(this, Prefs.KEY_SYNC_ENABLED, syncSwitch.isChecked());
-        Prefs.putString(this, Prefs.KEY_SYNC_SERVER_URL, textOf(serverUrl));
+        Prefs.putString(this, Prefs.KEY_SYNC_SERVER_URL,
+                textOf(serverUrl));
         Prefs.putString(this, Prefs.KEY_SYNC_USERNAME, textOf(username));
         Prefs.putString(this, Prefs.KEY_SYNC_PASSWORD, textOf(password));
         Prefs.putString(this, Prefs.KEY_LICENSE_KEY, textOf(licenseKey));
         long minutes = parseLong(interval);
         Prefs.putLong(this, Prefs.KEY_SYNC_INTERVAL_MINUTES, Math.max(15, minutes));
+        SyncWorker.schedule(this);
+    }
+
+    private void saveToPrefsSilently() {
+        saveToPrefs();
     }
 
     private String textOf(TextInputEditText input) {

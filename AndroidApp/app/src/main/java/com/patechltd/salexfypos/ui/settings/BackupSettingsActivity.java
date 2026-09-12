@@ -3,6 +3,7 @@ package com.patechltd.salexfypos.ui.settings;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.Nullable;
@@ -15,36 +16,40 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.api.Scope;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.switchmaterial.SwitchMaterial;
-import com.google.android.material.textfield.TextInputEditText;
 import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.backup.BackupManager;
-import com.patechltd.salexfypos.drive.DriveBackupEntry;
+import com.patechltd.salexfypos.backup.BackupWorker;
+import com.patechltd.salexfypos.backup.DriveBackupWorker;
 import com.patechltd.salexfypos.drive.DriveBackupManager;
-import com.patechltd.salexfypos.drive.DriveConfig;
 import com.patechltd.salexfypos.drive.DriveServiceHelper;
 import com.patechltd.salexfypos.util.DateUtil;
 import com.patechltd.salexfypos.util.DialogUtil;
 import com.patechltd.salexfypos.util.AppLogger;
-import com.patechltd.salexfypos.util.NumberUtil;
 import com.patechltd.salexfypos.util.Prefs;
 import com.patechltd.salexfypos.util.StorageUtil;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
 public class BackupSettingsActivity extends AppCompatActivity {
 
     private static final int RC_SIGN_IN = 9001;
+    private static final long[] FREQ_HOURS = {1, 3, 6, 12, 24, 48};
+    private static final String[] FREQ_LABELS = {"Every hour", "Every 3 hours",
+            "Every 6 hours", "Every 12 hours", "Every 24 hours", "Every 48 hours"};
 
     private SwitchMaterial autoBackup;
-    private TextInputEditText backupInterval;
+    private TextView backupFrequencyValue;
+    private int frequencyHours = 6;
     private TextView lastBackup;
 
     private SwitchMaterial driveBackup;
     private TextView driveAccount;
+    private TextView driveFrequencyValue;
+    private int driveFrequencyHours = 12;
     private TextView lastDriveBackup;
+    private MaterialButton btnDriveSignIn;
     private MaterialButton btnDriveBackupNow;
     private MaterialButton btnDriveRestoreLatest;
     private MaterialButton btnDriveList;
@@ -60,12 +65,14 @@ public class BackupSettingsActivity extends AppCompatActivity {
                 .setNavigationOnClickListener(v -> finish());
 
         autoBackup = findViewById(R.id.switch_auto_backup);
-        backupInterval = findViewById(R.id.input_backup_interval);
+        backupFrequencyValue = findViewById(R.id.backup_frequency_value);
         lastBackup = findViewById(R.id.last_backup);
 
         driveBackup = findViewById(R.id.switch_drive_backup);
         driveAccount = findViewById(R.id.drive_account);
+        driveFrequencyValue = findViewById(R.id.drive_frequency_value);
         lastDriveBackup = findViewById(R.id.last_drive_backup);
+        btnDriveSignIn = findViewById(R.id.btn_drive_sign_in);
         btnDriveBackupNow = findViewById(R.id.btn_drive_backup_now);
         btnDriveRestoreLatest = findViewById(R.id.btn_drive_restore_latest);
         btnDriveList = findViewById(R.id.btn_drive_list);
@@ -74,12 +81,15 @@ public class BackupSettingsActivity extends AppCompatActivity {
 
         load();
 
+        findViewById(R.id.row_backup_frequency).setOnClickListener(v -> pickFrequency());
+        findViewById(R.id.row_drive_frequency).setOnClickListener(v -> pickDriveFrequency());
         ((MaterialButton) findViewById(R.id.btn_backup_now)).setOnClickListener(v -> backupNow());
         ((MaterialButton) findViewById(R.id.btn_restore)).setOnClickListener(v -> restore());
         ((MaterialButton) findViewById(R.id.btn_drive_sign_in)).setOnClickListener(v -> signInDrive());
         ((MaterialButton) findViewById(R.id.btn_drive_backup_now)).setOnClickListener(v -> driveBackupNow());
         ((MaterialButton) findViewById(R.id.btn_drive_restore_latest)).setOnClickListener(v -> driveRestoreLatest());
-        ((MaterialButton) findViewById(R.id.btn_drive_list)).setOnClickListener(v -> driveList());
+        ((MaterialButton) findViewById(R.id.btn_drive_list)).setOnClickListener(v -> openBackups());
+        findViewById(R.id.btn_view_backups).setOnClickListener(v -> openBackups());
         ((MaterialButton) findViewById(R.id.btn_drive_remove)).setOnClickListener(v -> removeDrive());
         ((MaterialButton) findViewById(R.id.btn_save)).setOnClickListener(v -> save());
     }
@@ -93,10 +103,67 @@ public class BackupSettingsActivity extends AppCompatActivity {
 
     private void load() {
         autoBackup.setChecked(Prefs.getBoolean(this, Prefs.KEY_BACKUP_ENABLED, true));
-        backupInterval.setText(String.valueOf(
-                Prefs.getInt(this, Prefs.KEY_BACKUP_INTERVAL_HOURS, 6)));
+        frequencyHours = Math.max(1, Prefs.getInt(this, Prefs.KEY_BACKUP_INTERVAL_HOURS, 6));
+        updateFrequencyLabel();
+        driveFrequencyHours = Math.max(1,
+                (int) Prefs.getLong(this, Prefs.KEY_BACKUP_DRIVE_INTERVAL_HOURS, 12));
+        updateDriveFrequencyLabel();
         updateLastBackup();
         updateDriveSection();
+    }
+
+    private void updateFrequencyLabel() {
+        String label = frequencyHours + " hours";
+        for (int i = 0; i < FREQ_HOURS.length; i++) {
+            if (FREQ_HOURS[i] == frequencyHours) label = FREQ_LABELS[i];
+        }
+        backupFrequencyValue.setText(label);
+    }
+
+    private void pickFrequency() {
+        int selected = 2;
+        for (int i = 0; i < FREQ_HOURS.length; i++) {
+            if (FREQ_HOURS[i] == frequencyHours) {
+                selected = i;
+                break;
+            }
+        }
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Automatic backup frequency")
+                .setSingleChoiceItems(FREQ_LABELS, selected, (dialog, which) -> {
+                    frequencyHours = (int) FREQ_HOURS[which];
+                    updateFrequencyLabel();
+                    dialog.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void updateDriveFrequencyLabel() {
+        String label = driveFrequencyHours + " hours";
+        for (int i = 0; i < FREQ_HOURS.length; i++) {
+            if (FREQ_HOURS[i] == driveFrequencyHours) label = FREQ_LABELS[i];
+        }
+        driveFrequencyValue.setText(label);
+    }
+
+    private void pickDriveFrequency() {
+        int selected = 3;
+        for (int i = 0; i < FREQ_HOURS.length; i++) {
+            if (FREQ_HOURS[i] == driveFrequencyHours) {
+                selected = i;
+                break;
+            }
+        }
+        new MaterialAlertDialogBuilder(this)
+                .setTitle("Automatic Drive upload frequency")
+                .setSingleChoiceItems(FREQ_LABELS, selected, (dialog, which) -> {
+                    driveFrequencyHours = (int) FREQ_HOURS[which];
+                    updateDriveFrequencyLabel();
+                    dialog.dismiss();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void updateLastBackup() {
@@ -106,16 +173,34 @@ public class BackupSettingsActivity extends AppCompatActivity {
     }
 
     private void updateDriveSection() {
-        String email = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, null);
-        boolean signedIn = email != null;
-        driveAccount.setText(signedIn ? "Signed in: " + email : "Not signed in");
+        String stored = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, null);
+        boolean signedIn = currentAccount() != null;
+
+        if (signedIn) {
+            driveAccount.setText("Signed in: "
+                    + (currentAccount().getEmail() != null
+                    ? currentAccount().getEmail() : stored));
+            btnDriveSignIn.setVisibility(View.GONE);
+            btnDriveRemove.setVisibility(View.VISIBLE);
+            driveRemovalHint.setVisibility(View.VISIBLE);
+        } else {
+            driveAccount.setText(stored != null
+                    ? "Signed in session expired \u2014 sign in again"
+                    : "Not signed in");
+            btnDriveSignIn.setVisibility(View.VISIBLE);
+            btnDriveRemove.setVisibility(stored != null ? View.VISIBLE : View.GONE);
+            driveRemovalHint.setVisibility(stored != null ? View.VISIBLE : View.GONE);
+        }
         driveBackup.setEnabled(signedIn);
-        driveBackup.setChecked(signedIn && Prefs.getBoolean(this, Prefs.KEY_BACKUP_DRIVE_ENABLED, false));
+        driveBackup.setChecked(signedIn
+                && Prefs.getBoolean(this, Prefs.KEY_BACKUP_DRIVE_ENABLED, true));
         btnDriveBackupNow.setEnabled(signedIn);
         btnDriveRestoreLatest.setEnabled(signedIn);
         btnDriveList.setEnabled(signedIn);
-        btnDriveRemove.setVisibility(android.view.View.VISIBLE);
-        driveRemovalHint.setVisibility(signedIn ? android.view.View.VISIBLE : android.view.View.GONE);
+        refreshLastDriveBackup();
+    }
+
+    private void refreshLastDriveBackup() {
         long last = Prefs.getLong(this, Prefs.KEY_LAST_DRIVE_BACKUP, 0);
         lastDriveBackup.setText("Last Drive backup: " + (last == 0
                 ? "Never" : DateUtil.formatDate(last) + " " + DateUtil.formatTime(last)));
@@ -123,12 +208,14 @@ public class BackupSettingsActivity extends AppCompatActivity {
 
     private void save() {
         Prefs.putBoolean(this, Prefs.KEY_BACKUP_ENABLED, autoBackup.isChecked());
-        int hours = (int) NumberUtil.parse(
-                backupInterval.getText() == null ? "" : backupInterval.getText().toString(), 6);
-        Prefs.putInt(this, Prefs.KEY_BACKUP_INTERVAL_HOURS, Math.max(1, hours));
-        String email = Prefs.getString(this, Prefs.KEY_BACKUP_DRIVE_EMAIL, null);
+        Prefs.putInt(this, Prefs.KEY_BACKUP_INTERVAL_HOURS, Math.max(1, frequencyHours));
+        boolean signedInNow = currentAccount() != null;
         Prefs.putBoolean(this, Prefs.KEY_BACKUP_DRIVE_ENABLED,
-                email != null && driveBackup.isChecked());
+                signedInNow && driveBackup.isChecked());
+        Prefs.putLong(this, Prefs.KEY_BACKUP_DRIVE_INTERVAL_HOURS,
+                Math.max(1, driveFrequencyHours));
+        BackupWorker.schedule(this);
+        DriveBackupWorker.schedule(this);
         DialogUtil.toast(this, "Settings saved");
         finish();
     }
@@ -248,7 +335,7 @@ public class BackupSettingsActivity extends AppCompatActivity {
                         DriveServiceHelper.getDrive(self, account));
                 runOnUiThread(() -> {
                     btnDriveBackupNow.setEnabled(true);
-                    updateDriveSection();
+                    refreshLastDriveBackup();
                     DialogUtil.toast(self, ok ? "Backup uploaded to Drive" : "Drive backup failed");
                 });
             } catch (Exception e) {
@@ -269,9 +356,7 @@ public class BackupSettingsActivity extends AppCompatActivity {
             DialogUtil.toast(this, "Sign in to Google Drive first");
             return;
         }
-        DialogUtil.confirm(this, "Restore latest from Drive",
-                "This will REPLACE all current data with the newest Drive backup, after "
-                        + "uploading a safety copy (slex_db_before_restore_...) of the current data. Continue?",
+        DialogUtil.confirmRestore(this, "the latest Drive backup",
                 () -> new Thread(() -> {
                     try {
                         boolean ok = DriveBackupManager.restoreLatest(self,
@@ -285,64 +370,8 @@ public class BackupSettingsActivity extends AppCompatActivity {
                 }).start());
     }
 
-    private void driveList() {
-        final BackupSettingsActivity self = this;
-        GoogleSignInAccount account = currentAccount();
-        if (account == null) {
-            DialogUtil.toast(this, "Sign in to Google Drive first");
-            return;
-        }
-        DialogUtil.toast(this, "Loading Drive backups...");
-        new Thread(() -> {
-            try {
-                List<DriveBackupEntry> all = DriveBackupManager.listBackups(self,
-                        DriveServiceHelper.getDrive(self, account));
-                runOnUiThread(() -> showDriveList(all));
-            } catch (Exception e) {
-                DriveServiceHelper.log("list", e);
-                runOnUiThread(() -> DialogUtil.toast(self, "Failed to list backups: " + e.getMessage()));
-            }
-        }).start();
-    }
-
-    private void showDriveList(List<DriveBackupEntry> all) {
-        if (all.isEmpty()) {
-            DialogUtil.toast(this, "No Drive backups found");
-            return;
-        }
-        List<String> safeNames = new ArrayList<>();
-        for (DriveBackupEntry e : all) {
-            safeNames.add(e.name + "  (" + formatCreated(e.createdTime) + ")");
-        }
-        String[] options = safeNames.toArray(new String[0]);
-        DialogUtil.pick(this, "Drive backups", options, -1, index -> {
-            if (index < 0 || index >= all.size()) return;
-            restoreNamed(all.get(index).name);
-        });
-    }
-
-    private String formatCreated(long created) {
-        if (created <= 0) return "?";
-        return DateUtil.formatDate(created) + " " + DateUtil.formatTime(created);
-    }
-
-    private void restoreNamed(String name) {
-        final BackupSettingsActivity self = this;
-        GoogleSignInAccount account = currentAccount();
-        if (account == null) return;
-        DialogUtil.confirm(this, "Restore backup",
-                "Restore \"" + name + "\"? A safety copy of the current data will be uploaded first.",
-                () -> new Thread(() -> {
-                    try {
-                        boolean ok = DriveBackupManager.restoreNamed(self,
-                                DriveServiceHelper.getDrive(self, account), name);
-                        runOnUiThread(() -> DialogUtil.toast(self,
-                                ok ? "Database restored. Restart the app." : "Restore failed"));
-                    } catch (Exception e) {
-                        DriveServiceHelper.log("restore named", e);
-                        runOnUiThread(() -> DialogUtil.toast(self, "Restore failed: " + e.getMessage()));
-                    }
-                }).start());
+    private void openBackups() {
+        startActivity(new Intent(this, BackupsActivity.class));
     }
 
     private void restore() {
@@ -417,8 +446,7 @@ public class BackupSettingsActivity extends AppCompatActivity {
         if (requestCode == StorageUtil.REQ_BACKUP && resultCode == RESULT_OK
                 && data != null && data.getData() != null) {
             final Uri uri = data.getData();
-            DialogUtil.confirm(this, "Restore database",
-                    "This will REPLACE all current data with the backup. Continue?",
+            DialogUtil.confirmRestore(this, "the selected backup file",
                     () -> new Thread(() -> {
                         boolean ok = BackupManager.restoreFromUri(BackupSettingsActivity.this, uri);
                         runOnUiThread(() -> DialogUtil.toast(BackupSettingsActivity.this,

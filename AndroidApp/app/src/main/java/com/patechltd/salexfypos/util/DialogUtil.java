@@ -81,4 +81,28 @@ public class DialogUtil {
                 .setNegativeButton("No", null)
                 .show();
     }
+
+    /**
+     * Two-step confirmation for a dangerous restore. The user must dismiss a first
+     * warning and then confirm again on a second, stronger warning before it proceeds.
+     */
+    public static void confirmRestore(Context context, String what, Runnable onYes) {
+        new MaterialAlertDialogBuilder(context)
+                .setTitle("Restore backup?")
+                .setMessage("Restoring \"" + what + "\" will REPLACE ALL current data on this device "
+                        + "\u2014 sales, products, stock, customers and settings.\n\n"
+                        + "A safety copy of your current data will be saved first. Continue?")
+                .setPositiveButton("Yes, continue", (dialog, which) ->
+                        new MaterialAlertDialogBuilder(context)
+                                .setTitle("Are you absolutely sure?")
+                                .setMessage("Restoring overwrites everything on this device.\n\n"
+                                        + "If the app is interrupted, crashes, or the backup file is damaged "
+                                        + "during the restore, your current data could be lost or corrupted.\n\n"
+                                        + "Only proceed if you really want to go back to this backup.")
+                                .setPositiveButton("Yes, restore my data", (d, w) -> onYes.run())
+                                .setNegativeButton("Cancel", null)
+                                .show())
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
 }

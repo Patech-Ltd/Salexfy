@@ -39,6 +39,7 @@ public class Prefs {
     public static final String KEY_BACKUP_DRIVE_URI = "backup_drive_uri";
     public static final String KEY_BACKUP_DRIVE_ENABLED = "backup_drive_enabled";
     public static final String KEY_BACKUP_DRIVE_EMAIL = "backup_drive_email";
+    public static final String KEY_BACKUP_DRIVE_INTERVAL_HOURS = "backup_drive_interval";
     public static final String KEY_LAST_DRIVE_BACKUP = "last_drive_backup_time";
     public static final String KEY_SYNC_ENABLED = "sync_enabled";
     public static final String KEY_SYNC_SERVER_URL = "sync_server_url";

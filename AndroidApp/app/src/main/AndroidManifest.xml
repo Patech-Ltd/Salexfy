@@ -213,6 +213,9 @@
             android:name=".ui.settings.SyncLogActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.settings.BackupsActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.settings.DebugActivity"
             android:exported="false" />
         <activity

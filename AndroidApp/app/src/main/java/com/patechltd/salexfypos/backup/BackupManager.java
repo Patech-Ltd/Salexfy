@@ -80,6 +80,13 @@ public class BackupManager {
 
     public static boolean restoreFromFile(Context context, File source) {
         try {
+            if (!isLikelyBackup(source)) {
+                String msg = "Rejected: not a valid Salexfy backup file";
+                log(context, "RESTORE", "FAILED", source.getAbsolutePath(), msg);
+                AppLogger.e(msg + ": " + source.getAbsolutePath());
+                return false;
+            }
+            safetyCopy(context);
             AppDatabase.destroyInstance();
             Repository.reset();
             File db = context.getDatabasePath(AppDatabase.DATABASE_NAME);
@@ -95,6 +102,53 @@ public class BackupManager {
             log(context, "RESTORE", "FAILED", null, e.getMessage());
             AppLogger.e("Restore failed", e);
             return false;
+        }
+    }
+
+    /**
+     * Rejects any file that cannot be the live Salexfy database. This prevents a corrupt,
+     * truncated or half-downloaded backup from ever overwriting the working database.
+     */
+    public static boolean isLikelyBackup(File file) {
+        if (file == null || !file.exists() || file.length() == 0) return false;
+        try (android.database.sqlite.SQLiteDatabase check =
+                     android.database.sqlite.SQLiteDatabase.openDatabase(
+                             file.getPath(), null,
+                             android.database.sqlite.SQLiteDatabase.OPEN_READONLY)) {
+            android.database.Cursor c = check.rawQuery("PRAGMA integrity_check(1)", null);
+            try {
+                if (c == null || !c.moveToFirst() || !"ok".equalsIgnoreCase(c.getString(0))) {
+                    return false;
+                }
+            } finally {
+                if (c != null) c.close();
+            }
+            android.database.Cursor t = check.rawQuery(
+                    "SELECT count(*) FROM sqlite_master WHERE type='table' "
+                            + "AND name IN ('products','sales','room_master_table')", null);
+            try {
+                return t != null && t.moveToFirst() && t.getInt(0) == 3;
+            } finally {
+                if (t != null) t.close();
+            }
+        } catch (Exception e) {
+            AppLogger.e("isLikelyBackup rejected " + (file == null ? "null" : file.getPath()), e);
+            return false;
+        }
+    }
+
+    /**
+     * Writes a safety copy of the current database to internal storage right before a restore
+     * overwrites it, so the user can always get back to the pre-restore data.
+     */
+    public static void safetyCopy(Context context) {
+        try {
+            File copy = new File(defaultBackupDir(context),
+                    "salexfy_backup_before_restore_" + System.currentTimeMillis() + ".db");
+            if (commitDbToCleanFile(context, copy)) {
+                log(context, "BACKUP", "OK", copy.getAbsolutePath(), "Safety copy before restore");
+            }
+        } catch (Throwable ignored) {
         }
     }
 
