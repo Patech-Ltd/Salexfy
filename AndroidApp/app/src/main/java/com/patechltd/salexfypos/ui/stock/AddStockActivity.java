@@ -15,6 +15,7 @@ import com.patechltd.salexfypos.R;
 import com.patechltd.salexfypos.adapter.AddStockAdapter;
 import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.StockRow;
+import com.patechltd.salexfypos.util.KeyboardUtil;
 
 /**
  * Choose a product, then land on the Add/Remove stock page. Every change is a
@@ -29,6 +30,7 @@ public class AddStockActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_add_stock);
+        KeyboardUtil.makeAdjustResize(findViewById(R.id.root));
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);

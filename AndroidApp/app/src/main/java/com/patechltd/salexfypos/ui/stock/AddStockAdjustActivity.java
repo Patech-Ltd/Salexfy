@@ -21,6 +21,7 @@ import com.patechltd.salexfypos.db.Repository;
 import com.patechltd.salexfypos.db.entity.Product;
 import com.patechltd.salexfypos.security.Session;
 import com.patechltd.salexfypos.util.NumberUtil;
+import com.patechltd.salexfypos.util.KeyboardUtil;
 import com.patechltd.salexfypos.util.SoundUtil;
 
 /**
@@ -40,6 +41,7 @@ public class AddStockAdjustActivity extends AppCompatActivity {
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_stock_adjust);
+        KeyboardUtil.makeAdjustResize(findViewById(R.id.root));
 
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);

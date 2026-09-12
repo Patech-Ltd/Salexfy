@@ -21,6 +21,7 @@
         <item name="android:statusBarColor">@color/brand_primary_dark</item>
         <item name="android:navigationBarColor">@color/brand_primary_dark</item>
         <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowSoftInputMode">adjustPan</item>
         <item name="materialAlertDialogTheme">@style/AppAlertDialog</item>
         <item name="materialButtonStyle">@style/Widget.App.Button</item>
     </style>
@@ -32,7 +33,7 @@
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">true</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
-        <item name="android:windowSoftInputMode">stateVisible|adjustResize</item>
+        <item name="android:windowSoftInputMode">stateVisible|adjustPan</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
 

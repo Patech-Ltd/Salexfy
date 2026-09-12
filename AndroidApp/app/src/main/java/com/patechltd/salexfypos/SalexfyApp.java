@@ -64,15 +64,11 @@ public class SalexfyApp extends Application {
                                     WindowInsetsCompat.Type.systemBars()
                             );
 
-                            Insets ime = insets.getInsets(
-                                    WindowInsetsCompat.Type.ime()
-                            );
-
                             v.setPadding(
                                     bars.left,
                                     bars.top,
                                     bars.right,
-                                    Math.max(bars.bottom, ime.bottom)
+                                    bars.bottom
                             );
 
                             return insets;
