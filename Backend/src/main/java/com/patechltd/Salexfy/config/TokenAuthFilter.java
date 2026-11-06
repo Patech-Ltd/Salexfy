@@ -28,9 +28,11 @@ public class TokenAuthFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             String token = header.substring(7).trim();
             if (auth.isValidToken(token)) {
+                List<SimpleGrantedAuthority> roles = auth.isAdminToken(token)
+                        ? List.of(new SimpleGrantedAuthority("ROLE_SYNC"), new SimpleGrantedAuthority("ROLE_ADMIN"))
+                        : List.of(new SimpleGrantedAuthority("ROLE_SYNC"));
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(token, null,
-                                List.of(new SimpleGrantedAuthority("ROLE_SYNC")));
+                        new UsernamePasswordAuthenticationToken(token, null, roles);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
         }

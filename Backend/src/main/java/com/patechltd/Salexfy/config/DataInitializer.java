@@ -13,7 +13,7 @@ public class DataInitializer implements CommandLineRunner {
     @Value("${salexfy.admin.username:admin}")
     private String adminUsername;
 
-    @Value("${salexfy.admin.password:admin123}")
+    @Value("${salexfy.admin.password:}")
     private String adminPassword;
 
     public DataInitializer(AuthService auth) {
@@ -22,6 +22,17 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        auth.ensureAdmin(adminUsername, adminPassword);
+        String pw = adminPassword;
+        boolean generated = pw == null || pw.isBlank();
+        if (generated) {
+            byte[] b = new byte[18];
+            new java.security.SecureRandom().nextBytes(b);
+            pw = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+        }
+        boolean created = auth.createAdminIfMissing(adminUsername, pw);
+        if (created && generated) {
+            org.slf4j.LoggerFactory.getLogger(DataInitializer.class)
+                    .warn("Initial admin created. username={} password={} (shown once - change it)", adminUsername, pw);
+        }
     }
 }

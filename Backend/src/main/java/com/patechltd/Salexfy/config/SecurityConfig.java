@@ -28,6 +28,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/license/validate").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/license/v2/activate", "/api/license/v2/validate").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/license/v2/public-key").permitAll()
+                        .requestMatchers("/api/admin/**", "/api/license/provision").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new TokenAuthFilter(authService),

@@ -49,12 +49,31 @@ public class AuthService {
                 .orElse(false);
     }
 
+    /** True when the bearer token belongs to an active ADMIN user. */
+    public boolean isAdminToken(String token) {
+        if (token == null || token.isBlank()) return false;
+        long now = System.currentTimeMillis();
+        return tokens.findByToken(token.trim())
+                .filter(t -> t.getExpiresAt() >= now)
+                .flatMap(t -> users.findByUsername(t.getUsername()))
+                .filter(AppUser::isActive)
+                .map(u -> "ADMIN".equals(u.getRole()))
+                .orElse(false);
+    }
+
     /** Resolves the shopId for a valid bearer token (used to scope sync). */
     public Optional<String> shopIdForToken(String token) {
         if (token == null || token.isBlank()) return Optional.empty();
         return tokens.findByToken(token.trim())
                 .filter(t -> t.getExpiresAt() >= System.currentTimeMillis())
                 .map(AuthToken::getShopId);
+    }
+
+    /** @return true if a new admin was created. */
+    public boolean createAdminIfMissing(String username, String password) {
+        if (users.findByUsername(username).isPresent()) return false;
+        ensureAdmin(username, password);
+        return true;
     }
 
     public AppUser ensureAdmin(String username, String password) {
