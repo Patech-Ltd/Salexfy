@@ -54,6 +54,9 @@ public class Prefs {
     public static final String KEY_APP_LOCK_TIMEOUT_MS = "app_lock_timeout_ms";
     public static final String KEY_LICENSE_KEY = "license_key";
     public static final String KEY_LICENSE_EXPIRY = "license_expiry";
+    public static final String KEY_PLAY_VERIFIED_AT = "play_license_verified_at";
+    public static final String KEY_LICENSE_TOKEN = "license_token";
+    public static final String KEY_LICENSE_WATERMARK = "license_time_watermark";
     public static final String KEY_SHOP_ID = "shop_id";
     public static final String KEY_THEME_MODE = "theme_mode";
 

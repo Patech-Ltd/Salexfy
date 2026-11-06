@@ -131,7 +131,7 @@
                         android:layout_marginTop="8dp"
                         android:hint="License key (if licensed)"
                         app:counterEnabled="true"
-                        app:counterMaxLength="24"
+                        app:counterMaxLength="32"
                         app:helperText="Leave blank for offline/unlicensed use">
 
                         <com.google.android.material.textfield.TextInputEditText

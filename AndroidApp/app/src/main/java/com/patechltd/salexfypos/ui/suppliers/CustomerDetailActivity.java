@@ -36,6 +36,7 @@ public class CustomerDetailActivity extends AppCompatActivity {
     private TextView name, phone, outstanding, creditLimit, loyaltyPoints, totalSpent;
     private KeyValueAdapter salesAdapter, paymentsAdapter;
     private Customer customer;
+    private double outstandingNow;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -100,6 +101,7 @@ public class CustomerDetailActivity extends AppCompatActivity {
                 name.setText(customer.name);
                 phone.setText(customer.phone == null || customer.phone.isEmpty() ? "" : customer.phone);
                 double outstandingVal = debt - paid;
+                outstandingNow = outstandingVal;
                 outstanding.setText(currency + " " + NumberUtil.money(outstandingVal));
                 creditLimit.setText(customer.creditLimit <= 0 ? "Unlimited" : currency + " " + NumberUtil.money(customer.creditLimit));
                 loyaltyPoints.setText(NumberUtil.qty(customer.loyaltyPoints));
@@ -107,8 +109,9 @@ public class CustomerDetailActivity extends AppCompatActivity {
 
                 List<KeyValueAdapter.Row> sRows = new ArrayList<>();
                 for (Sale s : sales) {
+                    double owed = s.total - s.paidAmount;
                     sRows.add(new KeyValueAdapter.Row(
-                            "#" + s.saleNo,
+                            "#" + s.saleNo + (owed > 0.009 ? "  · on credit " + NumberUtil.money(owed) : ""),
                             DateUtil.formatDate(s.saleDate) + " · "
                                     + com.patechltd.salexfypos.model.PaymentMethod.labelOf(s.paymentMethod),
                             currency + " " + NumberUtil.money(s.total),
@@ -121,7 +124,8 @@ public class CustomerDetailActivity extends AppCompatActivity {
                 for (DebtPayment p : payments) {
                     pRows.add(new KeyValueAdapter.Row(
                             DateUtil.formatDate(p.paymentDate),
-                            p.method == null ? "" : p.method,
+                            (p.method == null ? "" : p.method)
+                                    + (p.notes == null || p.notes.isEmpty() ? "" : " · " + p.notes),
                             "+ " + currency + " " + NumberUtil.money(p.amount),
                             successColor));
                 }
@@ -132,24 +136,87 @@ public class CustomerDetailActivity extends AppCompatActivity {
     }
 
     private void recordPayment() {
-        DialogUtil.input(this, "Record payment", "Amount", "", "Save", value -> {
-            double amount = NumberUtil.parse(value, -1);
-            if (amount <= 0) {
-                DialogUtil.toast(this, "Enter a valid amount");
-                return;
-            }
-            repo.run(() -> {
-                DebtPayment p = new DebtPayment();
-                p.uid = UUID.randomUUID().toString();
-                p.customerId = customerId;
-                p.amount = amount;
-                p.paymentDate = System.currentTimeMillis();
-                p.method = "Cash";
-                p.createdBy = Session.userId(this);
-                p.createdAt = System.currentTimeMillis();
-                repo.recordPayment(p);
-                handler.post(this::load);
-            });
-        });
+        final double owing = NumberUtil.round2(outstandingNow);
+        if (owing <= 0.009) {
+            DialogUtil.toast(this, "This customer has no outstanding balance");
+            return;
+        }
+        final List<com.patechltd.salexfypos.db.entity.PaymentMethod> methods = new ArrayList<>();
+        for (com.patechltd.salexfypos.db.entity.PaymentMethod m : com.patechltd.salexfypos.util.PaymentMethods.active()) {
+            if (!m.isCredit) methods.add(m);
+        }
+        final String[] labels = new String[methods.size()];
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = methods.get(i).name == null ? methods.get(i).id : methods.get(i).name;
+        }
+
+        final android.widget.LinearLayout box = new android.widget.LinearLayout(this);
+        box.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = (int) (20 * getResources().getDisplayMetrics().density);
+        box.setPadding(pad, pad / 2, pad, 0);
+
+        final TextView info = new TextView(this);
+        info.setText("Outstanding balance: " + NumberUtil.money(owing));
+        info.setTextSize(15);
+        box.addView(info);
+
+        final android.widget.EditText amountIn = new android.widget.EditText(this);
+        amountIn.setHint("Amount received");
+        amountIn.setInputType(android.text.InputType.TYPE_CLASS_NUMBER
+                | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        amountIn.setText(NumberUtil.money(owing));
+        amountIn.selectAll();
+        box.addView(amountIn);
+
+        final android.widget.Spinner methodSp = new android.widget.Spinner(this);
+        if (labels.length > 0) {
+            methodSp.setAdapter(new android.widget.ArrayAdapter<>(this,
+                    android.R.layout.simple_spinner_dropdown_item, labels));
+        }
+        box.addView(methodSp);
+
+        final android.widget.EditText noteIn = new android.widget.EditText(this);
+        noteIn.setHint("Note (optional)");
+        noteIn.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        box.addView(noteIn);
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("Record payment")
+                .setView(box)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Save", (d, w) -> {
+                    double amount = NumberUtil.round2(NumberUtil.parse(amountIn.getText().toString(), -1));
+                    if (amount <= 0) {
+                        DialogUtil.toast(this, "Enter a valid amount");
+                        return;
+                    }
+                    if (amount > owing + 0.009) {
+                        DialogUtil.toast(this, "Amount exceeds the outstanding balance ("
+                                + NumberUtil.money(owing) + ")");
+                        return;
+                    }
+                    final String methodName = methods.isEmpty() ? "Cash"
+                            : labels[Math.max(0, methodSp.getSelectedItemPosition())];
+                    final String note = noteIn.getText().toString().trim();
+                    final double finalAmount = amount;
+                    repo.run(() -> {
+                        DebtPayment p = new DebtPayment();
+                        p.uid = UUID.randomUUID().toString();
+                        p.customerId = customerId;
+                        p.amount = finalAmount;
+                        p.paymentDate = System.currentTimeMillis();
+                        p.method = methodName;
+                        p.notes = note.isEmpty() ? null : note;
+                        p.createdBy = Session.userId(this);
+                        p.createdAt = System.currentTimeMillis();
+                        repo.recordPayment(p);
+                        handler.post(() -> {
+                            DialogUtil.toast(this, finalAmount >= owing - 0.009
+                                    ? "Balance cleared" : "Payment recorded");
+                            load();
+                        });
+                    });
+                })
+                .show();
     }
 }

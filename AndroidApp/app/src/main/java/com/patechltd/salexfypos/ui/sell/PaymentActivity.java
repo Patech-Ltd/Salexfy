@@ -306,6 +306,13 @@ public class PaymentActivity extends AppCompatActivity {
                 pickCustomer();
                 return;
             }
+            double room = NumberUtil.round2(remaining());
+            if (amount > room + 0.009) {
+                DialogUtil.toast(this, "Credit cannot exceed the amount still due ("
+                        + NumberUtil.money(room) + ")");
+                return;
+            }
+            if (!withinCreditLimit(creditAccount, amount)) return;
             lines.add(new PaymentLine(method, amount, creditAccount.uid, creditAccount.name));
         } else {
             lines.add(new PaymentLine(method, amount, null, null));
@@ -313,6 +320,26 @@ public class PaymentActivity extends AppCompatActivity {
         payAmount.setText("");
         renderLines();
         updateSummary();
+    }
+
+    /** Blocks a credit line that would push the customer past their credit limit (0 = unlimited). */
+    private boolean withinCreditLimit(Customer c, double extra) {
+        if (c == null || c.creditLimit <= 0) return true;
+        double pending = 0;
+        for (PaymentLine line : lines) {
+            if (line.method != null && line.method.isCredit && c.uid.equals(line.customerId)) {
+                pending += line.amount;
+            }
+        }
+        double projected = customerDebt(c) + pending + extra;
+        if (projected > c.creditLimit + 0.009) {
+            double available = Math.max(0, c.creditLimit - customerDebt(c) - pending);
+            DialogUtil.toast(this, c.name + " would exceed the credit limit of "
+                    + NumberUtil.money(c.creditLimit) + " (available: "
+                    + NumberUtil.money(available) + ")");
+            return false;
+        }
+        return true;
     }
 
     private void selectCashChip() {
@@ -551,6 +578,10 @@ public class PaymentActivity extends AppCompatActivity {
         sb.append("Credit account: ").append(creditAccount.name);
         if (debt > 0.01) sb.append("  •  Existing balance ").append(NumberUtil.money(debt));
         if (newLoan > 0.01) sb.append("  •  New loan ").append(NumberUtil.money(newLoan));
+        if (creditAccount.creditLimit > 0) {
+            sb.append("  •  Available credit ").append(NumberUtil.money(
+                    Math.max(0, creditAccount.creditLimit - debt - already)));
+        }
         if (debt <= 0.01 && newLoan <= 0.01) sb.append("  •  No balance");
         debtRow.setText(sb.toString());
         debtRow.setVisibility(View.VISIBLE);

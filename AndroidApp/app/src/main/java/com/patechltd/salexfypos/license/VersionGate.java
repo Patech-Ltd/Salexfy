@@ -30,6 +30,8 @@ public final class VersionGate {
 
     /** True when THIS installation is a post-cutoff (forbidden) install. */
     public static boolean isBlocked(Context context) {
+        // In backend-licensing mode the server decides; the legacy install-date gate is bypassed.
+        if (LicenseConfig.MODE != LicenseConfig.Mode.LEGACY) return false;
         long installTime = installTimeMillis(context);
         if (installTime <= 0) return false;      // unknown → fail open
         return installTime >= cutoffMillis();

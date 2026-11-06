@@ -47,6 +47,12 @@ public final class LicenseManager {
     }
 
     public static Result validate(Context context) {
+        if (LicenseConfig.MODE == LicenseConfig.Mode.GOOGLE_PLAY) {
+            return PlayLicense.validate(context);
+        }
+        if (LicenseBackend.isBackendMode(context)) {
+            return LicenseBackend.validate(context);
+        }
         String licenseKey = Prefs.getString(context, Prefs.KEY_LICENSE_KEY, "");
         if (licenseKey == null || licenseKey.trim().isEmpty()) {
             // No license configured yet — offline installs run in trial/self-managed mode.

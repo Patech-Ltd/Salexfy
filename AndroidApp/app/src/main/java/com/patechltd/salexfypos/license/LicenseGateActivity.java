@@ -28,6 +28,7 @@ public class LicenseGateActivity extends AppCompatActivity {
     private TextView messageText;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean stopping;
+    private final PlayLicense.Session playSession = new PlayLicense.Session();
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -41,6 +42,26 @@ public class LicenseGateActivity extends AppCompatActivity {
             startActivity(new Intent(this, SyncSettingsActivity.class));
         });
         findViewById(R.id.btn_continue_offline).setOnClickListener(v -> continueOffline());
+
+        if (LicenseConfig.MODE == LicenseConfig.Mode.GOOGLE_PLAY) {
+            findViewById(R.id.btn_buy).setVisibility(android.view.View.VISIBLE);
+            findViewById(R.id.btn_buy).setOnClickListener(v -> PlayLicense.startPurchase(this, playSession,
+                    new PlayLicense.PurchaseCallback() {
+                        @Override
+                        public void onPurchased() {
+                            continueOffline();
+                        }
+
+                        @Override
+                        public void onMessage(String m) {
+                            messageText.setText(m);
+                        }
+                    }));
+            ((com.google.android.material.button.MaterialButton) findViewById(R.id.btn_retry))
+                    .setText("Restore purchase");
+            findViewById(R.id.btn_settings).setVisibility(android.view.View.GONE);
+            findViewById(R.id.btn_continue_offline).setVisibility(android.view.View.GONE);
+        }
 
         String message = getIntent().getStringExtra("message");
         boolean expired = getIntent().getBooleanExtra("expired", false);
@@ -78,6 +99,12 @@ public class LicenseGateActivity extends AppCompatActivity {
                 });
             }
         }).start();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        playSession.close();
     }
 
     private void continueOffline() {
