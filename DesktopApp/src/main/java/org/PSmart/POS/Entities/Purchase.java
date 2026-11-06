@@ -43,6 +43,16 @@ public class Purchase {
 
     private String status;
 
+    /** The StockFeed this purchase booked into stock (null for older rows). */
+    private UUID feedUid;
+
+    /** Audit trail for edits and cancellations (cancelled rows are kept, just hidden from totals). */
+    private Long cancelledAt;
+    private String cancelReason;
+    private String cancelledBy;
+    private Long editedAt;
+    private String editedBy;
+
     private boolean deleted;
 
     @OneToMany(mappedBy = "purchase", cascade = CascadeType.ALL, fetch = FetchType.EAGER)

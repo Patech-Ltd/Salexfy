@@ -23,13 +23,16 @@ public final class PurchaseQueries {
         return DatabaseUtils.getInstance().getEmf().createEntityManager();
     }
 
-    public static List<Row> rows() {
+    public static List<Row> rows() { return rows(false); }
+
+    /** @param cancelled true = only cancelled purchases (kept for audit), false = the live ones. */
+    public static List<Row> rows(boolean cancelled) {
         EntityManager em = em();
         try {
             List<Row> out = new ArrayList<>();
             for (Object o : em.createQuery("SELECT p.uid, p.createdAt, p.supplierName, p.invoiceNumber, p.status, p.total, p.paidAmount, "
                     + "(SELECT COUNT(i) FROM PurchaseItem i WHERE i.purchase = p AND i.deleted = false) "
-                    + "FROM Purchase p WHERE p.deleted=false ORDER BY p.createdAt DESC").getResultList()) {
+                    + "FROM Purchase p WHERE " + (cancelled ? "p.deleted=true AND p.cancelledAt IS NOT NULL" : "p.deleted=false") + " ORDER BY p.createdAt DESC").getResultList()) {
                 Object[] r = (Object[]) o;
                 Row x = new Row();
                 x.uid = (UUID) r[0];

@@ -1145,31 +1145,20 @@ public class CashierPanel extends JPanel {
 
     private void openItemGrid() {
         if (!"CART".equals(step)) return;
-        GridtemsSearch grid = new GridtemsSearch();
-        grid.setSubmitAction(e -> {
-            addGridSelection(grid.getSelectedCartsItems());
-            grid.dispose();
-        });
+        new org.PSmart.POS.Utils.Components.ItemPicker("Browse items", "Add to sale", false, this::addPicks);
     }
 
     private void openItemSearch() {
         if (!"CART".equals(step)) return;
-        SearchItemListPrompt prompt = new SearchItemListPrompt();
-        prompt.itemSelectedRunnable = new ItemSelectedRunnable() {
-            @Override public void run() {
-                prompt.dispose();
-                addItemToCart(getClickedItem(), 1.0);
-                toast("Added: " + getClickedItem().getName());
-            }
-        };
+        new org.PSmart.POS.Utils.Components.ItemPicker("Search items", "Add to sale", true, this::addPicks);
     }
 
-    private void addGridSelection(List<GridItemJpanel> selected) {
-        if (selected == null) return;
-        for (GridItemJpanel panel : selected) {
-            Double qty = MyUtils.getDouble(panel.getQuantity().getText());
-            if (qty > 0 && panel.getItem() != null) addItemToCart(panel.getItem(), qty);
+    private void addPicks(List<org.PSmart.POS.Utils.Components.ItemPicker.Pick> picks) {
+        int n = 0;
+        for (org.PSmart.POS.Utils.Components.ItemPicker.Pick p : picks) {
+            if (p.quantity > 0 && p.item != null) { addItemToCart(p.item, p.quantity); n++; }
         }
+        if (n > 0) toast(n == 1 ? "Added: " + picks.get(0).item.getName() : "Added " + n + " items");
     }
 
     // ================================================================== checkout flow

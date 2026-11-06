@@ -18,7 +18,7 @@ final class UsersPanel extends ListPage {
     UsersPanel(User logged) {
         super("+   Add New User", "Search user", new String[]{"Name", "Username", "Phone", "Role", "Commission", "Status"});
         this.logged = logged;
-        JButton edit = Ui.primary("Edit User");
+        JButton edit = Ui.primary("Open User");
         edit.addActionListener(e -> onOpen());
         actions.add(edit);
         actions.add(status);
@@ -64,6 +64,6 @@ final class UsersPanel extends ListPage {
 
     @Override protected void onOpen() {
         Object id = selectedId();
-        if (id != null) new UserForm((UUID) id, logged, this::load);
+        if (id != null) new UserDetailForm((UUID) id, logged, this::load);
     }
 }

@@ -79,11 +79,11 @@ public class SuppliersPanel extends JPanel {
             if (owing <= 0.009) flash("Nothing is owed to " + n + ".");
             else SupplierForms.pay(n, owing, user, this::load);
         }));
-        stmt.addActionListener(e -> withSelection(SupplierForms::statement));
+        stmt.addActionListener(e -> withSelection(n -> SupplierForms.statement(n, user)));
         export.addActionListener(e -> export());
         table.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                if (e.getClickCount() == 2) withSelection(SupplierForms::statement);
+                if (e.getClickCount() == 2) withSelection(n -> SupplierForms.statement(n, user));
             }
         });
         search.getField().addKeyListener(new java.awt.event.KeyAdapter() {

@@ -145,11 +145,13 @@ final class SupplierForms {
 
     // ------------------------------------------------------------------ statement
 
-    static void statement(String name) {
+    static void statement(String name, User user) {
         DefaultTableModel m = new DefaultTableModel(new String[]{"Date", "Type", "Reference", "Change", "Balance"}, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
         double balance = 0;
+        final List<UUID> rowIds = new ArrayList<>();
+        final List<Boolean> rowIsPayment = new ArrayList<>();
         EntityManager em = DatabaseUtils.getInstance().getEmf().createEntityManager();
         try {
             List<Object[]> ev = new ArrayList<>();
@@ -159,18 +161,20 @@ final class SupplierForms {
                 double paid = p.getPaidAmount() == null ? total : p.getPaidAmount();
                 ev.add(new Object[]{p.getCreatedAt() == null ? 0L : p.getCreatedAt(), "Purchase",
                         (p.getInvoiceNumber() == null ? "" : "Inv " + p.getInvoiceNumber() + " - ")
-                                + "total " + money(total) + ", paid " + money(paid), total - paid});
+                                + "total " + money(total) + ", paid " + money(paid), total - paid, p.getUid(), false});
             }
             for (SupplierPayment sp : em.createQuery("FROM SupplierPayment sp WHERE sp.deleted=false AND LOWER(sp.supplierName)=:n",
                     SupplierPayment.class).setParameter("n", key(name)).getResultList()) {
                 ev.add(new Object[]{sp.getCreatedAt() == null ? 0L : sp.getCreatedAt(), "Payment",
-                        nz(sp.getMethod()) + (nz(sp.getNotes()).isEmpty() ? "" : " - " + sp.getNotes()), -sp.getAmount()});
+                        nz(sp.getMethod()) + (nz(sp.getNotes()).isEmpty() ? "" : " - " + sp.getNotes()), -sp.getAmount(), sp.getUid(), true});
             }
             ev.sort(Comparator.comparingLong(a -> (Long) a[0]));
             SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm");
             for (Object[] e : ev) {
                 double d = (Double) e[3];
                 balance += d;
+                rowIds.add((UUID) e[4]);
+                rowIsPayment.add((Boolean) e[5]);
                 m.addRow(new Object[]{df.format(new Date((Long) e[0])), e[1], e[2], (d > 0 ? "+" : "") + money(d), money(balance)});
             }
         } finally {
@@ -182,7 +186,32 @@ final class SupplierForms {
         JTable t = new JTable(m);
         Ui.styleTable(t);
         t.getColumnModel().getColumn(2).setPreferredWidth(360);
+        t.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         f.custom(new JScrollPane(t), 360);
+        f.note("Double-click a purchase to open it. To undo a payment, select it below and cancel it.");
+        t.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                int r = t.getSelectedRow();
+                if (e.getClickCount() == 2 && r >= 0 && r < rowIds.size() && !rowIsPayment.get(r))
+                    org.PSmart.POS.ui.MainView.ui.purchases.PurchaseViewForm.open(rowIds.get(r), user, () -> { f.dispose(); statement(name, user); });
+            }
+        });
+        FormFrame.Section sec = f.section("Cancel a payment", false);
+        PTextField reason = sec.field("Reason for cancelling (required)", "");
+        f.errorLine();
+        f.danger("Cancel Selected Payment", () -> {
+            sec.setOpen(true);
+            int r = t.getSelectedRow();
+            if (r < 0 || r >= rowIds.size() || !rowIsPayment.get(r)) { f.error("Select a payment row in the table first."); return; }
+            if (reason.getText().trim().length() < 3) { f.error("Enter a reason for cancelling (at least 3 letters)."); return; }
+            String by = org.PSmart.POS.Utils.Components.forms.TxnUi.authorise(f, user, org.PSmart.POS.Entities.RoleType.PURCHASE, "cancel a supplier payment");
+            if (by == null) return;
+            String err = org.PSmart.POS.Repositories.TxnService.cancelSupplierPayment(rowIds.get(r), reason.getText().trim(), by);
+            if (err != null) { f.error(err); return; }
+            Ui.toast("Payment cancelled - balance owed updated");
+            f.dispose();
+            statement(name, user);
+        });
         f.secondary("Close", f::dispose);
         f.open();
     }

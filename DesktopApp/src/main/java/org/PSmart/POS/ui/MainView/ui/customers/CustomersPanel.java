@@ -43,7 +43,7 @@ public class CustomersPanel extends ListPage {
         JButton export = Ui.neutral("Export Excel");
         edit.addActionListener(e -> onOpen());
         pay.addActionListener(e -> { Object id = selectedId(); if (id != null) CustomerForms.collect((UUID) id, user, this::load); });
-        stmt.addActionListener(e -> { Object id = selectedId(); if (id != null) CustomerForms.ledger((UUID) id, names.get(table.getSelectedRow())); });
+        stmt.addActionListener(e -> { Object id = selectedId(); if (id != null) CustomerForms.ledger((UUID) id, names.get(table.getSelectedRow()), user); });
         export.addActionListener(e -> export());
         for (JButton b : new JButton[]{edit, pay, stmt, export}) actions.add(b);
         actions.add(status);

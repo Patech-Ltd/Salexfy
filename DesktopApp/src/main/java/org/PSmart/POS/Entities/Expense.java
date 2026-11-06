@@ -38,6 +38,13 @@ public class Expense {
 
     private String notes;
 
+    /** Audit trail for edits and cancellations (cancelled rows are kept, just hidden from totals). */
+    private Long cancelledAt;
+    private String cancelReason;
+    private String cancelledBy;
+    private Long editedAt;
+    private String editedBy;
+
     private boolean deleted;
 
     @OneToMany(mappedBy = "expense", cascade = CascadeType.ALL, fetch = FetchType.EAGER)

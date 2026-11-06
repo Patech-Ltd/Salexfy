@@ -97,6 +97,23 @@ public class PurchasesPanel extends JPanel {
             refreshBtn.addActionListener(e -> loadPurchases());
             right.add(refreshBtn);
 
+            JButton openBtn = new JButton("Open / Edit / Cancel");
+            openBtn.setFont(new Font("Courier", Font.BOLD, 13));
+            openBtn.setBackground(new Color(0, 0, 137));
+            openBtn.setForeground(Color.WHITE);
+            openBtn.setFocusPainted(false);
+            openBtn.setBorderPainted(false);
+            openBtn.setToolTipText("Select a purchase first (or double-click it)");
+            openBtn.addActionListener(e -> openSelectedPurchase());
+            right.add(openBtn);
+
+            showCancelledP = new JCheckBox("Show cancelled");
+            showCancelledP.setOpaque(false);
+            showCancelledP.setForeground(Color.WHITE);
+            showCancelledP.setFont(new Font("Courier", Font.BOLD, 13));
+            showCancelledP.addActionListener(e -> loadPurchases());
+            right.add(showCancelledP);
+
             JButton printBtn = new JButton("Print / Preview Invoice");
             printBtn.setFont(new Font("Courier", Font.BOLD, 13));
             printBtn.setBackground(new Color(52, 58, 64));
@@ -113,6 +130,17 @@ public class PurchasesPanel extends JPanel {
 
         private List<UUID> shownPurchases = new ArrayList<>();
         private JLabel countValL, spendValL, todayValL;
+
+        private JCheckBox showCancelledP;
+
+        private void openSelectedPurchase() {
+            int r = table.getSelectedRow();
+            if (r < 0 || r >= shownPurchases.size()) {
+                AutoClosingNotification.sendNotification("Select a purchase in the list first");
+                return;
+            }
+            PurchaseViewForm.open(shownPurchases.get(r), getLoggedUser(), this::loadPurchases);
+        }
 
         private void previewSelectedPurchase() {
             int r = table.getSelectedRow();
@@ -189,7 +217,7 @@ public class PurchasesPanel extends JPanel {
 
             table.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                    if (e.getClickCount() == 2) previewSelectedPurchase();
+                    if (e.getClickCount() == 2) openSelectedPurchase();
                 }
             });
             JScrollPane sp = new JScrollPane(table);
@@ -204,7 +232,7 @@ public class PurchasesPanel extends JPanel {
             shownPurchases = new ArrayList<>();
             List<org.PSmart.POS.Repositories.PurchaseQueries.Row> list;
             try {
-                list = org.PSmart.POS.Repositories.PurchaseQueries.rows();
+                list = org.PSmart.POS.Repositories.PurchaseQueries.rows(showCancelledP != null && showCancelledP.isSelected());
             } catch (Exception ex) {
                 AutoClosingNotification.sendNotification("Could not load purchases: " + ex.getMessage());
                 return;
@@ -222,7 +250,7 @@ public class PurchasesPanel extends JPanel {
                         p.ref, p.createdAt > 0 ? sdf.format(new Date(p.createdAt)) : "N/A",
                         p.supplier.isEmpty() ? "N/A" : p.supplier, p.invoice.isEmpty() ? "N/A" : p.invoice, p.items,
                         "KES " + MyUtils.formatCurrency(String.valueOf(p.total)),
-                        owed > 0.004 ? "OWING " + MyUtils.formatCurrency(String.valueOf(owed)) : "PAID"
+                        "CANCELLED".equals(p.status) ? "CANCELLED" : owed > 0.004 ? "OWING " + MyUtils.formatCurrency(String.valueOf(owed)) : "PAID"
                 });
             }
             if (countValL != null) countValL.setText(String.valueOf(list.size()));
@@ -250,6 +278,8 @@ public class PurchasesPanel extends JPanel {
         private JTable table;
         private ExpenseRepository repo = DatabaseUtils.getInstance().getExpenseRepository();
         private JLabel totalVal, todayVal;
+        private JCheckBox showCancelledE;
+        private List<UUID> shownExpenses = new ArrayList<>();
 
         ExpensesSubPanel() {
             setLayout(new BorderLayout());
@@ -281,6 +311,23 @@ public class PurchasesPanel extends JPanel {
             newBtn.setBorderPainted(false);
             newBtn.addActionListener(e -> openExpenseForm());
             right.add(newBtn);
+
+            JButton openBtn = new JButton("Open / Edit / Cancel");
+            openBtn.setFont(new Font("Courier", Font.BOLD, 13));
+            openBtn.setBackground(new Color(0, 0, 137));
+            openBtn.setForeground(Color.WHITE);
+            openBtn.setFocusPainted(false);
+            openBtn.setBorderPainted(false);
+            openBtn.setToolTipText("Select an expense first (or double-click it)");
+            openBtn.addActionListener(e -> openSelectedExpense());
+            right.add(openBtn);
+
+            showCancelledE = new JCheckBox("Show cancelled");
+            showCancelledE.setOpaque(false);
+            showCancelledE.setForeground(Color.WHITE);
+            showCancelledE.setFont(new Font("Courier", Font.BOLD, 13));
+            showCancelledE.addActionListener(e -> loadExpenses());
+            right.add(showCancelledE);
 
             JButton refreshBtn = new JButton("Refresh");
             refreshBtn.setFont(new Font("Courier", Font.BOLD, 13));
@@ -330,6 +377,11 @@ public class PurchasesPanel extends JPanel {
                 public boolean isCellEditable(int r, int c) { return false; }
             };
             table = new JTable(tableModel);
+            table.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getClickCount() == 2) openSelectedExpense();
+                }
+            });
             table.setRowHeight(38);
             table.setFont(new Font("Courier", Font.PLAIN, 13));
             JTableHeader h = table.getTableHeader();
@@ -350,26 +402,44 @@ public class PurchasesPanel extends JPanel {
 
         void loadExpenses() {
             tableModel.setRowCount(0);
-            List<Expense> list = repo.findAllExpenses();
+            shownExpenses = new ArrayList<>();
+            boolean cancelled = showCancelledE != null && showCancelledE.isSelected();
+            List<Object[]> list;
+            try {
+                list = org.PSmart.POS.Repositories.TxnService.expenseRows(cancelled);
+            } catch (Exception ex) {
+                AutoClosingNotification.sendNotification("Could not load expenses: " + ex.getMessage());
+                return;
+            }
             SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy");
             double total = 0, today = 0;
             String todayKey = sdf.format(new Date());
-            for (Expense e : list) {
-                double a = e.getAmount() == null ? 0 : e.getAmount();
+            for (Object[] e : list) {
+                UUID uid = (UUID) e[0];
+                shownExpenses.add(uid);
+                Long at = e[1] == null ? null : ((Number) e[1]).longValue();
+                double a = e[4] == null ? 0 : ((Number) e[4]).doubleValue();
                 total += a;
-                if (e.getCreatedAt() != null && sdf.format(new Date(e.getCreatedAt())).equals(todayKey)) today += a;
-                String date = e.getCreatedAt() != null ? sdf.format(new Date(e.getCreatedAt())) : "N/A";
+                if (at != null && sdf.format(new Date(at)).equals(todayKey)) today += a;
                 tableModel.addRow(new Object[]{
-                        e.getReferenceNumber(), date,
-                        e.getCategory() != null ? e.getCategory() : "N/A",
-                        e.getDescription() != null ? e.getDescription() : "N/A",
-                        "KES " + MyUtils.formatCurrency(String.valueOf(e.getAmount() != null ? e.getAmount() : 0)),
-                        e.getPaymentMethod() != null ? e.getPaymentMethod() : "Cash",
-                        "Completed"
+                        "EXP-" + String.format("%06d", uid.hashCode() & 0xFFFFFF), at != null ? sdf.format(new Date(at)) : "N/A",
+                        e[2] != null ? e[2] : "N/A", e[3] != null ? e[3] : "N/A",
+                        "KES " + MyUtils.formatCurrency(String.valueOf(a)),
+                        e[5] != null ? e[5] : "Cash",
+                        cancelled ? "CANCELLED" : "Completed"
                 });
             }
             totalVal.setText("KES " + MyUtils.formatCurrency(String.valueOf(total)));
             todayVal.setText("KES " + MyUtils.formatCurrency(String.valueOf(today)));
+        }
+
+        private void openSelectedExpense() {
+            int r = table.getSelectedRow();
+            if (r < 0 || r >= shownExpenses.size()) {
+                AutoClosingNotification.sendNotification("Select an expense in the list first");
+                return;
+            }
+            ExpenseViewForm.open(shownExpenses.get(r), getLoggedUser(), this::loadExpenses);
         }
 
         private void openExpenseForm() {

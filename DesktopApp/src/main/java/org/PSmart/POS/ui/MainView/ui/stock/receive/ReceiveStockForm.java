@@ -417,23 +417,18 @@ public final class ReceiveStockForm extends JFrame {
 
     private void browseItems() {
         try {
-            org.PSmart.POS.Utils.Components.GridSearch.ItemComponents.GridtemsSearch grid =
-                    new org.PSmart.POS.Utils.Components.GridSearch.ItemComponents.GridtemsSearch();
-            grid.setSubmitAction(e -> {
-                for (org.PSmart.POS.Utils.Components.GridSearch.ItemComponents.GridItemJpanel p : grid.getSelectedCartsItems()) {
-                    if (p.getItem() == null) continue;
-                    UUID id = p.getItem().getUid();
-                    double q = Math.max(1, MyUtils.getDouble(p.getQuantity().getText()));
+            new org.PSmart.POS.Utils.Components.ItemPicker("Browse items", "Add to delivery", false, picks -> {
+                for (org.PSmart.POS.Utils.Components.ItemPicker.Pick p : picks) {
+                    UUID id = p.item.getUid();
                     for (ItemRef it : catalog) if (it.uid.equals(id)) {
                         addItem(it);
                         int row = lineItems.indexOf(it);
                         updating = true;
-                        model.setValueAt(fmt(q), row, C_QTY);
+                        model.setValueAt(fmt(Math.max(1, p.quantity)), row, C_QTY);
                         updating = false;
                     }
                 }
                 recalc();
-                grid.dispose();
             });
         } catch (Exception ex) {
             say("Could not open the item browser: " + ex.getMessage());
@@ -560,10 +555,12 @@ public final class ReceiveStockForm extends JFrame {
                         .setParameter("c", n[1]).setParameter("s", n[2]).setParameter("id", ref.uid).executeUpdate();
             }
             purchase.setItems(pItems);
-            em.persist(purchase);
-            em.persist(StockFeed.builder().doneOn(receivedAt)
+            StockFeed feed = StockFeed.builder().doneOn(receivedAt)
                     .comment("Purchase" + (purchase.getInvoiceNumber() == null ? "" : " " + purchase.getInvoiceNumber()) + (sup.isEmpty() ? "" : " from " + sup))
-                    .stockFeedItems(fItems).build());
+                    .stockFeedItems(fItems).build();
+            em.persist(feed);
+            purchase.setFeedUid(feed.getUid());   // lets "Cancel purchase" take this delivery back out of stock
+            em.persist(purchase);
             tx.commit();
 
             Ui.toast("Stock received - " + model.getRowCount() + " item(s)" + (total - paidNow > 0.004 ? ", " + money(total - paidNow) + " owed to " + sup : ""));

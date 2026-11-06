@@ -47,5 +47,9 @@ public class CreditTransaction {
 
     private String notes;
 
+    /** True once a PAYMENT has been cancelled (a PAYMENT_VOID entry restores the balance). */
+    private Boolean cancelled;
+    private String cancelReason;
+
     private boolean deleted;
 }

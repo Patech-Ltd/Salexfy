@@ -24,6 +24,12 @@ public class FormFrame extends JFrame {
 
     private static final int GAP = 10;
 
+    private int buttonWidth = 224;
+    private int buttonFont = 18;
+
+    /** For forms with many footer buttons: call before adding the buttons. */
+    public void compactButtons() { buttonWidth = 166; buttonFont = 14; footer.setLayout(new FlowLayout(FlowLayout.CENTER, 8, 10)); }
+
     private final int contentWidth;
     private final JPanel content = new JPanel(null);
     private final JScrollPane scroll;
@@ -347,8 +353,8 @@ public class FormFrame extends JFrame {
 
     private void style(JButton b, Runnable action) {
         b.setForeground(Color.WHITE);
-        b.setFont(MyUtils.courierFont(18));
-        b.setPreferredSize(new Dimension(190, 44));
+        b.setFont(MyUtils.courierFont(buttonFont));
+        b.setPreferredSize(new Dimension(buttonWidth, 44));
         b.addActionListener(e -> action.run());
     }
 

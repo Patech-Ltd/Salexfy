@@ -27,5 +27,9 @@ public class SupplierPayment {
     private String notes;
     private String createdByName;
     private Long createdAt;
+    private Long cancelledAt;
+    private String cancelReason;
+    private String cancelledBy;
+
     private boolean deleted;
 }

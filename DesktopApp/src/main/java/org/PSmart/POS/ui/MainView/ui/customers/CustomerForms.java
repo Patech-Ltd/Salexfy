@@ -180,23 +180,30 @@ final class CustomerForms {
 
     // ------------------------------------------------------------------ statement
 
-    static void ledger(UUID id, String name) {
+    static void ledger(UUID id, String name, User user) {
         DefaultTableModel m = new DefaultTableModel(new String[]{"Date", "Type", "Amount", "Balance", "Details"}, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
         double owed = 0;
+        final List<UUID> rowIds = new java.util.ArrayList<>();
+        final List<Boolean> cancellable = new java.util.ArrayList<>();
         EntityManager em = DatabaseUtils.getInstance().getEmf().createEntityManager();
         try {
             SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-            List<Object[]> rows = em.createQuery("SELECT t.createdAt, t.type, t.amount, t.balanceAfter, t.notes FROM CreditTransaction t "
+            List<Object[]> rows = em.createQuery("SELECT t.createdAt, t.type, t.amount, t.balanceAfter, t.notes, t.uid, t.cancelled FROM CreditTransaction t "
                     + "WHERE t.deleted=false AND t.customer.uid=:id ORDER BY t.createdAt ASC", Object[].class).setParameter("id", id).getResultList();
             for (Object[] r : rows) {
                 String type = String.valueOf(r[1]);
                 double amt = r[2] == null ? 0 : ((Number) r[2]).doubleValue();
                 double bal = r[3] == null ? 0 : ((Number) r[3]).doubleValue();
+                boolean wasCancelled = Boolean.TRUE.equals(r[6]);
+                rowIds.add((UUID) r[5]);
+                cancellable.add("PAYMENT".equals(type) && !wasCancelled);
+                String label = "CHARGE".equals(type) ? "On credit" : "PAYMENT".equals(type) ? (wasCancelled ? "Payment (cancelled)" : "Payment")
+                        : "PAYMENT_VOID".equals(type) ? "Payment cancelled" : "Cancelled sale";
+                boolean plus = "CHARGE".equals(type) || "PAYMENT_VOID".equals(type);
                 m.addRow(new Object[]{r[0] == null ? "" : df.format(new Date(((Number) r[0]).longValue())),
-                        "CHARGE".equals(type) ? "On credit" : "PAYMENT".equals(type) ? "Payment" : "Cancelled sale",
-                        ("CHARGE".equals(type) ? "+" : "-") + money(amt), money(bal), r[4] == null ? "" : r[4]});
+                        label, (plus ? "+" : "-") + money(amt), money(bal), r[4] == null ? "" : r[4]});
                 owed = bal;
             }
         } finally {
@@ -208,7 +215,25 @@ final class CustomerForms {
         JTable t = new JTable(m);
         Ui.styleTable(t);
         t.getColumnModel().getColumn(4).setPreferredWidth(340);
+        t.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         f.custom(new JScrollPane(t), 380);
+        f.note("To undo a payment received by mistake, select it in the table and cancel it. The amount becomes owed again.");
+        FormFrame.Section sec = f.section("Cancel a payment", false);
+        PTextField reason = sec.field("Reason for cancelling (required)", "");
+        f.errorLine();
+        f.danger("Cancel Selected Payment", () -> {
+            sec.setOpen(true);
+            int r = t.getSelectedRow();
+            if (r < 0 || r >= rowIds.size() || !cancellable.get(r)) { f.error("Select a payment that hasn't been cancelled."); return; }
+            if (reason.getText().trim().length() < 3) { f.error("Enter a reason for cancelling (at least 3 letters)."); return; }
+            String by = org.PSmart.POS.Utils.Components.forms.TxnUi.authorise(f, user, RoleType.CASHIER, "cancel a customer payment");
+            if (by == null) return;
+            String err = org.PSmart.POS.Repositories.TxnService.cancelCustomerPayment(rowIds.get(r), reason.getText().trim(), by);
+            if (err != null) { f.error(err); return; }
+            Ui.toast("Payment cancelled - balance owed updated");
+            f.dispose();
+            ledger(id, name, user);
+        });
         f.secondary("Close", f::dispose);
         f.open();
     }
