@@ -208,9 +208,10 @@ public class LoginWindow {
                     } else {
                         System.out.println("User found: " + user.getUsername());
 
-                        if(user.getPassword().equals(password))
+                        if(org.PSmart.POS.Utils.PasswordUtil.matches(user.getPassword(), password))
                         {
                             successUser=user;
+                            upgradePasswordHash(user, password);
                             action.actionPerformed(e);
                         }
                         else
@@ -262,5 +263,24 @@ public class LoginWindow {
     public User successfulUserLogin()
     {
         return successUser;
+    }
+
+    /** Plain-text passwords from older versions are replaced by a salted hash after a successful sign-in. */
+    private void upgradePasswordHash(User user, String plain) {
+        try {
+            if (org.PSmart.POS.Utils.PasswordUtil.isHashed(user.getPassword())) return;
+            jakarta.persistence.EntityManager em = org.PSmart.POS.Database.DatabaseUtils.getInstance().getEmf().createEntityManager();
+            try {
+                em.getTransaction().begin();
+                User u = em.find(User.class, user.getUid());
+                u.setPassword(org.PSmart.POS.Utils.PasswordUtil.hash(plain));
+                em.getTransaction().commit();
+                user.setPassword(u.getPassword());
+            } finally {
+                em.close();
+            }
+        } catch (Exception ignored) {
+            // never block a sign-in because the upgrade failed
+        }
     }
 }

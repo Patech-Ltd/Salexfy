@@ -34,6 +34,12 @@ public class Customer {
 
     private String notes;
 
+    /** Loyalty points balance (null = 0). */
+    private Double loyaltyPoints;
+
+    /** Lifetime spend recorded by the till (null = 0). */
+    private Double totalSpent;
+
     private boolean deleted;
 
     public String toString() {

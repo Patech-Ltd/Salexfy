@@ -28,6 +28,12 @@ public class User {
 
     private boolean deleted;
 
+    /** Name of the RoleProfile assigned to this user ("Custom" when permissions were hand-edited). */
+    private String roleProfile;
+
+    /** Commission rate (%) for this user; null = use the store default from Settings. */
+    private Double commissionRate;
+
     public String getSmallName()
     {
         String shortName=fullname;

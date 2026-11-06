@@ -38,6 +38,9 @@ public class Purchase {
 
     private Double total;
 
+    /** Amount paid to the supplier at purchase time. null = fully paid (legacy rows). */
+    private Double paidAmount;
+
     private String status;
 
     private boolean deleted;

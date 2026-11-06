@@ -24,6 +24,10 @@ public class SettingsPanel extends JPanel {
     private JTextField receiptFooterField;
     private JCheckBox useBarcodeCheckbox;
     private JTextField lowStockField;
+    private JCheckBox loyaltyEnabledCb;
+    private JTextField pointsPerMoneyField;
+    private JTextField pointValueField;
+    private JCheckBox blockStockCb;
 
     public SettingsPanel() {
         super();
@@ -70,8 +74,18 @@ public class SettingsPanel extends JPanel {
 
         main.add(cardsPanel, BorderLayout.NORTH);
 
-        JPanel bottomCard = buildMiscCard();
-        main.add(bottomCard, BorderLayout.CENTER);
+        JPanel bottomStack = new JPanel();
+        bottomStack.setLayout(new BoxLayout(bottomStack, BoxLayout.Y_AXIS));
+        bottomStack.setOpaque(false);
+        JPanel miscCard = buildMiscCard();
+        miscCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JPanel controlCard = buildLoyaltyStockCard();
+        controlCard.setAlignmentX(Component.LEFT_ALIGNMENT);
+        bottomStack.add(Box.createVerticalStrut(15));
+        bottomStack.add(miscCard);
+        bottomStack.add(Box.createVerticalStrut(15));
+        bottomStack.add(controlCard);
+        main.add(bottomStack, BorderLayout.CENTER);
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         btnPanel.setOpaque(false);
@@ -187,6 +201,52 @@ public class SettingsPanel extends JPanel {
         return card;
     }
 
+    private JPanel buildLoyaltyStockCard() {
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBackground(Color.WHITE);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(220, 220, 220)),
+                BorderFactory.createEmptyBorder(15, 20, 15, 20)));
+
+        JLabel cardTitle = new JLabel("Loyalty & Stock Control");
+        cardTitle.setFont(new Font("Courier", Font.BOLD, 16));
+        cardTitle.setForeground(new Color(52, 58, 64));
+        cardTitle.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(cardTitle);
+        card.add(Box.createVerticalStrut(12));
+
+        JPanel row = new JPanel(new GridLayout(1, 4, 15, 0));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 65));
+
+        loyaltyEnabledCb = new JCheckBox("Enable customer loyalty points");
+        loyaltyEnabledCb.setFont(new Font("Courier", Font.PLAIN, 13));
+        JPanel cp = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        cp.setOpaque(false);
+        cp.add(loyaltyEnabledCb);
+        row.add(cp);
+
+        JPanel ppm = createMiniField("Points earned per 1.00 paid:");
+        pointsPerMoneyField = getField(ppm);
+        row.add(ppm);
+
+        JPanel pv = createMiniField("Money value of 1 point:");
+        pointValueField = getField(pv);
+        row.add(pv);
+
+        blockStockCb = new JCheckBox("Block sales above stock on hand");
+        blockStockCb.setFont(new Font("Courier", Font.PLAIN, 13));
+        JPanel bp = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        bp.setOpaque(false);
+        bp.add(blockStockCb);
+        row.add(bp);
+
+        card.add(row);
+        return card;
+    }
+
     private JPanel createMiniField(String label) {
         JPanel p = new JPanel(new BorderLayout(0, 3));
         p.setOpaque(false);
@@ -241,6 +301,10 @@ public class SettingsPanel extends JPanel {
         receiptFooterField.setText(config.getReceiptFooter() != null ? config.getReceiptFooter() : "");
         useBarcodeCheckbox.setSelected(config.getUseBarcodeScanner() != null && config.getUseBarcodeScanner());
         lowStockField.setText(config.getLowStockAlertLevel() != null ? config.getLowStockAlertLevel().toString() : "10");
+        loyaltyEnabledCb.setSelected(Boolean.TRUE.equals(config.getLoyaltyEnabled()));
+        pointsPerMoneyField.setText(String.valueOf(config.getLoyaltyPointsPerMoney() != null ? config.getLoyaltyPointsPerMoney() : 0.01));
+        pointValueField.setText(String.valueOf(config.getLoyaltyPointValue() != null ? config.getLoyaltyPointValue() : 1.0));
+        blockStockCb.setSelected(Boolean.TRUE.equals(config.getBlockOutOfStockSales()));
     }
 
     private void saveConfig() {
@@ -256,6 +320,10 @@ public class SettingsPanel extends JPanel {
         config.setReceiptFooter(receiptFooterField.getText().trim());
         config.setUseBarcodeScanner(useBarcodeCheckbox.isSelected());
         config.setLowStockAlertLevel(MyUtils.getInt(lowStockField.getText().trim()));
+        config.setLoyaltyEnabled(loyaltyEnabledCb.isSelected());
+        config.setLoyaltyPointsPerMoney(Math.max(0, MyUtils.getDouble(pointsPerMoneyField.getText().trim())));
+        config.setLoyaltyPointValue(Math.max(0, MyUtils.getDouble(pointValueField.getText().trim())));
+        config.setBlockOutOfStockSales(blockStockCb.isSelected());
 
         DatabaseUtils.getInstance().getStoreConfigRepository().saveOrUpdate(config);
         AutoClosingNotification.sendNotification("Settings saved");

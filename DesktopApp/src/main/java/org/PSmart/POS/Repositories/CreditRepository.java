@@ -51,13 +51,16 @@ public class CreditRepository extends BaseRepository<CreditTransaction> {
      */
     public CreditTransaction recordCreditSale(Sale sale, Customer customer, User cashier) {
         Double balance = customer.getCurrentBalance() == null ? 0.0 : customer.getCurrentBalance();
-        balance = balance + sale.getTotal();
+        // Only the unpaid part of a split sale goes on the account (cash/M-Pesa/card already paid).
+        double charge = Math.max(0, (sale.getTotal() == null ? 0 : sale.getTotal())
+                - (sale.getAmountPaid() == null ? 0 : sale.getAmountPaid()));
+        balance = balance + charge;
 
         CreditTransaction tx = CreditTransaction.builder()
                 .customer(customer)
                 .sale(sale)
                 .type("CHARGE")
-                .amount(sale.getTotal())
+                .amount(charge)
                 .balanceAfter(balance)
                 .cashier(cashier)
                 .createdAt(System.currentTimeMillis())

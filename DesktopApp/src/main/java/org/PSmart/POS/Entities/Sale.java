@@ -50,6 +50,15 @@ public class Sale {
 
     private boolean deleted;
 
+    /** Set when the sale is cancelled (status becomes VOIDED); the sale stays in the books for audit. */
+    private Long voidedAt;
+    private String voidReason;
+    private String voidedByName;
+
+    /** Loyalty movements booked by this sale, so a void can reverse them exactly. */
+    private Double pointsEarned;
+    private Double pointsRedeemed;
+
     public String getReceiptNumber() {
         return "RCP-" + String.format("%06d", uid.hashCode() & 0xFFFFFF);
     }

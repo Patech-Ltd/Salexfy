@@ -150,6 +150,13 @@ public class SaleDetailDialog extends JDialog {
         JButton printBtn = btn("Print Receipt", Palette.BLUE_BTN, 700, 78, 180, 28);
         printBtn.addActionListener(e -> printReceipt());
         totals.add(printBtn);
+        JButton previewBtn = btn("Preview", Palette.BLUE_BTN, 590, 78, 100, 28);
+        previewBtn.addActionListener(e -> previewDoc(false));
+        totals.add(previewBtn);
+        JButton invoiceBtn = btn("Invoice", Palette.BLUE_BTN, 480, 78, 100, 28);
+        invoiceBtn.setToolTipText("Preview / print an A4 invoice for this sale");
+        invoiceBtn.addActionListener(e -> previewDoc(true));
+        totals.add(invoiceBtn);
 
         add(totals);
 
@@ -333,6 +340,13 @@ public class SaleDetailDialog extends JDialog {
             ex.printStackTrace();
             JOptionPane.showMessageDialog(this, "Delete failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void previewDoc(boolean invoice) {
+        StoreConfig cfg = DatabaseUtils.getInstance().getStoreConfigRepository().getStoreConfig();
+        if (cfg == null) cfg = StoreConfig.defaultConfig();
+        if (invoice) ReceiptPrinter.previewInvoice(this, sale, cfg);
+        else ReceiptPrinter.previewReceipt(this, sale, cfg);
     }
 
     private void printReceipt() {

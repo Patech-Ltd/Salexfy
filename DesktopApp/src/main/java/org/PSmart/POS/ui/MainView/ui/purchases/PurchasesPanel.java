@@ -24,8 +24,15 @@ public class PurchasesPanel extends JPanel {
     private JPanel purchasesTab;
     private JPanel expensesTab;
 
+    private final User sessionUser;
+
     public PurchasesPanel() {
+        this(null);
+    }
+
+    public PurchasesPanel(User sessionUser) {
         super();
+        this.sessionUser = sessionUser;
         draw();
     }
 
@@ -90,8 +97,34 @@ public class PurchasesPanel extends JPanel {
             refreshBtn.addActionListener(e -> loadPurchases());
             right.add(refreshBtn);
 
+            JButton printBtn = new JButton("Print / Preview Invoice");
+            printBtn.setFont(new Font("Courier", Font.BOLD, 13));
+            printBtn.setBackground(new Color(52, 58, 64));
+            printBtn.setForeground(Color.WHITE);
+            printBtn.setFocusPainted(false);
+            printBtn.setBorderPainted(false);
+            printBtn.setToolTipText("Select a purchase in the list first (or double-click it)");
+            printBtn.addActionListener(e -> previewSelectedPurchase());
+            right.add(printBtn);
+
             h.add(right, BorderLayout.EAST);
             return h;
+        }
+
+        private List<UUID> shownPurchases = new ArrayList<>();
+        private JLabel countValL, spendValL, todayValL;
+
+        private void previewSelectedPurchase() {
+            int r = table.getSelectedRow();
+            if (r < 0 || r >= shownPurchases.size()) {
+                AutoClosingNotification.sendNotification("Select a purchase in the list first");
+                return;
+            }
+            StoreConfig cfg = DatabaseUtils.getInstance().getStoreConfigRepository().getStoreConfig();
+            Purchase full = org.PSmart.POS.Repositories.PurchaseQueries.load(shownPurchases.get(r));
+            if (full == null) { AutoClosingNotification.sendNotification("That purchase could not be found"); return; }
+            org.PSmart.POS.Utils.ReceiptPrinter.previewPurchase(this, full,
+                    cfg != null ? cfg : StoreConfig.defaultConfig());
         }
 
         private JPanel buildSummary() {
@@ -101,16 +134,19 @@ public class PurchasesPanel extends JPanel {
             cards.setPreferredSize(new Dimension(0, 80));
 
             JLabel countVal = new JLabel("0", SwingConstants.CENTER);
+            countValL = countVal;
             countVal.setFont(new Font("Courier", Font.BOLD, 22));
             countVal.setForeground(new Color(0, 123, 255));
             JPanel c1 = makeCard("Total Purchases", countVal);
 
             JLabel spendVal = new JLabel("KES 0.00", SwingConstants.CENTER);
+            spendValL = spendVal;
             spendVal.setFont(new Font("Courier", Font.BOLD, 22));
             spendVal.setForeground(new Color(111, 66, 193));
             JPanel c2 = makeCard("Total Spend", spendVal);
 
             JLabel todayVal = new JLabel("0", SwingConstants.CENTER);
+            todayValL = todayVal;
             todayVal.setFont(new Font("Courier", Font.BOLD, 22));
             todayVal.setForeground(new Color(40, 167, 69));
             JPanel c3 = makeCard("Today", todayVal);
@@ -151,6 +187,11 @@ public class PurchasesPanel extends JPanel {
             center.setHorizontalAlignment(JLabel.CENTER);
             for (int i = 0; i < cols.length; i++) table.getColumnModel().getColumn(i).setCellRenderer(center);
 
+            table.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getClickCount() == 2) previewSelectedPurchase();
+                }
+            });
             JScrollPane sp = new JScrollPane(table);
             sp.setBorder(BorderFactory.createEmptyBorder(0, 20, 15, 20));
             sp.setPreferredSize(new Dimension(0, 400));
@@ -160,30 +201,42 @@ public class PurchasesPanel extends JPanel {
 
         void loadPurchases() {
             tableModel.setRowCount(0);
-            List<Purchase> list = repo.findAllPurchases();
+            shownPurchases = new ArrayList<>();
+            List<org.PSmart.POS.Repositories.PurchaseQueries.Row> list;
+            try {
+                list = org.PSmart.POS.Repositories.PurchaseQueries.rows();
+            } catch (Exception ex) {
+                AutoClosingNotification.sendNotification("Could not load purchases: " + ex.getMessage());
+                return;
+            }
             SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy");
-            for (Purchase p : list) {
-                String date = p.getCreatedAt() != null ? sdf.format(new Date(p.getCreatedAt())) : "N/A";
-                int itemCount = p.getItems() != null ? p.getItems().size() : 0;
+            long startOfDay = java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
+            double spend = 0;
+            int today = 0;
+            for (org.PSmart.POS.Repositories.PurchaseQueries.Row p : list) {
+                shownPurchases.add(p.uid);
+                spend += p.total;
+                if (p.createdAt >= startOfDay) today++;
+                double owed = Math.max(0, p.total - p.paid);
                 tableModel.addRow(new Object[]{
-                        p.getReferenceNumber(), date,
-                        p.getSupplierName() != null ? p.getSupplierName() : "N/A",
-                        p.getInvoiceNumber() != null ? p.getInvoiceNumber() : "N/A",
-                        itemCount,
-                        "KES " + MyUtils.formatCurrency(String.valueOf(p.getTotal() != null ? p.getTotal() : 0)),
-                        p.getStatus() != null ? p.getStatus() : "Draft"
+                        p.ref, p.createdAt > 0 ? sdf.format(new Date(p.createdAt)) : "N/A",
+                        p.supplier.isEmpty() ? "N/A" : p.supplier, p.invoice.isEmpty() ? "N/A" : p.invoice, p.items,
+                        "KES " + MyUtils.formatCurrency(String.valueOf(p.total)),
+                        owed > 0.004 ? "OWING " + MyUtils.formatCurrency(String.valueOf(owed)) : "PAID"
                 });
             }
+            if (countValL != null) countValL.setText(String.valueOf(list.size()));
+            if (spendValL != null) spendValL.setText("KES " + MyUtils.formatCurrency(String.valueOf(spend)));
+            if (todayValL != null) todayValL.setText(String.valueOf(today));
         }
 
         private void openPurchaseDialog() {
             if (!AuthorizationUtils.authorizeAction(this, getLoggedUser(), RoleType.PURCHASE, "Create Purchase")) return;
-            PurchaseDialog d = new PurchaseDialog((Frame) SwingUtilities.getWindowAncestor(this));
-            d.setOnSave(this::loadPurchases);
-            d.setVisible(true);
+            new org.PSmart.POS.ui.MainView.ui.stock.receive.ReceiveStockForm(getLoggedUser(), this::loadPurchases);
         }
 
         private User getLoggedUser() {
+            if (sessionUser != null) return sessionUser;
             try {
                 String hql = "FROM User u WHERE u.deleted=false";
                 return DatabaseUtils.getInstance().getEmf().createEntityManager()
@@ -196,6 +249,7 @@ public class PurchasesPanel extends JPanel {
         private DefaultTableModel tableModel;
         private JTable table;
         private ExpenseRepository repo = DatabaseUtils.getInstance().getExpenseRepository();
+        private JLabel totalVal, todayVal;
 
         ExpensesSubPanel() {
             setLayout(new BorderLayout());
@@ -225,7 +279,7 @@ public class PurchasesPanel extends JPanel {
             newBtn.setForeground(Color.WHITE);
             newBtn.setFocusPainted(false);
             newBtn.setBorderPainted(false);
-            newBtn.addActionListener(e -> openExpenseDialog());
+            newBtn.addActionListener(e -> openExpenseForm());
             right.add(newBtn);
 
             JButton refreshBtn = new JButton("Refresh");
@@ -247,7 +301,7 @@ public class PurchasesPanel extends JPanel {
             cards.setBorder(BorderFactory.createEmptyBorder(10, 20, 5, 20));
             cards.setPreferredSize(new Dimension(0, 80));
 
-            JLabel totalVal = new JLabel("KES 0.00", SwingConstants.CENTER);
+            totalVal = new JLabel("KES 0.00", SwingConstants.CENTER);
             totalVal.setFont(new Font("Courier", Font.BOLD, 22));
             totalVal.setForeground(new Color(220, 53, 69));
             JPanel c1 = new JPanel(new BorderLayout());
@@ -256,7 +310,7 @@ public class PurchasesPanel extends JPanel {
             c1.add(new JLabel("  Total Expenses", SwingConstants.LEFT), BorderLayout.NORTH);
             c1.add(totalVal, BorderLayout.CENTER);
 
-            JLabel todayVal = new JLabel("KES 0.00", SwingConstants.CENTER);
+            todayVal = new JLabel("KES 0.00", SwingConstants.CENTER);
             todayVal.setFont(new Font("Courier", Font.BOLD, 22));
             todayVal.setForeground(new Color(255, 193, 7));
             JPanel c2 = new JPanel(new BorderLayout());
@@ -298,7 +352,12 @@ public class PurchasesPanel extends JPanel {
             tableModel.setRowCount(0);
             List<Expense> list = repo.findAllExpenses();
             SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy");
+            double total = 0, today = 0;
+            String todayKey = sdf.format(new Date());
             for (Expense e : list) {
+                double a = e.getAmount() == null ? 0 : e.getAmount();
+                total += a;
+                if (e.getCreatedAt() != null && sdf.format(new Date(e.getCreatedAt())).equals(todayKey)) today += a;
                 String date = e.getCreatedAt() != null ? sdf.format(new Date(e.getCreatedAt())) : "N/A";
                 tableModel.addRow(new Object[]{
                         e.getReferenceNumber(), date,
@@ -309,16 +368,17 @@ public class PurchasesPanel extends JPanel {
                         "Completed"
                 });
             }
+            totalVal.setText("KES " + MyUtils.formatCurrency(String.valueOf(total)));
+            todayVal.setText("KES " + MyUtils.formatCurrency(String.valueOf(today)));
         }
 
-        private void openExpenseDialog() {
+        private void openExpenseForm() {
             if (!AuthorizationUtils.authorizeAction(this, getLoggedUser(), RoleType.EXPENSE, "Create Expense")) return;
-            ExpenseDialog d = new ExpenseDialog((Frame) SwingUtilities.getWindowAncestor(this));
-            d.setOnSave(this::loadExpenses);
-            d.setVisible(true);
+            ExpenseForm.open(getLoggedUser(), this::loadExpenses);
         }
 
         private User getLoggedUser() {
+            if (sessionUser != null) return sessionUser;
             try {
                 String hql = "FROM User u WHERE u.deleted=false";
                 return DatabaseUtils.getInstance().getEmf().createEntityManager()
@@ -328,7 +388,8 @@ public class PurchasesPanel extends JPanel {
     }
 
     private class PurchaseDialog extends JDialog {
-        private JTextField supplierField, invoiceField, barcodeField;
+        private JTextField supplierField, invoiceField, barcodeField, paidField;
+        private JCheckBox addToStock;
         private JTextArea notesArea;
         private DefaultTableModel itemsModel;
         private JTable itemsTable;
@@ -345,12 +406,17 @@ public class PurchasesPanel extends JPanel {
         }
 
         private void buildForm() {
-            JPanel top = new JPanel(new GridLayout(1, 3, 10, 0));
+            JPanel top = new JPanel(new GridLayout(1, 5, 10, 0));
             top.setBorder(BorderFactory.createEmptyBorder(10, 15, 5, 15));
             top.setBackground(Color.WHITE);
 
             supplierField = makeField(top, "Supplier Name");
             invoiceField = makeField(top, "Invoice #");
+            paidField = makeField(top, "Paid Now (blank = full)");
+            addToStock = new JCheckBox("<html>Add these items<br>to stock</html>", true);
+            addToStock.setFont(new Font("Courier", Font.BOLD, 12));
+            addToStock.setOpaque(false);
+            top.add(addToStock);
 
             notesArea = new JTextArea(2, 20);
             notesArea.setFont(new Font("Courier", Font.PLAIN, 12));
@@ -834,6 +900,19 @@ public class PurchasesPanel extends JPanel {
                         .createQuery(hql, User.class).getResultList().stream().findFirst().orElse(null);
             } catch (Exception ignored) {}
 
+            double grandTotal = subtotal + tax;
+            double paidNow = grandTotal;
+            String paidText = paidField.getText().trim().replace(",", "");
+            if (!supplier.isEmpty() && !paidText.isEmpty()) {
+                paidNow = MyUtils.getDouble(paidText);
+                if (paidNow < 0 || paidNow > grandTotal + 0.009) {
+                    paidField.setBackground(new Color(255, 220, 220));
+                    paidField.setToolTipText("Must be between 0 and the invoice total " + String.format("%,.2f", grandTotal));
+                    AutoClosingNotification.sendNotification("Paid amount must be between 0 and " + String.format("%,.2f", grandTotal));
+                    return;
+                }
+            }
+
             Purchase purchase = Purchase.builder()
                     .createdAt(System.currentTimeMillis())
                     .createdBy(user)
@@ -843,6 +922,7 @@ public class PurchasesPanel extends JPanel {
                     .subtotal(subtotal)
                     .taxAmount(tax)
                     .total(subtotal + tax)
+                    .paidAmount(paidNow)
                     .status("COMPLETED")
                     .items(pItems)
                     .build();
@@ -850,119 +930,39 @@ public class PurchasesPanel extends JPanel {
             for (PurchaseItem pi : pItems) pi.setPurchase(purchase);
 
             DatabaseUtils.getInstance().getPurchaseRepository().save(purchase);
+            if (addToStock.isSelected()) receiveIntoStock(purchase, pItems);
             AutoClosingNotification.sendNotification("Purchase saved - KES " + MyUtils.formatCurrency(String.valueOf(purchase.getTotal())));
             dispose();
             if (onSave != null) onSave.run();
         }
 
-        void setOnSave(Runnable r) { this.onSave = r; }
-    }
-
-    private class ExpenseDialog extends JDialog {
-        private JComboBox<String> categoryCombo;
-        private JTextField descField, amountField, receiptField;
-        private JTextArea notesArea;
-        private JComboBox<String> paymentCombo;
-        private Runnable onSave;
-
-        ExpenseDialog(Frame owner) {
-            super(owner, "New Expense", true);
-            setSize(450, 420);
-            setLocationRelativeTo(owner);
-            setLayout(new BorderLayout(8, 8));
-            buildForm();
-        }
-
-        private void buildForm() {
-            JPanel form = new JPanel(new GridBagLayout());
-            form.setBorder(BorderFactory.createEmptyBorder(15, 20, 10, 20));
-            form.setBackground(Color.WHITE);
-            GridBagConstraints gbc = new GridBagConstraints();
-            gbc.insets = new Insets(4, 4, 4, 4);
-            gbc.fill = GridBagConstraints.HORIZONTAL;
-            gbc.weightx = 1;
-
-            String[] categories = {"Rent", "Utilities", "Salaries", "Transport", "Office Supplies", "Marketing", "Maintenance", "Other"};
-            categoryCombo = new JComboBox<>(categories);
-            addRow(form, gbc, 0, "Category:", categoryCombo);
-
-            descField = new JTextField();
-            addRow(form, gbc, 1, "Description:", descField);
-
-            amountField = new JTextField();
-            addRow(form, gbc, 2, "Amount (KES):", amountField);
-
-            String[] payments = {"Cash", "M-Pesa", "Card", "Bank Transfer"};
-            paymentCombo = new JComboBox<>(payments);
-            addRow(form, gbc, 3, "Payment Method:", paymentCombo);
-
-            receiptField = new JTextField();
-            addRow(form, gbc, 4, "Receipt #:", receiptField);
-
-            notesArea = new JTextArea(3, 20);
-            notesArea.setFont(new Font("Courier", Font.PLAIN, 12));
-            gbc.gridx = 0; gbc.gridy = 5; gbc.weightx = 0.3;
-            form.add(new JLabel("Notes:"), gbc);
-            gbc.gridx = 1; gbc.weightx = 0.7;
-            form.add(new JScrollPane(notesArea), gbc);
-
-            add(form, BorderLayout.CENTER);
-
-            JPanel btns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
-            btns.setBackground(Color.WHITE);
-
-            JButton cancelBtn = new JButton("Cancel");
-            cancelBtn.addActionListener(e -> dispose());
-            btns.add(cancelBtn);
-
-            JButton saveBtn = new JButton("Save");
-            saveBtn.setBackground(new Color(40, 167, 69));
-            saveBtn.setForeground(Color.WHITE);
-            saveBtn.setFocusPainted(false);
-            saveBtn.setBorderPainted(false);
-            saveBtn.addActionListener(e -> saveExpense());
-            btns.add(saveBtn);
-
-            add(btns, BorderLayout.SOUTH);
-        }
-
-        private void addRow(JPanel p, GridBagConstraints gbc, int row, String label, JComponent comp) {
-            gbc.gridx = 0; gbc.gridy = row; gbc.weightx = 0.3;
-            p.add(new JLabel(label), gbc);
-            gbc.gridx = 1; gbc.weightx = 0.7;
-            p.add(comp, gbc);
-        }
-
-        private void saveExpense() {
-            String desc = descField.getText().trim();
-            String amtStr = amountField.getText().trim();
-            if (desc.isEmpty() || amtStr.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Description and Amount are required.", "Validation", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
-
-            User user = null;
+        /** Books the purchase as a stock delivery so on-hand goes up (same record the Stock Received page shows). */
+        private void receiveIntoStock(Purchase purchase, List<PurchaseItem> lines) {
+            jakarta.persistence.EntityManager em = DatabaseUtils.getInstance().getEmf().createEntityManager();
             try {
-                String hql = "FROM User u WHERE u.deleted=false";
-                user = DatabaseUtils.getInstance().getEmf().createEntityManager()
-                        .createQuery(hql, User.class).getResultList().stream().findFirst().orElse(null);
-            } catch (Exception ignored) {}
-
-            Expense expense = Expense.builder()
-                    .createdAt(System.currentTimeMillis())
-                    .createdBy(user)
-                    .category((String) categoryCombo.getSelectedItem())
-                    .description(desc)
-                    .amount(MyUtils.getDouble(amtStr))
-                    .paymentMethod((String) paymentCombo.getSelectedItem())
-                    .receiptNumber(receiptField.getText().trim().isEmpty() ? null : receiptField.getText().trim())
-                    .notes(notesArea.getText().trim().isEmpty() ? null : notesArea.getText().trim())
-                    .build();
-
-            DatabaseUtils.getInstance().getExpenseRepository().save(expense);
-            AutoClosingNotification.sendNotification("Expense saved");
-            dispose();
-            if (onSave != null) onSave.run();
+                em.getTransaction().begin();
+                List<StockFeedItem> feedItems = new ArrayList<>();
+                for (PurchaseItem pi : lines) {
+                    if (pi.getItem() == null || pi.getQuantity() == null || pi.getQuantity() <= 0) continue;
+                    StockFeedItem fi = StockFeedItem.builder().item(em.getReference(Item.class, pi.getItem().getUid()))
+                            .quantity(pi.getQuantity()).buyingPrice(pi.getUnitPrice()).build();
+                    em.persist(fi);
+                    feedItems.add(fi);
+                }
+                if (!feedItems.isEmpty()) {
+                    StockFeed feed = StockFeed.builder().doneOn(System.currentTimeMillis())
+                            .comment("Purchase " + (purchase.getInvoiceNumber() == null ? "" : purchase.getInvoiceNumber() + " ")
+                                    + (purchase.getSupplierName() == null ? "" : "from " + purchase.getSupplierName()))
+                            .stockFeedItems(feedItems).build();
+                    em.persist(feed);
+                }
+                em.getTransaction().commit();
+            } catch (Exception ex) {
+                if (em.getTransaction().isActive()) em.getTransaction().rollback();
+                AutoClosingNotification.sendNotification("Purchase saved, but stock was not updated: " + ex.getMessage());
+            } finally {
+                em.close();
+            }
         }
 
         void setOnSave(Runnable r) { this.onSave = r; }

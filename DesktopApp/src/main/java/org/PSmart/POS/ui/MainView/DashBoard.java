@@ -64,6 +64,22 @@ public class DashBoard extends JFrame {
         add(playground,BorderLayout.CENTER);
         repaint();
 
+        // land on a useful page straight after sign-in (once the window has its real size)
+        SwingUtilities.invokeLater(this::openLandingTab);
+    }
+
+    /**
+     * Cashier first. If the signed-in user's role cannot open the cashier, take them to the first page
+     * their role does allow (Notifications, the shop overview, is open to everyone).
+     */
+    private void openLandingTab() {
+        int[] order = {0, 2, 1, 3, 4, 6, 5, 7, 8, 9};   // cashier, sales, stock, reports, customers, purchases, suppliers, admin, settings, notifications
+        for (int tab : order) {
+            if (menuItems != null && tab < menuItems.length && menuItems[tab] != null && menuItems[tab].isEnabled()) {
+                openTab(tab);
+                return;
+            }
+        }
     }
 
     private void addFooter() {
@@ -271,7 +287,62 @@ public class DashBoard extends JFrame {
 
 
         }
+        applyRoleAccess();
+        startAlertBadge(buttons);
+    }
 
+    private javax.swing.Timer badgeTimer;
+
+    /** Shows the number of things needing attention on the Notifications menu button, refreshed every 5 minutes. */
+    private void startAlertBadge(String[][] buttons) {
+        final int idx = buttons.length - 1;
+        final String baseLabel = buttons[idx][0];
+        final Runnable refresh = () -> new SwingWorker<Integer, Void>() {
+            @Override protected Integer doInBackground() {
+                return org.PSmart.POS.Utils.AlertService.attentionCount(org.PSmart.POS.Utils.AlertService.compute());
+            }
+            @Override protected void done() {
+                try {
+                    int n = get();
+                    menuItems[idx].setText("<html><center><body style='color:white;padding:15px;'>" + baseLabel
+                            + (n > 0 ? "<br><span style='color:#ffd54f'>(" + n + ")</span>" : "") + "</body></html>");
+                } catch (Exception ignored) {
+                    // badge is a convenience only
+                }
+            }
+        }.execute();
+        refresh.run();
+        badgeTimer = new javax.swing.Timer(5 * 60 * 1000, e -> refresh.run());
+        badgeTimer.start();
+    }
+
+    /**
+     * Greys out pages the signed-in user's role cannot open. Users who have no roles at all keep full
+     * access, so older installs are never locked out; assign roles under Admin > Users.
+     */
+    private void applyRoleAccess() {
+        org.PSmart.POS.Entities.RoleType[][] needs = {
+                {org.PSmart.POS.Entities.RoleType.CASHIER},                 // cashier
+                {org.PSmart.POS.Entities.RoleType.STOCK},                   // stock
+                {org.PSmart.POS.Entities.RoleType.REPORTS},                 // sales
+                {org.PSmart.POS.Entities.RoleType.REPORTS},                 // reports
+                {org.PSmart.POS.Entities.RoleType.CASHIER},                 // customers
+                {org.PSmart.POS.Entities.RoleType.PURCHASE},                // suppliers
+                {org.PSmart.POS.Entities.RoleType.PURCHASE, org.PSmart.POS.Entities.RoleType.EXPENSE}, // purchases & expenses
+                {org.PSmart.POS.Entities.RoleType.ADMIN},                   // admin
+                {org.PSmart.POS.Entities.RoleType.SETTINGS},                // settings
+                {}                                                          // notifications
+        };
+        for (int i = 0; i < menuItems.length && i < needs.length; i++) {
+            boolean ok = needs[i].length == 0;
+            for (org.PSmart.POS.Entities.RoleType t : needs[i]) {
+                if (org.PSmart.POS.Utils.RoleService.canView(loggedUser, t)) ok = true;
+            }
+            if (!ok) {
+                menuItems[i].setEnabled(false);
+                menuItems[i].setToolTipText("Your role cannot open this page");
+            }
+        }
     }
 
     private HashMap<String,JPanel> fragments=new HashMap<>();
@@ -283,28 +354,31 @@ public class DashBoard extends JFrame {
                 (() -> showFragment("stock",
                         new StockPanel(this))),
                 (() -> showFragment("sales",
-                        new SalesPanel())),
+                        new SalesPanel(loggedUser))),
+                (() -> showFragment("reports",
+                        new org.PSmart.POS.ui.MainView.ui.reports.ReportsPanel(loggedUser))),
                 (() -> showFragment("customers",
-                        new CustomersPanel())),
+                        new CustomersPanel(loggedUser))),
+                (() -> showFragment("suppliers",
+                        new org.PSmart.POS.ui.MainView.ui.suppliers.SuppliersPanel(loggedUser))),
                 (() -> showFragment("purchases",
-                        new org.PSmart.POS.ui.MainView.ui.purchases.PurchasesPanel())),
+                        new org.PSmart.POS.ui.MainView.ui.purchases.PurchasesPanel(loggedUser))),
                 (() -> showFragment("admin",
-                        new AdminPanel(new StockPanel(this)))),
+                        new AdminPanel(this))),
                 (() -> showFragment("settings",
-                        new org.PSmart.POS.ui.MainView.ui.settings.SettingsPanel())),
+                        new org.PSmart.POS.ui.MainView.ui.admin.AdminSettings(loggedUser))),
                 (() -> showFragment("notifications",
-                        new NotificationsPanel())),
+                        new NotificationsPanel(this))),
         };
         return runnables;
     }
 
     private void showFragment(String key, JPanel builder) {
         playground.removeAll();
-        if (!fragments.containsKey(key))
-            fragments.put(key, builder);
-        JPanel frag = fragments.get(key);
-        frag.removeAll();
-        frag.setLayout(null);
+        // Always show the freshly built panel (the old cached one was emptied by removeAll(),
+        // which left tabs blank on every visit after the first).
+        fragments.put(key, builder);
+        JPanel frag = builder;   // each panel sets its own layout; never touch children or layout here
         frag.setBounds(0, 0, playground.getWidth(), playground.getHeight());
         frag.setPreferredSize(new Dimension(playground.getWidth(), playground.getHeight()));
         frag.setVisible(true);
@@ -318,9 +392,11 @@ public class DashBoard extends JFrame {
     private String[][] getButtons() {
         return new String[][]{
                 {"Cashier<br>Checkout","cart.png","checkout"},
-                {"Stock/Inventory<br>Management","stock.png","stock"},
+                {"Stock<br>Management","stock.png","stock"},
                 {"Sales<br>Reports","reports.png","sales"},
+                {"Reports<br>& Profit","reports.png","reports"},
                 {"Customers","debtors.png","debtors"},
+                {"Suppliers","stock.png","suppliers"},
                 {"Purchases &<br>Expenses","stock.png","purchases"},
                 {"Admin","admin.png","admin"},
                 {"Settings","img.png","settings"},
@@ -346,6 +422,10 @@ public class DashBoard extends JFrame {
 
     /** Programmatically open a tab by index (used by other panels, e.g. cashier -> sales). */
     public void openTab(int tab) {
+        if (menuItems != null && tab >= 0 && tab < menuItems.length && menuItems[tab] != null && !menuItems[tab].isEnabled()) {
+            org.PSmart.POS.tests.AutoClosingNotification.sendNotification("Your role cannot open that page");
+            return;
+        }
         setActiveTab(tab);
         if (tabRunnables != null && tab >= 0 && tab < tabRunnables.length && tabRunnables[tab] != null) {
             tabRunnables[tab].run();

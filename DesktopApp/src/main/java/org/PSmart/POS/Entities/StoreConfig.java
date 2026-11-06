@@ -58,6 +58,20 @@ public class StoreConfig {
 
     private String defaultPrinter;
 
+    /** Business tax PIN / VAT number printed under the store name. */
+    private String taxPin;
+    /** Optional line printed under the address (e.g. "Pay via Till 123456"). */
+    private String receiptHeader;
+    /** "58", "80" (thermal roll width in mm) or "A4". */
+    private String receiptPaper;
+    /** Print the receipt automatically after each sale (default on). */
+    private Boolean autoPrintReceipt;
+
+    /** Staff commission: enabled flag, basis ("SALES" or "PROFIT") and default rate in percent. */
+    private Boolean commissionEnabled;
+    private String commissionBasis;
+    private Double commissionRate;
+
     @ElementCollection
     @CollectionTable(name = "PaymentMethodTable", joinColumns = @JoinColumn(name = "config_id"))
     @Column(name = "method_name")
@@ -93,6 +107,16 @@ public class StoreConfig {
     private Long lastSyncAt;
 
     private String lastSyncStatus;
+
+    /** Loyalty programme (off unless enabled). */
+    private Boolean loyaltyEnabled;
+    /** Points earned per 1.00 of money paid. */
+    private Double loyaltyPointsPerMoney;
+    /** Money value of one point when redeemed. */
+    private Double loyaltyPointValue;
+
+    /** When true the till refuses to sell more than is on hand. */
+    private Boolean blockOutOfStockSales;
 
     public static StoreConfig defaultConfig() {
         return StoreConfig.builder()

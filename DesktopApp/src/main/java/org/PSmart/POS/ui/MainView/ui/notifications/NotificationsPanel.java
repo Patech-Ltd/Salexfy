@@ -1,240 +1,170 @@
 package org.PSmart.POS.ui.MainView.ui.notifications;
 
-import org.PSmart.POS.Database.DatabaseUtils;
-import org.PSmart.POS.Entities.StockFeedItem;
-import org.PSmart.POS.Repositories.SaleRepository;
-import org.PSmart.POS.Utils.Palette;
+import org.PSmart.POS.Utils.AlertService;
+import org.PSmart.POS.Utils.AlertService.Alert;
+import org.PSmart.POS.Utils.AlertService.Level;
+import org.PSmart.POS.Utils.BackupService;
+import org.PSmart.POS.Utils.Components.forms.Ui;
+import org.PSmart.POS.Utils.MyUtils;
+import org.PSmart.POS.ui.MainView.DashBoard;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
 
-/**
- * Professional notification centre: daily sales summary + live stock alerts
- * (low stock vs reorder level, expired batches, expiring soon). Built on null
- * layout so bounds are set explicitly for full control.
- */
+/** Notifications: what needs attention (stock, expiry, backups, security, who owes whom), most urgent first. */
 public class NotificationsPanel extends JPanel {
 
-    private JPanel cards;
-    private JLabel alertCountLabel;
-    private java.util.List<Alert> alerts = new java.util.ArrayList<>();
+    private static final Color RED = new Color(200, 30, 45), AMBER = new Color(214, 137, 16), BLUE = new Color(25, 118, 211), GREEN = new Color(30, 110, 50);
 
-    public NotificationsPanel() {
-        super();
-        draw();
-    }
+    private final DashBoard dash;
+    private final JPanel list = new JPanel();
+    private final JLabel summary = new JLabel(" ");
+    private final JLabel status = new JLabel(" ");
 
-    private void draw() {
-        setLayout(null);
-        setBackground(Palette.BG);
+    public NotificationsPanel() { this(null); }
 
-        buildHeader();
-        buildAlerts();
+    public NotificationsPanel(DashBoard dash) {
+        super(new BorderLayout());
+        this.dash = dash;
+        setBackground(Ui.PAGE);
 
-        revalidate();
-        repaint();
-    }
-
-    private void buildHeader() {
-        JPanel header = new JPanel(null);
-        header.setBackground(Palette.HEADER);
-        header.setBounds(0, 0, getWidth(), 60);
-
-        JLabel title = new JLabel("Notifications Centre");
-        title.setFont(Palette.courier(22));
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(Ui.SLATE);
+        bar.setPreferredSize(new Dimension(0, 60));
+        bar.setBorder(BorderFactory.createEmptyBorder(0, 20, 0, 16));
+        JLabel title = new JLabel("Notifications");
+        title.setFont(MyUtils.courierFont(22));
         title.setForeground(Color.WHITE);
-        title.setBounds(20, 0, 320, 60);
+        bar.add(title, BorderLayout.WEST);
+        summary.setFont(new Font("Courier", Font.BOLD, 15));
+        summary.setForeground(Color.WHITE);
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 14, 12));
+        right.setOpaque(false);
+        right.add(summary);
+        JButton refresh = Ui.primary("Refresh");
+        refresh.addActionListener(e -> load());
+        right.add(refresh);
+        bar.add(right, BorderLayout.EAST);
+        add(bar, BorderLayout.NORTH);
 
-        alertCountLabel = new JLabel("", SwingConstants.RIGHT);
-        alertCountLabel.setFont(Palette.courier(15));
-        alertCountLabel.setForeground(new Color(255, 193, 7));
-        alertCountLabel.setBounds(getWidth() - 360, 0, 340, 60);
+        list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
+        list.setBackground(Ui.PAGE);
+        list.setBorder(BorderFactory.createEmptyBorder(16, 20, 16, 20));
+        JScrollPane sp = new JScrollPane(list);
+        sp.setBorder(null);
+        sp.getVerticalScrollBar().setUnitIncrement(16);
+        sp.getViewport().setBackground(Ui.PAGE);
+        add(sp, BorderLayout.CENTER);
 
-        JButton refreshBtn = new JButton("Refresh");
-        refreshBtn.setFont(Palette.courier(13));
-        refreshBtn.setBackground(Palette.BLUE_BTN);
-        refreshBtn.setForeground(Color.WHITE);
-        refreshBtn.setBorderPainted(false);
-        refreshBtn.setFocusPainted(false);
-        refreshBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        refreshBtn.setBounds(getWidth() - 110, 14, 90, 32);
-        refreshBtn.addActionListener(e -> {
-            removeAll();
-            draw();
-        });
-
-        header.add(title);
-        header.add(alertCountLabel);
-        header.add(refreshBtn);
-        add(header);
+        status.setFont(new Font("Courier", Font.BOLD, 13));
+        status.setBorder(BorderFactory.createEmptyBorder(4, 20, 6, 20));
+        add(status, BorderLayout.SOUTH);
+        load();
     }
 
-    private void buildAlerts() {
-        cards = new JPanel(new GridLayout(0, 1, 0, 10));
-        cards.setBackground(Palette.BG);
-        cards.setBounds(20, 74, getWidth() - 40, getHeight() - 94);
-
-        alerts.clear();
-
-        SaleRepository saleRepo = DatabaseUtils.getInstance().getSaleRepository();
-
-        alerts.add(new Alert("Daily Revenue",
-                "Today's Sales: KES " + org.PSmart.POS.Utils.MyUtils.formatCurrency(
-                        String.valueOf(saleRepo.getTotalSalesToday())),
-                Palette.GREEN, "Total value of sales made today."));
-
-        alerts.add(new Alert("Transactions Today",
-                saleRepo.getSalesCountToday() + " transactions recorded",
-                Palette.BLUE_ACTIVE, "Number of completed sales today."));
-
-        collectStockAlerts();
-
-        if (alerts.isEmpty()) {
-            alerts.add(new Alert("All Clear",
-                    "No low-stock or expiry issues to address.",
-                    Palette.GREEN, "Inventory is healthy."));
-        }
-
-        for (Alert a : alerts) cards.add(buildAlertCard(a));
-
-        int open = 0;
-        for (Alert a : alerts) if (a.level > 0) open++;
-        alertCountLabel.setText(open + " actionable alerts");
-
-        cards.revalidate();
-        cards.repaint();
-        add(cards);
-    }
-
-    private void collectStockAlerts() {
-        long now = System.currentTimeMillis();
-        long soonWindow = 30L * 24 * 60 * 60 * 1000; // 30 days
-
-        List<StockFeedItem> feeds;
-        try {
-            feeds = loadFeeds();
-        } catch (Exception ex) {
-            return;
-        }
-
-        java.util.Map<java.util.UUID, Double> qtyByItem = new java.util.HashMap<>();
-        java.util.Map<java.util.UUID, String> nameByItem = new java.util.HashMap<>();
-        java.util.Map<java.util.UUID, Double> reorderByItem = new java.util.HashMap<>();
-
-        java.util.List<StockFeedItem> expired = new java.util.ArrayList<>();
-        java.util.List<StockFeedItem> expiringSoon = new java.util.ArrayList<>();
-
-        for (StockFeedItem feed : feeds) {
-            if (feed.getItem() == null) continue;
-            if (feed.getExpiry() == null) { // only count non-expired batches as "available"
-                qtyByItem.merge(feed.getItem().getUid(), feed.getQuantity() != null ? feed.getQuantity() : 0, Double::sum);
-            } else if (feed.getExpiry() < now) {
-                expired.add(feed);
-            } else if (feed.getExpiry() <= now + soonWindow) {
-                expiringSoon.add(feed);
+    private void load() {
+        status.setForeground(Ui.SLATE);
+        status.setText("Checking your shop...");
+        new SwingWorker<List<Alert>, Void>() {
+            @Override protected List<Alert> doInBackground() { return AlertService.compute(); }
+            @Override protected void done() {
+                try {
+                    render(get());
+                    status.setText("Updated " + new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()));
+                } catch (Exception ex) {
+                    status.setForeground(Color.RED);
+                    status.setText("Could not check: " + ex.getMessage());
+                }
             }
-            nameByItem.putIfAbsent(feed.getItem().getUid(), feed.getItem().getName());
-            if (feed.getItem().getReorderLevel() != null)
-                reorderByItem.putIfAbsent(feed.getItem().getUid(), feed.getItem().getReorderLevel());
-        }
+        }.execute();
+    }
 
-        for (java.util.Map.Entry<java.util.UUID, Double> e : qtyByItem.entrySet()) {
-            Double reorder = reorderByItem.get(e.getKey());
-            if (reorder != null && reorder > 0 && e.getValue() < reorder) {
-                String name = nameByItem.get(e.getKey());
-                alerts.add(new Alert("Low Stock: " + name,
-                        String.format("On hand: %.0f  —  Reorder level: %.0f", e.getValue(), reorder),
-                        Palette.AMBER, "Restock this item to avoid stock-out."));
-            }
+    private void render(List<Alert> alerts) {
+        list.removeAll();
+        int crit = 0, warn = 0;
+        for (Alert a : alerts) {
+            if (a.level == Level.CRITICAL) crit++;
+            if (a.level == Level.WARNING) warn++;
+            list.add(card(a));
+            list.add(Box.createVerticalStrut(10));
         }
+        summary.setText(crit + " urgent   " + warn + " to review");
+        list.revalidate();
+        list.repaint();
+    }
 
-        for (StockFeedItem f : trimmed(expired, 20)) {
-            String name = f.getItem().getName();
-            alerts.add(new Alert("Expired Batch: " + name,
-                    "A received stock batch has expired.",
-                    Palette.RED, "Remove this product from sale immediately."));
-        }
-        if (expired.size() > 20) {
-            alerts.add(new Alert("Expired Stock",
-                    (expired.size() - 20) + " more expired batches.",
-                    Palette.RED, "Review all expiry dates."));
-        }
-
-        for (StockFeedItem f : trimmed(expiringSoon, 10)) {
-            String name = f.getItem().getName();
-            alerts.add(new Alert("Expiring Soon: " + name,
-                    "A batch expires within 30 days (" + daysLeft(f.getExpiry()) + " days).",
-                    Palette.TEAL, "Consider a discount or promotion."));
+    private Color colorOf(Level l) {
+        switch (l) {
+            case CRITICAL: return RED;
+            case WARNING: return AMBER;
+            case OK: return GREEN;
+            default: return BLUE;
         }
     }
 
-    private int daysLeft(long expiry) {
-        return Math.max(0, (int) ((expiry - System.currentTimeMillis()) / (24L * 60 * 60 * 1000)));
-    }
-
-    private List<StockFeedItem> trimmed(List<StockFeedItem> list, int max) {
-        return list.size() > max ? list.subList(0, max) : list;
-    }
-
-    /** Load all non-deleted stock feed items (goods received batches). */
-    private List<StockFeedItem> loadFeeds() {
-        jakarta.persistence.EntityManager em =
-                org.PSmart.POS.TestJPA.getEntityManager();
-        return em.createQuery(
-                "FROM StockFeedItem f WHERE f.deleted=false", StockFeedItem.class)
-                .getResultList();
-    }
-
-    private JPanel buildAlertCard(Alert a) {
-        JPanel card = new JPanel(new BorderLayout(12, 0));
+    private JPanel card(Alert a) {
+        Color c = colorOf(a.level);
+        JPanel card = new JPanel(new BorderLayout(14, 0));
         card.setBackground(Color.WHITE);
-        card.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Palette.BORDER_CARD),
-                BorderFactory.createEmptyBorder(12, 15, 12, 15)));
-
-        JPanel accent = new JPanel();
-        accent.setBackground(a.levelColor);
-        accent.setPreferredSize(new Dimension(5, 0));
-        card.add(accent, BorderLayout.WEST);
+        card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 6, 0, 0, c),
+                BorderFactory.createEmptyBorder(12, 16, 12, 16)));
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel text = new JPanel();
-        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
         text.setOpaque(false);
-        JLabel title = new JLabel(a.title);
-        title.setFont(Palette.courier(15));
-        JLabel msg = new JLabel(a.message);
-        msg.setFont(Palette.courierPlain(13));
-        msg.setForeground(Palette.GRAY_SOFT);
-        text.add(title);
-        text.add(Box.createVerticalStrut(4));
-        text.add(msg);
+        text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+        JLabel tag = new JLabel(a.level == Level.OK ? "ALL CLEAR" : a.category.toUpperCase() + (a.level == Level.CRITICAL ? "  -  URGENT" : a.level == Level.WARNING ? "  -  REVIEW" : ""));
+        tag.setFont(new Font("Courier", Font.BOLD, 11));
+        tag.setForeground(c);
+        JLabel t = new JLabel(a.title);
+        t.setFont(new Font("Courier", Font.BOLD, 17));
+        t.setForeground(new Color(40, 40, 40));
+        JLabel d = new JLabel("<html>" + a.detail.replace("&", "&amp;").replace("<", "&lt;") + "</html>");
+        d.setFont(new Font("Courier", Font.PLAIN, 13));
+        d.setForeground(new Color(90, 96, 104));
+        text.add(tag);
+        text.add(Box.createVerticalStrut(2));
+        text.add(t);
+        text.add(Box.createVerticalStrut(3));
+        text.add(d);
         card.add(text, BorderLayout.CENTER);
 
-        JLabel tag = new JLabel(a.tag);
-        tag.setFont(Palette.courier(12));
-        tag.setForeground(a.levelColor);
-        tag.setPreferredSize(new Dimension(70, 40));
-        tag.setHorizontalAlignment(SwingConstants.CENTER);
-        tag.setOpaque(true);
-        tag.setBackground(Color.WHITE);
-        card.add(tag, BorderLayout.EAST);
-
+        if (a.actionLabel != null) {
+            JButton go = Ui.button(a.actionLabel, a.level == Level.CRITICAL ? RED : Ui.BLUE);
+            go.setPreferredSize(new Dimension(170, 38));
+            go.addActionListener(e -> act(a));
+            JPanel east = new JPanel(new GridBagLayout());
+            east.setOpaque(false);
+            east.add(go);
+            card.add(east, BorderLayout.EAST);
+        }
         return card;
     }
 
-    private static class Alert {
-        String title, message, tag;
-        Color levelColor;
-        int level; // 0 info, 1 warning, 2 critical
-
-        Alert(String title, String message, Color color, String tag) {
-            this.title = title;
-            this.message = message;
-            this.levelColor = color;
-            this.tag = tag.toUpperCase();
-            this.level = color.equals(Palette.GREEN) ? 0
-                    : color.equals(Palette.AMBER) || color.equals(Palette.TEAL) ? 1 : 2;
+    private void act(Alert a) {
+        if (a.backupNow) {
+            status.setForeground(Ui.SLATE);
+            status.setText("Backing up...");
+            new SwingWorker<Void, Void>() {
+                @Override protected Void doInBackground() throws Exception {
+                    org.PSmart.POS.Entities.StoreConfig cfg = org.PSmart.POS.Database.DatabaseUtils.getInstance().getStoreConfigRepository().getStoreConfig();
+                    int keep = cfg != null && cfg.getBackupKeepCount() != null ? cfg.getBackupKeepCount() : 10;
+                    BackupService.createBackupAndRotate(keep);
+                    if (cfg != null) {
+                        cfg.setLastBackupAt(System.currentTimeMillis());
+                        org.PSmart.POS.Database.DatabaseUtils.getInstance().getStoreConfigRepository().saveOrUpdate(cfg);
+                    }
+                    return null;
+                }
+                @Override protected void done() {
+                    try { get(); Ui.toast("Backup created"); } catch (Exception ex) { Ui.toast("Backup failed: " + ex.getMessage()); }
+                    load();
+                }
+            }.execute();
+        } else if (a.tab >= 0 && dash != null) {
+            dash.openTab(a.tab);
         }
     }
 }

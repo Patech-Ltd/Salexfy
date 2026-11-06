@@ -1,133 +1,123 @@
 package org.PSmart.POS.Utils;
 
-import org.PSmart.POS.Entities.*;
+import org.PSmart.POS.Entities.Purchase;
+import org.PSmart.POS.Entities.Sale;
+import org.PSmart.POS.Entities.StoreConfig;
+import org.PSmart.POS.Utils.receipt.Receipt;
+import org.PSmart.POS.Utils.receipt.ReceiptDocs;
+import org.PSmart.POS.tests.AutoClosingNotification;
 
+import javax.print.PrintService;
+import javax.print.PrintServiceLookup;
+import javax.swing.*;
 import java.awt.*;
-import java.awt.print.*;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
+import java.awt.image.BufferedImage;
+import java.awt.print.PrinterJob;
 
+/**
+ * Printing front door. Printing is silent (no dialog at the till): it goes to the printer chosen in
+ * Settings > Receipt &amp; Printer, or the system default. Every document can also be previewed first.
+ */
 public class ReceiptPrinter {
 
+    // ---- thermal receipt (kept signature used across the app)
     public static void printReceipt(Sale sale, StoreConfig config) {
-        PrinterJob printerJob = PrinterJob.getPrinterJob();
-        printerJob.setPrintable((graphics, pageFormat, pageIndex) -> {
-            if (pageIndex > 0) return Printable.NO_SUCH_PAGE;
-            Graphics2D g2d = (Graphics2D) graphics;
-            g2d.translate(pageFormat.getImageableX(), pageFormat.getImageableY());
+        print(ReceiptDocs.saleReceipt(sale, config), config);
+    }
 
-            int y = 0;
-            int pw = (int) pageFormat.getImageableWidth();
-            Font plain = new Font("Monospaced", Font.PLAIN, 10);
-            Font bold = new Font("Monospaced", Font.BOLD, 10);
-            Font title = new Font("Monospaced", Font.BOLD, 14);
-            Font small = new Font("Monospaced", Font.PLAIN, 8);
+    public static void printInvoice(Sale sale, StoreConfig config) {
+        print(ReceiptDocs.saleInvoice(sale, config), config);
+    }
 
-            String storeName = config != null ? config.getStoreName() : "PSMART POS";
-            g2d.setFont(title);
-            y = drawCentered(g2d, storeName, y, pw, title);
-            g2d.setFont(plain);
+    public static void printPurchase(Purchase purchase, StoreConfig config) {
+        print(ReceiptDocs.purchaseInvoice(purchase, config), config);
+    }
 
-            if (config != null) {
-                if (config.getStoreAddress() != null && !config.getStoreAddress().isEmpty()) {
-                    y = drawCentered(g2d, config.getStoreAddress(), y, pw, plain);
+    public static void previewReceipt(Component parent, Sale sale, StoreConfig config) {
+        preview(parent, ReceiptDocs.saleReceipt(sale, config), config);
+    }
+
+    public static void previewInvoice(Component parent, Sale sale, StoreConfig config) {
+        preview(parent, ReceiptDocs.saleInvoice(sale, config), config);
+    }
+
+    public static void previewPurchase(Component parent, Purchase purchase, StoreConfig config) {
+        preview(parent, ReceiptDocs.purchaseInvoice(purchase, config), config);
+    }
+
+    // ---- core
+    /** Prints silently on a background thread. Falls back to a toast if no printer is available. */
+    public static void print(Receipt doc, StoreConfig config) {
+        new Thread(() -> {
+            try {
+                PrinterJob job = PrinterJob.getPrinterJob();
+                PrintService svc = chosenService(config);
+                if (svc == null && PrintServiceLookup.lookupPrintServices(null, null).length == 0) {
+                    AutoClosingNotification.sendNotification("No printer found - use Preview, or install a printer");
+                    return;
                 }
-                if (config.getStorePhone() != null && !config.getStorePhone().isEmpty()) {
-                    y = drawCentered(g2d, config.getStorePhone(), y, pw, plain);
-                }
+                if (svc != null) job.setPrintService(svc);
+                job.setJobName(doc.title());
+                job.setCopies(1);          // CUPS/lpr rejects "copies 0", which is what Java sends by default
+                job.setPrintable(doc, doc.pageFormat(job.defaultPage()));
+                job.print();
+            } catch (Exception e) {
+                e.printStackTrace();
+                AutoClosingNotification.sendNotification("Print failed: " + e.getMessage());
             }
+        }, "receipt-print").start();
+    }
 
-            y = drawLine(g2d, y, pw);
-            y = drawCentered(g2d, "RECEIPT", y, pw, bold);
-            y = drawLine(g2d, y, pw);
-
-            g2d.setFont(plain);
-            y = drawLeftRight(g2d, "Receipt:", sale.getReceiptNumber(), y);
-            String dateStr = new SimpleDateFormat("dd-MMM-yyyy HH:mm").format(new Date(sale.getCreatedAt()));
-            y = drawLeftRight(g2d, "Date:", dateStr, y);
-            if (sale.getCashier() != null) {
-                y = drawLeftRight(g2d, "Cashier:", sale.getCashier().getFullname(), y);
-            }
-            if (sale.getCustomer() != null) {
-                y = drawLeftRight(g2d, "Customer:", sale.getCustomer().getFullname(), y);
-            }
-            y = drawLeftRight(g2d, "Payment:", sale.getPaymentMethod(), y);
-
-            y = drawLine(g2d, y, pw);
-
-            g2d.setFont(bold);
-            y = drawLeftRight(g2d, "Item", "Amount", y);
-            g2d.setFont(plain);
-            y = drawLine(g2d, y, pw);
-
-            if (sale.getItems() != null) {
-                for (SaleItem item : sale.getItems()) {
-                    String name = item.getItem().getName();
-                    if (name.length() > 18) name = name.substring(0, 16) + "..";
-                    String qty = String.format("x%.0f", item.getQuantity());
-                    String total = MyUtils.formatCurrency(String.valueOf(item.getTotal()));
-                    y = drawLeftRight(g2d, name, qty + " " + total, y);
-                }
-            }
-
-            y = drawLine(g2d, y, pw);
-            y = drawLeftRight(g2d, "Subtotal:", "KES " + MyUtils.formatCurrency(String.valueOf(sale.getSubtotal())), y);
-            if (sale.getVatAmount() != null && sale.getVatAmount() > 0) {
-                String taxName = "Tax:";
-                if (config != null && config.getTaxName() != null) taxName = config.getTaxName() + ":";
-                y = drawLeftRight(g2d, taxName, "KES " + MyUtils.formatCurrency(String.valueOf(sale.getVatAmount())), y);
-            }
-            if (sale.getDiscount() != null && sale.getDiscount() > 0) {
-                y = drawLeftRight(g2d, "Discount:", "-KES " + MyUtils.formatCurrency(String.valueOf(sale.getDiscount())), y);
-            }
-            g2d.setFont(bold);
-            y = drawLeftRight(g2d, "TOTAL:", "KES " + MyUtils.formatCurrency(String.valueOf(sale.getTotal())), y);
-            g2d.setFont(plain);
-            y = drawLeftRight(g2d, "Paid:", "KES " + MyUtils.formatCurrency(String.valueOf(sale.getAmountPaid())), y);
-            if (sale.getChange() != null && sale.getChange() > 0) {
-                y = drawLeftRight(g2d, "Change:", "KES " + MyUtils.formatCurrency(String.valueOf(sale.getChange())), y);
-            }
-
-            y = drawLine(g2d, y, pw);
-
-            if (config != null && config.getReceiptFooter() != null && !config.getReceiptFooter().isEmpty()) {
-                y = drawCentered(g2d, config.getReceiptFooter(), y, pw, small);
-            }
-            y = drawCentered(g2d, new SimpleDateFormat("dd-MMM-yyyy HH:mm:ss").format(new Date()), y, pw, small);
-
-            return Printable.PAGE_EXISTS;
-        });
-
-        if (printerJob.printDialog()) {
-            new Thread(() -> {
-                try {
-                    printerJob.print();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }).start();
+    private static PrintService chosenService(StoreConfig config) {
+        if (config == null || config.getDefaultPrinter() == null) return null;
+        String want = config.getDefaultPrinter().trim();
+        if (want.isEmpty() || want.startsWith("(")) return null;
+        for (PrintService s : PrinterJob.lookupPrintServices()) {
+            if (s.getName().equalsIgnoreCase(want)) return s;
         }
+        return null;
     }
 
-    private static int drawCentered(Graphics2D g2d, String text, int y, int pw, Font font) {
-        g2d.setFont(font);
-        FontMetrics fm = g2d.getFontMetrics();
-        int x = (pw - fm.stringWidth(text)) / 2;
-        g2d.drawString(text, x, y + fm.getAscent());
-        return y + fm.getHeight();
-    }
+    /** On-screen preview with Print / Close. */
+    public static void preview(Component parent, Receipt doc, StoreConfig config) {
+        Runnable show = () -> {
+            BufferedImage img = doc.toImage(24);
+            double scale = doc.paper() == Receipt.Paper.A4 ? 0.52 : 0.8;
+            int w = (int) (img.getWidth() * scale), h = (int) (img.getHeight() * scale);
+            Image scaled = img.getScaledInstance(w, h, Image.SCALE_SMOOTH);
 
-    private static int drawLeftRight(Graphics2D g2d, String left, String right, int y) {
-        FontMetrics fm = g2d.getFontMetrics();
-        g2d.drawString(left, 10, y + fm.getAscent());
-        int rw = fm.stringWidth(right);
-        g2d.drawString(right, (int) g2d.getClipBounds().getWidth() - rw - 10, y + fm.getAscent());
-        return y + fm.getHeight();
-    }
+            JFrame f = new JFrame("Preview - " + doc.title());
+            f.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+            f.setLayout(new BorderLayout());
+            JLabel page = new JLabel(new ImageIcon(scaled));
+            JPanel holder = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 16));
+            holder.setBackground(new Color(120, 124, 130));
+            holder.add(page);
+            JScrollPane sp = new JScrollPane(holder);
+            sp.getVerticalScrollBar().setUnitIncrement(24);
+            f.add(sp, BorderLayout.CENTER);
 
-    private static int drawLine(Graphics2D g2d, int y, int pw) {
-        g2d.drawLine(10, y + 2, pw - 10, y + 2);
-        return y + 6;
+            JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 16, 10));
+            bar.setBackground(Color.WHITE);
+            JButton print = MyUtils.createButton("Print", Color.BLUE);
+            print.setForeground(Color.WHITE);
+            print.setFont(MyUtils.courierFont(18));
+            print.setPreferredSize(new Dimension(180, 42));
+            print.addActionListener(e -> print(doc, config));
+            JButton close = MyUtils.createButton("Close", new Color(52, 58, 64));
+            close.setForeground(Color.WHITE);
+            close.setFont(MyUtils.courierFont(18));
+            close.setPreferredSize(new Dimension(180, 42));
+            close.addActionListener(e -> f.dispose());
+            bar.add(close);
+            bar.add(print);
+            f.add(bar, BorderLayout.SOUTH);
+
+            Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+            f.setSize(Math.min(w + 80, screen.width - 100), Math.min(h + 160, screen.height - 100));
+            f.setLocationRelativeTo(parent);
+            f.setVisible(true);
+        };
+        if (SwingUtilities.isEventDispatchThread()) show.run(); else SwingUtilities.invokeLater(show);
     }
 }

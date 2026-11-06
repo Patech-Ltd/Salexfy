@@ -40,12 +40,25 @@ public class AdminSettings extends JPanel {
     // Receipt & Printer
     private JTextArea receiptFooterArea;
     private JComboBox<String> printerCombo;
+    private JComboBox<String> paperCombo;
+    private JCheckBox loyaltyCheck, blockStockCheck, commissionCheck;
+    private JTextField pointsPerMoneyField, pointValueField, commissionRateField;
+    private JComboBox<String> commissionBasisCombo;
+    private JCheckBox autoPrintCheck;
+    private JTextField taxPinField, receiptHeaderField;
     // Payment methods
     private JPanel paymentListPanel;
     private JTextField newMethodField;
     private final List<PaymentMethodCard> paymentCards = new ArrayList<>();
 
+    private final org.PSmart.POS.Entities.User sessionUser;
+
     public AdminSettings() {
+        this(null);
+    }
+
+    public AdminSettings(org.PSmart.POS.Entities.User sessionUser) {
+        this.sessionUser = sessionUser;
         loadConfig();
         draw();
         populate();
@@ -70,6 +83,8 @@ public class AdminSettings extends JPanel {
         cards.add(buildPrinterCard(), "PRINTER");
         cards.add(buildPaymentCard(), "PAYMENT");
         cards.add(buildBackupCard(), "BACKUP");
+        cards.add(buildSalesCard(), "SALES");
+        cards.add(buildCommissionCard(), "COMMISSION");
         add(cards, BorderLayout.CENTER);
 
         showCard("STORE");
@@ -77,89 +92,148 @@ public class AdminSettings extends JPanel {
 
     // ------------------------------------------------------------------ sidebar
 
+    private final java.util.Map<String, JButton> navMap = new java.util.LinkedHashMap<>();
+
+    private static final String[][] NAV = {
+            {"BUSINESS", null},
+            {"Store details", "STORE"},
+            {"Tax & pricing", "TAX"},
+            {"SELLING", null},
+            {"Payment methods", "PAYMENT"},
+            {"Sales & loyalty", "SALES"},
+            {"Staff commission", "COMMISSION"},
+            {"RECEIPTS", null},
+            {"Receipt & printer", "PRINTER"},
+            {"DATA", null},
+            {"Backup & sync", "BACKUP"},
+    };
+
     private JPanel buildSidebar() {
         navSidebar = new JPanel();
         navSidebar.setLayout(new BoxLayout(navSidebar, BoxLayout.Y_AXIS));
         navSidebar.setBackground(DARK);
-        navSidebar.setPreferredSize(new Dimension(220, 0));
-        navSidebar.setBorder(BorderFactory.createEmptyBorder(20, 12, 20, 12));
+        navSidebar.setPreferredSize(new Dimension(270, 0));
+        navSidebar.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
 
-        JLabel head = new JLabel("Settings");
-        head.setFont(MyUtils.courierFont(20));
+        JLabel head = new JLabel("  Settings");
+        head.setFont(MyUtils.courierFont(24));
         head.setForeground(Color.WHITE);
         head.setAlignmentX(Component.LEFT_ALIGNMENT);
+        head.setBorder(BorderFactory.createEmptyBorder(0, 14, 14, 0));
         navSidebar.add(head);
-        navSidebar.add(Box.createVerticalStrut(24));
 
-        addNav("  Store", "STORE");
-        addNav("  Tax & Pricing", "TAX");
-        addNav("  Receipt & Printer", "PRINTER");
-        addNav("  Payment Methods", "PAYMENT");
-        addNav("  Backup & Sync", "BACKUP");
-
+        for (String[] n : NAV) {
+            if (n[1] == null) {
+                JLabel g = new JLabel("  " + n[0]);
+                g.setFont(new Font("Courier", Font.BOLD, 11));
+                g.setForeground(new Color(150, 158, 168));
+                g.setAlignmentX(Component.LEFT_ALIGNMENT);
+                g.setBorder(BorderFactory.createEmptyBorder(14, 14, 4, 0));
+                navSidebar.add(g);
+            } else {
+                addNav(n[0], n[1]);
+            }
+        }
         navSidebar.add(Box.createVerticalGlue());
         return navSidebar;
     }
 
     private void addNav(String label, String card) {
         JButton b = new JButton(label);
-        b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
-        b.setPreferredSize(new Dimension(Integer.MAX_VALUE, 44));
+        b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
+        b.setPreferredSize(new Dimension(270, 40));
         b.setAlignmentX(Component.LEFT_ALIGNMENT);
         b.setHorizontalAlignment(SwingConstants.LEFT);
         b.setFont(MyUtils.courierFont(15));
         b.setForeground(Color.WHITE);
         b.setFocusPainted(false);
         b.setBorderPainted(false);
+        b.setOpaque(true);
         b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        b.setBackground(IDLE);
+        b.setBackground(DARK);
+        b.setBorder(navBorder(DARK));
         b.addActionListener(e -> showCard(card));
+        navMap.put(card, b);
         navButtons.add(b);
         navSidebar.add(b);
-        navSidebar.add(Box.createVerticalStrut(6));
+    }
+
+    private static javax.swing.border.Border navBorder(Color accent) {
+        return BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 4, 0, 0, accent),
+                BorderFactory.createEmptyBorder(0, 20, 0, 0));
     }
 
     private void showCard(String card) {
         ((CardLayout) cards.getLayout()).show(cards, card);
-        int i = switch (card) {
-            case "TAX" -> 1;
-            case "PRINTER" -> 2;
-            case "PAYMENT" -> 3;
-            case "BACKUP" -> 4;
-            default -> 0;
-        };
-        for (int k = 0; k < navButtons.size(); k++)
-            navButtons.get(k).setBackground(k == i ? ACTIVE : IDLE);
+        for (java.util.Map.Entry<String, JButton> e : navMap.entrySet()) {
+            boolean on = e.getKey().equals(card);
+            e.getValue().setBackground(on ? new Color(0, 0, 137) : DARK);
+            e.getValue().setBorder(navBorder(on ? IDLE : DARK));
+        }
     }
+
+    private static final java.util.Map<String, String> SUBTITLES = java.util.Map.ofEntries(
+            java.util.Map.entry("Store", "Your shop's name and contact details. They appear on receipts and invoices."),
+            java.util.Map.entry("Tax & Pricing", "How VAT or turnover tax is worked out on sales."),
+            java.util.Map.entry("Receipt & Printer", "Which printer to use, the paper width, and what the receipt says."),
+            java.util.Map.entry("Payment Methods", "The ways customers can pay at the till."),
+            java.util.Map.entry("Backup & Sync", "Keep copies of your data safe and in step with your server."),
+            java.util.Map.entry("Sales & Loyalty", "Rules the till follows at checkout."),
+            java.util.Map.entry("Staff Commission", "Pay staff a share of what they sell."));
 
     private JPanel sectionWrap(JLabel title, Component form, Runnable save) {
         JPanel wrap = new JPanel(new BorderLayout());
         wrap.setBackground(Color.WHITE);
-        wrap.setBorder(BorderFactory.createEmptyBorder(30, 40, 30, 40));
 
-        JPanel top = new JPanel(new BorderLayout());
+        JPanel top = new JPanel();
+        top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
         top.setOpaque(false);
-        title.setFont(MyUtils.courierFont(22));
-        title.setForeground(DARK);
-        top.add(title, BorderLayout.WEST);
-
-        JButton saveBtn = new JButton("Save");
-        saveBtn.setFont(MyUtils.courierFont(14));
-        saveBtn.setBackground(new Color(40, 167, 69));
-        saveBtn.setForeground(Color.WHITE);
-        saveBtn.setFocusPainted(false);
-        saveBtn.setBorderPainted(false);
-        saveBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        saveBtn.setPreferredSize(new Dimension(120, 38));
-        saveBtn.addActionListener(e -> save.run());
-        top.add(saveBtn, BorderLayout.EAST);
-
+        top.setBorder(BorderFactory.createEmptyBorder(26, 40, 8, 40));
+        title.setFont(MyUtils.courierFont(24));
+        title.setForeground(new Color(0, 0, 137));
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        top.add(title);
+        String sub = SUBTITLES.get(title.getText());
+        if (sub != null) {
+            JLabel d = new JLabel(sub);
+            d.setFont(new Font("Courier", Font.PLAIN, 13));
+            d.setForeground(new Color(108, 117, 125));
+            d.setAlignmentX(Component.LEFT_ALIGNMENT);
+            d.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+            top.add(d);
+        }
         wrap.add(top, BorderLayout.NORTH);
 
         JScrollPane scroll = new JScrollPane(form);
         scroll.setBorder(BorderFactory.createEmptyBorder());
         scroll.getViewport().setBackground(Color.WHITE);
+        scroll.getVerticalScrollBar().setUnitIncrement(16);
         wrap.add(scroll, BorderLayout.CENTER);
+
+        JPanel bar = new JPanel(new BorderLayout());
+        bar.setBackground(new Color(245, 245, 250));
+        bar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(220, 220, 220)),
+                BorderFactory.createEmptyBorder(10, 40, 10, 40)));
+        JLabel hint = new JLabel("Changes apply once you press Save.");
+        hint.setFont(new Font("Courier", Font.PLAIN, 13));
+        hint.setForeground(new Color(108, 117, 125));
+        bar.add(hint, BorderLayout.WEST);
+        JButton saveBtn = org.PSmart.POS.Utils.Components.forms.Ui.button("Save changes", Color.BLUE);
+        saveBtn.setFont(MyUtils.courierFont(16));
+        saveBtn.setPreferredSize(new Dimension(190, 42));
+        saveBtn.addActionListener(e -> {
+            if (org.PSmart.POS.Utils.SupervisorApproval.require(this, sessionUser, org.PSmart.POS.Entities.RoleType.SETTINGS, "change settings") == null) {
+                hint.setForeground(new Color(200, 30, 45));
+                hint.setText("Changing settings needs approval from someone who can.");
+                return;
+            }
+            save.run();
+            hint.setForeground(new Color(30, 110, 50));
+            hint.setText("Saved " + new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()));
+        });
+        bar.add(saveBtn, BorderLayout.EAST);
+        wrap.add(bar, BorderLayout.SOUTH);
         return wrap;
     }
 
@@ -167,25 +241,57 @@ public class AdminSettings extends JPanel {
         JPanel p = new JPanel();
         p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
         p.setBackground(Color.WHITE);
-        p.setBorder(BorderFactory.createEmptyBorder(20, 0, 20, 0));
+        p.setBorder(BorderFactory.createEmptyBorder(14, 40, 24, 40));
         return p;
     }
 
+    private static final int FIELD_MAX = 720;
+
     private JPanel fieldRow(String label, JComponent input) {
-        JPanel row = new JPanel(new BorderLayout(14, 0));
+        return fieldRow(label, input, null);
+    }
+
+    /** Label above, control below, optional grey helper text - consistent on every settings page. */
+    private JPanel fieldRow(String label, JComponent input, String helper) {
+        JPanel row = new JPanel();
+        row.setLayout(new BoxLayout(row, BoxLayout.Y_AXIS));
         row.setOpaque(false);
-        row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
-        row.setBorder(BorderFactory.createEmptyBorder(6, 0, 6, 0));
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
 
         JLabel l = new JLabel(label);
-        l.setFont(MyUtils.courierFont(14));
-        l.setForeground(new Color(90, 90, 90));
-        l.setPreferredSize(new Dimension(220, 36));
-        row.add(l, BorderLayout.WEST);
+        l.setFont(new Font("Courier", Font.BOLD, 14));
+        l.setForeground(new Color(0, 0, 137));
+        l.setAlignmentX(Component.LEFT_ALIGNMENT);
+        row.add(l);
+        row.add(Box.createVerticalStrut(5));
 
-        input.setFont(new Font("Courier", Font.PLAIN, 14));
-        input.setPreferredSize(new Dimension(0, 36));
-        row.add(input, BorderLayout.CENTER);
+        input.setAlignmentX(Component.LEFT_ALIGNMENT);
+        input.setFont(new Font("Courier", Font.PLAIN, 15));
+        boolean box = input instanceof JCheckBox;
+        if (input instanceof JTextField || input instanceof JComboBox) {
+            input.setPreferredSize(new Dimension(FIELD_MAX, 38));
+            input.setMaximumSize(new Dimension(FIELD_MAX, 38));
+            if (input instanceof JTextField) {
+                input.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createLineBorder(new Color(200, 204, 210)),
+                        BorderFactory.createEmptyBorder(4, 10, 4, 10)));
+            }
+        } else if (input instanceof JScrollPane) {
+            input.setMaximumSize(new Dimension(FIELD_MAX, 120));
+        } else if (box) {
+            ((JCheckBox) input).setOpaque(false);
+        }
+        row.add(input);
+        if (helper != null) {
+            JLabel h = new JLabel(helper);
+            h.setFont(new Font("Courier", Font.PLAIN, 12));
+            h.setForeground(new Color(108, 117, 125));
+            h.setAlignmentX(Component.LEFT_ALIGNMENT);
+            h.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
+            row.add(h);
+        }
+        row.setMaximumSize(new Dimension(FIELD_MAX + 20, Integer.MAX_VALUE));
         return row;
     }
 
@@ -198,11 +304,11 @@ public class AdminSettings extends JPanel {
         storePhoneField   = new JTextField();
         storeEmailField   = new JTextField();
         currencyField     = new JTextField();
-        form.add(fieldRow("Store Name", storeNameField));
-        form.add(fieldRow("Address", storeAddressField));
-        form.add(fieldRow("Phone", storePhoneField));
+        form.add(fieldRow("Store Name", storeNameField, "Shown at the top of every receipt and invoice."));
+        form.add(fieldRow("Address", storeAddressField, "Printed under the store name."));
+        form.add(fieldRow("Phone", storePhoneField, "Customers see this on their receipts."));
         form.add(fieldRow("Email", storeEmailField));
-        form.add(fieldRow("Currency", currencyField));
+        form.add(fieldRow("Currency", currencyField, "The currency word printed on receipts, e.g. KES."));
 
         return sectionWrap(new JLabel("Store"), form, this::saveStore);
     }
@@ -245,9 +351,9 @@ public class AdminSettings extends JPanel {
         form.add(Box.createVerticalStrut(12));
         form.add(useTurnoverTaxCheckbox);
         form.add(Box.createVerticalStrut(12));
-        form.add(fieldRow("Tax Name (e.g. VAT)", taxNameField));
-        form.add(fieldRow("Tax Rate (%)", taxRateField));
-        form.add(fieldRow("Turnover Tax Rate (%)", turnoverTaxField));
+        form.add(fieldRow("Tax Name (e.g. VAT)", taxNameField, "Printed next to the tax amount on receipts."));
+        form.add(fieldRow("Tax Rate (%)", taxRateField, "Numbers only, e.g. 16."));
+        form.add(fieldRow("Turnover Tax Rate (%)", turnoverTaxField, "Only used if you pay turnover tax."));
         form.add(fieldRow("Adjusting %", adjustingPctField));
 
         return sectionWrap(new JLabel("Tax & Pricing"), form, this::saveTax);
@@ -265,6 +371,86 @@ public class AdminSettings extends JPanel {
         AutoClosingNotification.sendNotification("Tax settings saved");
     }
 
+    // ------------------------------------------------------------------ SALES & LOYALTY
+
+    private JPanel buildSalesCard() {
+        JPanel form = formPanel();
+        JLabel hint = new JLabel("Rules the till follows at checkout.");
+        hint.setFont(MyUtils.courierFont(12));
+        hint.setForeground(new Color(120, 120, 120));
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        hint.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+        form.add(hint);
+
+        blockStockCheck = new JCheckBox("Refuse to sell more than the stock on hand");
+        blockStockCheck.setOpaque(false);
+        form.add(fieldRow("Stock control", blockStockCheck));
+        form.add(Box.createVerticalStrut(6));
+
+        loyaltyCheck = new JCheckBox("Customers earn loyalty points on every sale");
+        loyaltyCheck.setOpaque(false);
+        form.add(fieldRow("Loyalty points", loyaltyCheck));
+        pointsPerMoneyField = new JTextField();
+        form.add(fieldRow("Points earned per 1.00 paid", pointsPerMoneyField));
+        pointValueField = new JTextField();
+        form.add(fieldRow("Money value of 1 point", pointValueField));
+        JLabel eg = new JLabel("Example: 0.01 points per 1.00 and a point value of 1.00 gives customers 1% back.");
+        eg.setFont(MyUtils.courierFont(12));
+        eg.setForeground(new Color(120, 120, 120));
+        eg.setAlignmentX(Component.LEFT_ALIGNMENT);
+        form.add(eg);
+        return sectionWrap(new JLabel("Sales & Loyalty"), form, this::saveSales);
+    }
+
+    private void saveSales() {
+        config.setBlockOutOfStockSales(blockStockCheck.isSelected());
+        config.setLoyaltyEnabled(loyaltyCheck.isSelected());
+        config.setLoyaltyPointsPerMoney(Math.max(0, MyUtils.getDouble(pointsPerMoneyField.getText().trim())));
+        config.setLoyaltyPointValue(Math.max(0, MyUtils.getDouble(pointValueField.getText().trim())));
+        repo.saveOrUpdate(config);
+        AutoClosingNotification.sendNotification("Sales & loyalty settings saved");
+    }
+
+    // ------------------------------------------------------------------ COMMISSION
+
+    private JPanel buildCommissionCard() {
+        JPanel form = formPanel();
+        JLabel hint = new JLabel("Pay staff a share of what they sell. Each user can have their own rate (Admin > Users).");
+        hint.setFont(MyUtils.courierFont(12));
+        hint.setForeground(new Color(120, 120, 120));
+        hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+        hint.setBorder(BorderFactory.createEmptyBorder(0, 0, 10, 0));
+        form.add(hint);
+
+        commissionCheck = new JCheckBox("Track staff commission");
+        commissionCheck.setOpaque(false);
+        form.add(fieldRow("Commission", commissionCheck));
+        commissionBasisCombo = new JComboBox<>(new String[]{"% of sales (selling total)", "% of profit (sales minus cost)"});
+        commissionBasisCombo.setPreferredSize(new Dimension(0, 36));
+        form.add(fieldRow("Calculated on", commissionBasisCombo));
+        commissionRateField = new JTextField();
+        form.add(fieldRow("Default rate (%)", commissionRateField, "Used for every user who has no rate of their own."));
+        JLabel eg = new JLabel("Cancelled sales earn no commission. See Reports > Staff to review and record payouts.");
+        eg.setFont(MyUtils.courierFont(12));
+        eg.setForeground(new Color(120, 120, 120));
+        eg.setAlignmentX(Component.LEFT_ALIGNMENT);
+        form.add(eg);
+        return sectionWrap(new JLabel("Staff Commission"), form, this::saveCommission);
+    }
+
+    private void saveCommission() {
+        double rate = MyUtils.getDouble(commissionRateField.getText().trim());
+        if (rate < 0 || rate > 100) {
+            AutoClosingNotification.sendNotification("Commission rate must be between 0 and 100");
+            return;
+        }
+        config.setCommissionEnabled(commissionCheck.isSelected());
+        config.setCommissionBasis(commissionBasisCombo.getSelectedIndex() == 1 ? "PROFIT" : "SALES");
+        config.setCommissionRate(rate);
+        repo.saveOrUpdate(config);
+        AutoClosingNotification.sendNotification("Commission settings saved");
+    }
+
     // ------------------------------------------------------------------ PRINTER
 
     private JPanel buildPrinterCard() {
@@ -274,17 +460,77 @@ public class AdminSettings extends JPanel {
         printerCombo.setFont(new Font("Courier", Font.PLAIN, 14));
         printerCombo.setPreferredSize(new Dimension(0, 36));
         printerCombo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 40));
-        form.add(fieldRow("Default Printer", printerCombo));
-        form.add(Box.createVerticalStrut(10));
+        form.add(fieldRow("Default Printer", printerCombo, "Pick your receipt printer, or leave on System Default."));
+        form.add(Box.createVerticalStrut(6));
+
+        paperCombo = new JComboBox<>(new String[]{"80 mm thermal roll", "58 mm thermal roll"});
+        paperCombo.setPreferredSize(new Dimension(0, 36));
+        form.add(fieldRow("Receipt paper", paperCombo, "Choose the roll width your thermal printer uses."));
+        form.add(Box.createVerticalStrut(6));
+
+        autoPrintCheck = new JCheckBox("Print the receipt automatically after every sale");
+        autoPrintCheck.setOpaque(false);
+        autoPrintCheck.setFont(new Font("Courier", Font.PLAIN, 14));
+        form.add(fieldRow("Auto print", autoPrintCheck));
+        form.add(Box.createVerticalStrut(6));
+
+        taxPinField = new JTextField();
+        form.add(fieldRow("Tax PIN / VAT no.", taxPinField, "Printed under the address, e.g. P051234567Z."));
+        receiptHeaderField = new JTextField();
+        form.add(fieldRow("Header line", receiptHeaderField, "Optional line under the address, e.g. \"Pay via Till 123456\"."));
+        form.add(Box.createVerticalStrut(6));
 
         receiptFooterArea = new JTextArea(4, 40);
         receiptFooterArea.setFont(new Font("Courier", Font.PLAIN, 14));
         receiptFooterArea.setLineWrap(true);
-        JPanel foot = fieldRow("Receipt Footer", new JScrollPane(receiptFooterArea));
-        foot.setMaximumSize(new Dimension(Integer.MAX_VALUE, 130));
+        JPanel foot = fieldRow("Receipt Footer", new JScrollPane(receiptFooterArea), "The thank-you message at the bottom of the receipt.");
         form.add(foot);
+        form.add(Box.createVerticalStrut(10));
+
+        JPanel tests = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        tests.setOpaque(false);
+        tests.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JButton preview = MyUtils.createButton("Preview test receipt", new Color(52, 58, 64));
+        preview.setForeground(Color.WHITE);
+        preview.setFont(MyUtils.courierFont(14));
+        preview.setPreferredSize(new Dimension(230, 38));
+        preview.addActionListener(e -> testReceipt(false));
+        JButton printTest = MyUtils.createButton("Print test receipt", new Color(25, 118, 211));
+        printTest.setForeground(Color.WHITE);
+        printTest.setFont(MyUtils.courierFont(14));
+        printTest.setPreferredSize(new Dimension(230, 38));
+        printTest.addActionListener(e -> testReceipt(true));
+        tests.add(preview);
+        tests.add(printTest);
+        form.add(tests);
 
         return sectionWrap(new JLabel("Receipt & Printer"), form, this::savePrinter);
+    }
+
+    /** Uses the values currently typed in the form (no need to save first). */
+    private void testReceipt(boolean print) {
+        StoreConfig t = config;
+        applyPrinterFields(t);
+        org.PSmart.POS.Entities.Sale s = org.PSmart.POS.Entities.Sale.builder()
+                .uid(java.util.UUID.randomUUID()).createdAt(System.currentTimeMillis())
+                .subtotal(430.0).vatAmount(68.8).discount(0.0).total(498.8).amountPaid(500.0).change(1.2)
+                .paymentMethod("CASH").status("COMPLETED").build();
+        s.setItems(new java.util.ArrayList<>(java.util.List.of(
+                org.PSmart.POS.Entities.SaleItem.builder().item(org.PSmart.POS.Entities.Item.builder().name("Sample item A").build())
+                        .quantity(2.0).unitPrice(120.0).discount(0.0).total(240.0).build(),
+                org.PSmart.POS.Entities.SaleItem.builder().item(org.PSmart.POS.Entities.Item.builder().name("Sample item B with a longer name").build())
+                        .quantity(1.0).unitPrice(190.0).discount(0.0).total(190.0).build())));
+        if (print) org.PSmart.POS.Utils.ReceiptPrinter.printReceipt(s, t);
+        else org.PSmart.POS.Utils.ReceiptPrinter.previewReceipt(this, s, t);
+    }
+
+    private void applyPrinterFields(StoreConfig c) {
+        c.setDefaultPrinter(printerCombo.getSelectedItem() == null ? "" : printerCombo.getSelectedItem().toString());
+        c.setReceiptFooter(receiptFooterArea.getText());
+        c.setReceiptPaper(paperCombo.getSelectedIndex() == 1 ? "58" : "80");
+        c.setAutoPrintReceipt(autoPrintCheck.isSelected());
+        c.setTaxPin(taxPinField.getText().trim());
+        c.setReceiptHeader(receiptHeaderField.getText().trim());
     }
 
     private String[] listPrinters() {
@@ -298,9 +544,7 @@ public class AdminSettings extends JPanel {
     }
 
     private void savePrinter() {
-        config.setDefaultPrinter(printerCombo.getSelectedItem() == null
-                ? "" : printerCombo.getSelectedItem().toString());
-        config.setReceiptFooter(receiptFooterArea.getText());
+        applyPrinterFields(config);
         repo.saveOrUpdate(config);
         AutoClosingNotification.sendNotification("Receipt & printer settings saved");
     }
@@ -582,10 +826,10 @@ public class AdminSettings extends JPanel {
         form.add(Box.createVerticalStrut(8));
 
         autoBackupMinutesField = new JTextField();
-        form.add(fieldRow("Interval (minutes)", autoBackupMinutesField));
+        form.add(fieldRow("Interval (minutes)", autoBackupMinutesField, "How often an automatic backup is made (whole minutes)."));
 
         backupKeepField = new JTextField();
-        form.add(fieldRow("Keep latest (count)", backupKeepField));
+        form.add(fieldRow("Keep latest (count)", backupKeepField, "Older backups beyond this number are deleted automatically."));
 
         JPanel backupRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         backupRow.setOpaque(false);
@@ -617,7 +861,7 @@ public class AdminSettings extends JPanel {
         form.add(Box.createVerticalStrut(8));
 
         syncUrlField = new JTextField();
-        form.add(fieldRow("Server URL (https://...)", syncUrlField));
+        form.add(fieldRow("Server URL (https://...)", syncUrlField, "The address of your Salexfy server."));
         syncUserField = new JTextField();
         form.add(fieldRow("Username", syncUserField));
         syncPassField = new JTextField();
@@ -683,12 +927,25 @@ public class AdminSettings extends JPanel {
             config.setLastBackupAt(System.currentTimeMillis());
             repo.saveOrUpdate(config);
             refreshBackupList();
-            lastBackupField.setText("Last backup: " + new java.text.SimpleDateFormat("dd-MMM-yyyy HH:mm").format(new java.util.Date()));
+            lastBackupField.setText(backupSummary());
             org.PSmart.POS.tests.AutoClosingNotification.sendNotification("Backup created successfully");
         } catch (Exception ex) {
             ex.printStackTrace();
-            JOptionPane.showMessageDialog(this, "Backup failed: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            org.PSmart.POS.tests.AutoClosingNotification.sendNotification("Backup failed: " + ex.getMessage());
         }
+    }
+
+    /** Last backup time, folder, number of copies and size - so you know exactly where your data is safe. */
+    private String backupSummary() {
+        java.util.List<java.io.File> files = org.PSmart.POS.Utils.BackupService.listBackups();
+        long bytes = 0;
+        for (java.io.File f : files) bytes += f.length();
+        Long last = config.getLastBackupAt();
+        String when = last == null || last == 0 ? "never"
+                : new java.text.SimpleDateFormat("dd-MMM-yyyy HH:mm").format(new java.util.Date(last));
+        return "<html>Last backup: <b>" + when + "</b><br>Folder: "
+                + new java.io.File(org.PSmart.POS.Utils.BackupService.BACKUP_DIR).getAbsolutePath()
+                + "<br>" + files.size() + " copies kept, " + String.format("%.1f", bytes / 1048576.0) + " MB</html>";
     }
 
     private void openBackupsFolder() {
@@ -844,7 +1101,20 @@ public class AdminSettings extends JPanel {
 
     // ------------------------------------------------------------------ populate
 
+    /** Number boxes in Settings only accept digits (and one decimal point where it makes sense). */
+    private void restrictNumberFields() {
+        org.PSmart.POS.Utils.Components.Inputs.decimal(taxRateField);
+        org.PSmart.POS.Utils.Components.Inputs.decimal(turnoverTaxField);
+        org.PSmart.POS.Utils.Components.Inputs.decimal(adjustingPctField);
+        org.PSmart.POS.Utils.Components.Inputs.integer(autoBackupMinutesField);
+        org.PSmart.POS.Utils.Components.Inputs.integer(backupKeepField);
+        org.PSmart.POS.Utils.Components.Inputs.decimal(pointsPerMoneyField);
+        org.PSmart.POS.Utils.Components.Inputs.decimal(pointValueField);
+        org.PSmart.POS.Utils.Components.Inputs.decimal(commissionRateField);
+    }
+
     private void populate() {
+        restrictNumberFields();
         storeNameField.setText(config.getStoreName() != null ? config.getStoreName() : "");
         storeAddressField.setText(config.getStoreAddress() != null ? config.getStoreAddress() : "");
         storePhoneField.setText(config.getStorePhone() != null ? config.getStorePhone() : "");
@@ -858,6 +1128,18 @@ public class AdminSettings extends JPanel {
         turnoverTaxField.setText(config.getTurnoverTaxRate() != null ? config.getTurnoverTaxRate().toString() : "0");
         adjustingPctField.setText(config.getAdjustingPct() != null ? config.getAdjustingPct().toString() : "0");
         receiptFooterArea.setText(config.getReceiptFooter() != null ? config.getReceiptFooter() : "");
+        paperCombo.setSelectedIndex("58".equals(config.getReceiptPaper()) ? 1 : 0);
+        blockStockCheck.setSelected(Boolean.TRUE.equals(config.getBlockOutOfStockSales()));
+        loyaltyCheck.setSelected(Boolean.TRUE.equals(config.getLoyaltyEnabled()));
+        pointsPerMoneyField.setText(String.valueOf(config.getLoyaltyPointsPerMoney() != null ? config.getLoyaltyPointsPerMoney() : 0.01));
+        pointValueField.setText(String.valueOf(config.getLoyaltyPointValue() != null ? config.getLoyaltyPointValue() : 1.0));
+        commissionCheck.setSelected(Boolean.TRUE.equals(config.getCommissionEnabled()));
+        commissionBasisCombo.setSelectedIndex("PROFIT".equals(config.getCommissionBasis()) ? 1 : 0);
+        commissionRateField.setText(String.valueOf(config.getCommissionRate() != null ? config.getCommissionRate() : 0.0));
+        lastBackupField.setText(backupSummary());
+        autoPrintCheck.setSelected(!Boolean.FALSE.equals(config.getAutoPrintReceipt()));
+        taxPinField.setText(config.getTaxPin() == null ? "" : config.getTaxPin());
+        receiptHeaderField.setText(config.getReceiptHeader() == null ? "" : config.getReceiptHeader());
         if (config.getDefaultPrinter() != null && !config.getDefaultPrinter().isEmpty()) {
             for (int i = 0; i < printerCombo.getItemCount(); i++) {
                 if (printerCombo.getItemAt(i).equals(config.getDefaultPrinter())) {

@@ -33,12 +33,14 @@
             <!-- Add other Hibernate and JPA properties if needed -->
 
             <property name="hibernate.connection.provider_class" value="org.hibernate.hikaricp.internal.HikariCPConnectionProvider"/>
-            <property name="hibernate.hikari.minimumIdle" value="10"/>
-            <property name="hibernate.hikari.maximumPoolSize" value="500"/>
-            <property name="hibernate.hikari.idleTimeout" value="30000"/>
+            <property name="hibernate.hikari.minimumIdle" value="2"/>
+            <property name="hibernate.hikari.maximumPoolSize" value="20"/>
+            <property name="hibernate.hikari.idleTimeout" value="600000"/>
+            <!-- ping idle connections so a firewall / PostgreSQL never silently drops them ("ResultSet is closed") -->
+            <property name="hibernate.hikari.keepaliveTime" value="240000"/>
             <property name="hibernate.hikari.connectionTimeout" value="10000"/>
-            <property name="hibernate.hikari.maxLifetime" value="1800000"/>
-            <property name="hibernate.hikari.leakDetectionThreshold" value="30000"/>
+            <property name="hibernate.hikari.maxLifetime" value="1740000"/>
+            <property name="hibernate.hikari.leakDetectionThreshold" value="60000"/>
 
 
         </properties>

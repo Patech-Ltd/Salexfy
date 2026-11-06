@@ -25,7 +25,8 @@ public class WholeScale
     private UUID itemId;
 
     @JsonIgnore
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @lombok.EqualsAndHashCode.Exclude @lombok.ToString.Exclude
     private Item item;
 
     private String name;

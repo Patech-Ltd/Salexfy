@@ -52,11 +52,72 @@ private Double reorderLevel;
 
         private boolean deleted;
 
+        /*
+         * Scale options. They used to be mapped as Java arrays, which this Hibernate version cannot load when
+         * an item has none ("ResultSet is closed" on Sales / Purchases). The mapped fields are lazy Lists now (loaded
+         * only when the scales are actually read, never nested inside another query); the
+         * getWholeScales()/getSubScales() array API below keeps all existing code working unchanged.
+         */
         @OneToMany(mappedBy = "item")
-        private WholeScale[] wholeScales;
+        @lombok.Getter(lombok.AccessLevel.NONE) @lombok.Setter(lombok.AccessLevel.NONE)
+        @lombok.EqualsAndHashCode.Exclude @lombok.ToString.Exclude
+        @lombok.Builder.Default
+        private java.util.List<WholeScale> wholeScaleList = new java.util.ArrayList<>();
 
         @OneToMany(mappedBy = "item")
-        private SubScale[] subScales;
+        @lombok.Getter(lombok.AccessLevel.NONE) @lombok.Setter(lombok.AccessLevel.NONE)
+        @lombok.EqualsAndHashCode.Exclude @lombok.ToString.Exclude
+        @lombok.Builder.Default
+        private java.util.List<SubScale> subScaleList = new java.util.ArrayList<>();
+
+        /** Working copies used by the item form (positions = levels); not stored. */
+        @Transient
+        @lombok.Getter(lombok.AccessLevel.NONE) @lombok.Setter(lombok.AccessLevel.NONE)
+        @lombok.EqualsAndHashCode.Exclude @lombok.ToString.Exclude
+        private WholeScale[] wholeScalesView;
+
+        @Transient
+        @lombok.Getter(lombok.AccessLevel.NONE) @lombok.Setter(lombok.AccessLevel.NONE)
+        @lombok.EqualsAndHashCode.Exclude @lombok.ToString.Exclude
+        private SubScale[] subScalesView;
+
+        public WholeScale[] getWholeScales() {
+                if (wholeScalesView != null) return wholeScalesView;
+                try {
+                        return wholeScaleList == null ? new WholeScale[0] : wholeScaleList.toArray(new WholeScale[0]);
+                } catch (RuntimeException e) {      // session already closed: behave as "no scales"
+                        return new WholeScale[0];
+                }
+        }
+
+        public void setWholeScales(WholeScale[] scales) {
+                this.wholeScalesView = scales;
+        }
+
+        public SubScale[] getSubScales() {
+                if (subScalesView != null) return subScalesView;
+                try {
+                        return subScaleList == null ? new SubScale[0] : subScaleList.toArray(new SubScale[0]);
+                } catch (RuntimeException e) {
+                        return new SubScale[0];
+                }
+        }
+
+        public void setSubScales(SubScale[] scales) {
+                this.subScalesView = scales;
+        }
+
+        public static class ItemBuilder {
+                public ItemBuilder wholeScales(WholeScale[] scales) {
+                        this.wholeScalesView = scales;
+                        return this;
+                }
+
+                public ItemBuilder subScales(SubScale[] scales) {
+                        this.subScalesView = scales;
+                        return this;
+                }
+        }
 
         public void setImage(File file)
         {

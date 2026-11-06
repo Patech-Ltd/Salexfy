@@ -1,444 +1,448 @@
 package org.PSmart.POS.ui.MainView.ui.sales;
 
 import org.PSmart.POS.Database.DatabaseUtils;
-import org.PSmart.POS.Entities.Sale;
-import org.PSmart.POS.Repositories.SaleRepository;
+import org.PSmart.POS.Entities.StoreConfig;
+import org.PSmart.POS.Entities.User;
+import org.PSmart.POS.Repositories.SaleQueries;
+import org.PSmart.POS.Utils.Components.PTextField;
 import org.PSmart.POS.Utils.Components.PaginationBar;
+import org.PSmart.POS.Utils.Components.forms.Ui;
 import org.PSmart.POS.Utils.ExcelExporter;
-import org.PSmart.POS.Utils.MyUtils;
-import org.PSmart.POS.Utils.Palette;
+import org.PSmart.POS.Utils.IconsUtils;
+import org.PSmart.POS.Utils.ReceiptPrinter;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
-import javax.swing.table.JTableHeader;
 import java.awt.*;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.*;
 import java.util.List;
 
 /**
- * Sales Reports — professional, card-based. Searchable by receipt# / customer,
- * filterable by date range, paginated with progressive loading, exportable to Excel,
- * and each sale opens a printable + editable details dialog.
+ * Sales: find any sale fast (receipt #, customer, period, status, payment, cashier), review it,
+ * reprint it, or cancel it with a recorded reason. Data comes from SaleQueries (projection rows,
+ * short-lived sessions), so paging stays quick however many sales exist.
  */
 public class SalesPanel extends JPanel {
 
     private static final int PAGE_SIZE = 20;
+    private static final ZoneId ZONE = ZoneId.systemDefault();
+    private static final Color RED = new Color(200, 30, 45);
 
-    private final SaleRepository saleRepository = DatabaseUtils.getInstance().getSaleRepository();
+    private final User user;
 
-    private DefaultTableModel salesTableModel;
-    private JTable salesTable;
+    private final JPanel header = new JPanel(null);
+    private final JPanel cards = new JPanel(new GridLayout(1, 4, 14, 0));
+    private final JLabel todayRevenue = new JLabel("-", SwingConstants.LEFT);
+    private final JLabel todayCount = new JLabel("-", SwingConstants.LEFT);
+    private final JLabel filteredTotal = new JLabel("-", SwingConstants.LEFT);
+    private final JLabel filteredCount = new JLabel("-", SwingConstants.LEFT);
 
-    private JLabel todayRevenueLabel;
-    private JLabel todayCountLabel;
-    private JLabel totalSalesLabel;
-    private JLabel pageCountLabel;
+    private final PTextField search = new PTextField(Ui.SLATE, new Color(0, 0, 255), "Search receipt # or customer",
+            IconsUtils.getIcon("search.png"));
+    private final JComboBox<String> period = new JComboBox<>(new String[]{"All Time", "Today", "This Week", "This Month", "Custom Range"});
+    private final JComboBox<String> status = new JComboBox<>(new String[]{"All", "Completed", "Credit", "Voided"});
+    private final JComboBox<String> payment = new JComboBox<>(new String[]{"All", "Cash", "M-Pesa", "Card", "Credit"});
+    private final JComboBox<String> cashier = new JComboBox<>(new String[]{"All"});
+    private final org.jdatepicker.JDatePicker fromField = org.PSmart.POS.Utils.Components.Inputs.datePicker(null);
+    private final org.jdatepicker.JDatePicker toField = org.PSmart.POS.Utils.Components.Inputs.datePicker(null);
+    private final List<JComponent> labels = new ArrayList<>();
+    private final List<UUID> cashierIds = new ArrayList<>();
 
-    private JTextField searchField;
-    private JComboBox<String> rangeCombo;
-    private PaginationBar paginationBar;
+    private final DefaultTableModel model = new DefaultTableModel(
+            new String[]{"Receipt #", "Date / Time", "Customer", "Cashier", "Items", "Total", "Payment", "Status"}, 0) {
+        @Override public boolean isCellEditable(int r, int c) { return false; }
+    };
+    private final JTable table = new JTable(model);
+    private final JScrollPane scroll = new JScrollPane(table);
+    private final PaginationBar pagination;
+    private final JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 6));
+    private final JLabel info = new JLabel(" ");
+    private final JLabel flash = new JLabel(" ");
 
+    private List<SaleQueries.Row> rows = new ArrayList<>();
     private int page = 0;
-    private String keyword = "";
-    private long totalRows = 0;
-    private boolean loading = false;
+    private int loadToken = 0;
 
-    private static final String[] COLS =
-            {"Receipt #", "Date/Time", "Items", "Subtotal", "VAT", "Total", "Payment", "Status"};
+    public SalesPanel() { this(null); }
 
-    public SalesPanel() {
-        super();
-        setLayout(null);
-        setBackground(Palette.BG);
-        buildComponents();
-        SwingUtilities.invokeLater(this::applyFilters);
+    public SalesPanel(User user) {
+        super(null);
+        this.user = user;
+        setBackground(Ui.PAGE);
+        buildHeader();
+        buildCards();
+        buildFilters();
+        buildTable();
+        pagination = new PaginationBar(p -> { page = p; load(); });
+        pagination.setPageSize(PAGE_SIZE);
+        add(pagination);
+        buildActions();
+        loadCashiers();
+        SwingUtilities.invokeLater(this::reload);
         layoutUi();
     }
 
     @Override
-    public void setBounds(int x, int y, int width, int height) {
-        super.setBounds(x, y, width, height);
-        if (width > 0) layoutUi();
+    public void setBounds(int x, int y, int w, int h) {
+        super.setBounds(x, y, w, h);
+        if (w > 0) layoutUi();
     }
 
-    /** Re-positions all children. Safe to call repeatedly once width>0. */
+    // ------------------------------------------------------------------ build
+
+    private void buildHeader() {
+        header.setBackground(Ui.SLATE);
+        JLabel title = new JLabel("Sales");
+        title.setFont(new Font("Courier", Font.BOLD, 22));
+        title.setForeground(Color.WHITE);
+        title.setBounds(20, 0, 300, 60);
+        header.add(title);
+        add(header);
+    }
+
+    private JPanel card(String caption, JLabel value) {
+        JPanel c = new JPanel(new BorderLayout());
+        c.setBackground(Color.WHITE);
+        c.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 5, 0, 0, new Color(0, 0, 137)),
+                BorderFactory.createEmptyBorder(8, 14, 8, 10)));
+        JLabel cap = new JLabel(caption);
+        cap.setFont(new Font("Courier", Font.PLAIN, 12));
+        cap.setForeground(new Color(108, 117, 125));
+        value.setFont(new Font("Courier", Font.BOLD, 24));
+        value.setForeground(new Color(0, 0, 137));
+        c.add(cap, BorderLayout.NORTH);
+        c.add(value, BorderLayout.CENTER);
+        return c;
+    }
+
+    private void buildCards() {
+        cards.setOpaque(false);
+        cards.add(card("Today's sales", todayRevenue));
+        cards.add(card("Today's receipts", todayCount));
+        cards.add(card("Total for current filter", filteredTotal));
+        cards.add(card("Receipts for current filter", filteredCount));
+        add(cards);
+    }
+
+    private JLabel tag(String text) {
+        JLabel l = new JLabel(text);
+        l.setFont(new Font("Courier", Font.BOLD, 12));
+        l.setForeground(new Color(52, 58, 64));
+        labels.add(l);
+        add(l);
+        return l;
+    }
+
+    private void buildFilters() {
+        add(search);
+        search.getField().addKeyListener(new java.awt.event.KeyAdapter() {
+            private javax.swing.Timer debounce;
+            @Override public void keyReleased(java.awt.event.KeyEvent e) {
+                if (debounce != null) debounce.stop();
+                debounce = new javax.swing.Timer(250, ev -> reload());
+                debounce.setRepeats(false);
+                debounce.start();
+            }
+        });
+        for (JComboBox<String> c : List.of(period, status, payment, cashier)) {
+            c.setFont(new Font("Courier", Font.PLAIN, 13));
+            add(c);
+        }
+        period.addActionListener(e -> {
+            boolean custom = "Custom Range".equals(period.getSelectedItem());
+            fromField.setVisible(custom);
+            toField.setVisible(custom);
+            for (JComponent l : labels) if (l.getName() != null && l.getName().equals("custom")) l.setVisible(custom);
+            if (!custom) reload();
+            layoutUi();
+        });
+        status.addActionListener(e -> reload());
+        payment.addActionListener(e -> reload());
+        cashier.addActionListener(e -> reload());
+
+        for (org.jdatepicker.JDatePicker f : List.of(fromField, toField)) {
+            f.setVisible(false);
+            f.addActionListener(e -> reload());
+            add(f);
+        }
+        tag("Period");
+        tag("Status");
+        tag("Payment");
+        tag("Cashier");
+        JLabel fl = tag("From");
+        JLabel tl = tag("To");
+        fl.setName("custom");
+        tl.setName("custom");
+        fl.setVisible(false);
+        tl.setVisible(false);
+    }
+
+    private void buildTable() {
+        Ui.styleTable(table);
+        table.setRowHeight(34);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        DefaultTableCellRenderer base = new DefaultTableCellRenderer() {
+            @Override public Component getTableCellRendererComponent(JTable t, Object v, boolean sel, boolean f, int row, int col) {
+                Component c = super.getTableCellRendererComponent(t, v, sel, f, row, col);
+                boolean voided = row < rows.size() && rows.get(row).voided();
+                if (!sel) {
+                    c.setBackground(row % 2 == 0 ? Color.WHITE : new Color(248, 249, 252));
+                    c.setForeground(voided ? RED : new Color(40, 40, 40));
+                }
+                if (voided) {
+                    Font fo = c.getFont();
+                    java.util.Map<java.awt.font.TextAttribute, Object> at = new HashMap<>(fo.getAttributes());
+                    if (col == 5) at.put(java.awt.font.TextAttribute.STRIKETHROUGH, java.awt.font.TextAttribute.STRIKETHROUGH_ON);
+                    c.setFont(fo.deriveFont(at));
+                }
+                setHorizontalAlignment(col == 4 ? CENTER : col == 5 ? RIGHT : LEFT);
+                setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+                return c;
+            }
+        };
+        for (int i = 0; i < model.getColumnCount(); i++) table.getColumnModel().getColumn(i).setCellRenderer(base);
+        int[] w = {110, 150, 200, 150, 60, 120, 120, 110};
+        for (int i = 0; i < w.length; i++) table.getColumnModel().getColumn(i).setPreferredWidth(w[i]);
+        table.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override public void mouseClicked(java.awt.event.MouseEvent e) { if (e.getClickCount() == 2) view(); }
+        });
+        add(scroll);
+    }
+
+    private void buildActions() {
+        actions.setOpaque(false);
+        JButton view = Ui.primary("View / Cancel");
+        JButton print = Ui.primary("Print Receipt");
+        JButton inv = Ui.neutral("Invoice");
+        JButton export = Ui.neutral("Export Excel");
+        JButton refresh = Ui.neutral("Refresh");
+        view.addActionListener(e -> view());
+        print.addActionListener(e -> withSale(r -> {
+            StoreConfig cfg = config();
+            ReceiptPrinter.printReceipt(org.PSmart.POS.Repositories.SaleQueries.load(r.uid), cfg);
+        }));
+        inv.addActionListener(e -> withSale(r -> ReceiptPrinter.previewInvoice(this, SaleQueries.load(r.uid), config())));
+        export.addActionListener(e -> export());
+        refresh.addActionListener(e -> reload());
+        for (JButton b : new JButton[]{view, print, inv, export, refresh}) actions.add(b);
+        info.setFont(new Font("Courier", Font.BOLD, 13));
+        add(actions);
+        add(info);
+        flash.setFont(new Font("Courier", Font.BOLD, 13));
+        flash.setForeground(Color.RED);
+        add(flash);
+    }
+
     private void layoutUi() {
-        if (getWidth() <= 1 || getHeight() <= 1) return;
-
-        if (mainHeader != null) mainHeader.setBounds(0, 0, getWidth(), 60);
-        if (summaryBar != null) summaryBar.setBounds(20, 70, getWidth() - 40, 100);
-        if (filterBar != null) filterBar.setBounds(20, 184, getWidth() - 40, 58);
-        if (tableScroll != null) tableScroll.setBounds(20, 258, getWidth() - 40, getHeight() - 258 - 66);
-        if (paginationBar != null) paginationBar.setBounds(20, getHeight() - 60, getWidth() - 40, 52);
-
+        int w = getWidth(), h = getHeight();
+        if (w <= 1 || h <= 1) return;
+        header.setBounds(0, 0, w, 60);
+        cards.setBounds(20, 70, w - 40, 76);
+        int y = 156;
+        int fx = 20;
+        search.setLocation(fx, y - 4);
+        search.setSize(Math.max(300, w / 4), 60);
+        fx += Math.max(300, w / 4) + 16;
+        int cw = 150;
+        placeCombo(period, labels.get(0), fx, y + 22, cw);
+        fx += cw + 12;
+        placeCombo(status, labels.get(1), fx, y + 22, 130);
+        fx += 142;
+        placeCombo(payment, labels.get(2), fx, y + 22, 130);
+        fx += 142;
+        placeCombo(cashier, labels.get(3), fx, y + 22, 170);
+        fx += 182;
+        if (fromField.isVisible()) {
+            labels.get(4).setBounds(fx, y, 160, 18);
+            fromField.setBounds(fx, y + 22, 150, 30);
+            fx += 162;
+            labels.get(5).setBounds(fx, y, 60, 18);
+            toField.setBounds(fx, y + 22, 150, 30);
+        }
+        scroll.setBounds(20, 226, w - 40, h - 226 - 108);
+        pagination.setBounds(20, h - 104, w - 40, 44);
+        actions.setBounds(20, h - 58, w - 400, 44);
+        info.setBounds(w - 380, h - 54, 360, 22);
+        info.setHorizontalAlignment(SwingConstants.RIGHT);
+        flash.setBounds(20, h - 22, w - 40, 20);
         revalidate();
         repaint();
     }
 
-    // ---------------------------------------------------------------- component fields
-    private JPanel mainHeader;
-    private JPanel summaryBar;
-    private JPanel filterBar;
-    private JScrollPane tableScroll;
-
-    private void buildComponents() {
-        buildHeader();
-        buildSummaryBar();
-        buildFilterBar();
-        buildTable();
-        buildPagination();
+    private void placeCombo(JComboBox<String> c, JComponent label, int x, int y, int w) {
+        label.setBounds(x, y - 22, w, 18);
+        c.setBounds(x, y, w, 30);
     }
 
-    // ---------------------------------------------------------------- header
-    private void buildHeader() {
-        mainHeader = new JPanel(null);
-        mainHeader.setBackground(Palette.HEADER);
+    // ------------------------------------------------------------------ data
 
-        JLabel title = new JLabel("Sales Reports");
-        title.setFont(Palette.courier(22));
-        title.setForeground(Color.WHITE);
-        title.setBounds(20, 0, 300, 60);
-        mainHeader.add(title);
-
-        JButton exportBtn = btn("Export to Excel", Palette.GREEN);
-        exportBtn.addActionListener(e -> exportCurrent());
-        mainHeader.add(exportBtn);
-
-        JButton refreshBtn = btn("Refresh", Palette.BLUE_BTN);
-        refreshBtn.addActionListener(e -> applyFilters());
-        mainHeader.add(refreshBtn);
-
-        JLabel tag = new JLabel("PSMART POS", SwingConstants.RIGHT);
-        tag.setFont(Palette.courier(12));
-        tag.setForeground(new Color(200, 200, 200));
-        tag.setBounds(20, 40, 500, 20);
-        mainHeader.add(tag);
-
-        add(mainHeader);
+    private StoreConfig config() {
+        StoreConfig c = DatabaseUtils.getInstance().getStoreConfigRepository().getStoreConfig();
+        return c != null ? c : StoreConfig.defaultConfig();
     }
 
-    private JButton btn(String text, Color bg) {
-        JButton b = new JButton(text);
-        b.setFont(new Font("Courier", Font.BOLD, 12));
-        b.setBackground(bg);
-        b.setForeground(Color.WHITE);
-        b.setFocusPainted(false);
-        b.setBorderPainted(false);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        b.setSize(132, 32);
-        return b;
-    }
-
-    // ---------------------------------------------------------------- summary cards
-    private void buildSummaryBar() {
-        summaryBar = new JPanel(new GridLayout(1, 3, 14, 0));
-        summaryBar.setBackground(Palette.BG);
-
-        todayRevenueLabel = new JLabel("KES 0.00", SwingConstants.CENTER);
-        JPanel revCard = card("Today's Revenue", todayRevenueLabel, Palette.GREEN);
-
-        todayCountLabel = new JLabel("0", SwingConstants.CENTER);
-        JPanel cntCard = card("Today's Sales", todayCountLabel, Palette.BLUE_ACTIVE);
-
-        totalSalesLabel = new JLabel("0", SwingConstants.CENTER);
-        JPanel totCard = card("Total Sales (All Time)", totalSalesLabel, Palette.PURPLE);
-
-        summaryBar.add(revCard);
-        summaryBar.add(cntCard);
-        summaryBar.add(totCard);
-        add(summaryBar);
-    }
-
-    private JPanel card(String title, JLabel value, Color accent) {
-        JPanel c = new JPanel(null);
-        c.setBackground(Color.WHITE);
-        c.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Palette.BORDER_CARD),
-                BorderFactory.createEmptyBorder(0, 0, 0, 0)));
-
-        JPanel stripe = new JPanel();
-        stripe.setBackground(accent);
-        stripe.setBounds(0, 0, 5, 100);
-        c.add(stripe);
-
-        JLabel t = new JLabel(title);
-        t.setFont(new Font("Courier", Font.PLAIN, 12));
-        t.setForeground(Palette.GRAY_DIM);
-        t.setBounds(16, 12, 260, 20);
-        c.add(t);
-
-        value.setFont(new Font("Courier", Font.BOLD, 24));
-        value.setForeground(accent);
-        value.setBounds(16, 38, 280, 40);
-        c.add(value);
-
-        return c;
-    }
-
-    // ---------------------------------------------------------------- filter bar
-    private void buildFilterBar() {
-        filterBar = new JPanel(null);
-        filterBar.setBackground(Color.WHITE);
-        filterBar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Palette.BORDER_CARD),
-                BorderFactory.createEmptyBorder()));
-
-        searchField = new JTextField();
-        searchField.setFont(new Font("Courier", Font.PLAIN, 14));
-        searchField.setBounds(16, 12, 360, 32);
-        searchField.setBorder(BorderFactory.createLineBorder(Palette.BORDER_SUBTLE));
-        searchField.addKeyListener(new java.awt.event.KeyAdapter() {
-            public void keyReleased(java.awt.event.KeyEvent e) {
-                keyword = searchField.getText().trim();
-                page = 0;
-                loadPage();
+    private void loadCashiers() {
+        new SwingWorker<Map<UUID, String>, Void>() {
+            @Override protected Map<UUID, String> doInBackground() { return SaleQueries.cashiers(); }
+            @Override protected void done() {
+                try {
+                    cashierIds.clear();
+                    cashier.removeAllItems();
+                    cashier.addItem("All");
+                    for (Map.Entry<UUID, String> e : get().entrySet()) {
+                        cashierIds.add(e.getKey());
+                        cashier.addItem(e.getValue());
+                    }
+                } catch (Exception ignored) {
+                    // cashier filter is optional
+                }
             }
-        });
-        filterBar.add(searchField);
-
-        JLabel searchTag = new JLabel("Search Receipt # or Customer:");
-        searchTag.setFont(Palette.courier(13));
-        searchTag.setForeground(Palette.GRAY_DIM);
-        searchTag.setBounds(16, -16, 360, 20);
-        filterBar.add(searchTag);
-
-        rangeCombo = new JComboBox<>(new String[]{"All Time", "Today", "This Week", "This Month", "Custom Range"});
-        rangeCombo.setFont(new Font("Courier", Font.PLAIN, 13));
-        rangeCombo.setBounds(400, 12, 200, 32);
-        rangeCombo.addActionListener(e -> { page = 0; loadPage(); });
-        filterBar.add(rangeCombo);
-
-        JLabel rangeTag = new JLabel("Period:");
-        rangeTag.setFont(Palette.courier(13));
-        rangeTag.setForeground(Palette.GRAY_DIM);
-        rangeTag.setBounds(400, -16, 120, 20);
-        filterBar.add(rangeTag);
-
-        pageCountLabel = new JLabel("", SwingConstants.RIGHT);
-        pageCountLabel.setFont(Palette.courier(13));
-        pageCountLabel.setForeground(Palette.GRAY_DIM);
-        pageCountLabel.setBounds(0, 12, 0, 32);
-        filterBar.add(pageCountLabel);
-
-        add(filterBar);
+        }.execute();
     }
 
-    // ---------------------------------------------------------------- table
-    private void buildTable() {
-        salesTableModel = new DefaultTableModel(COLS, 0) {
-            public boolean isCellEditable(int r, int c) { return false; }
-        };
-        salesTable = new JTable(salesTableModel);
-        salesTable.setRowHeight(40);
-        salesTable.setFont(new Font("Courier", Font.PLAIN, 13));
-        salesTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        salesTable.setGridColor(Palette.GRID);
-        salesTable.setShowGrid(true);
-        salesTable.setIntercellSpacing(new Dimension(1, 1));
-        salesTable.setFocusable(false);
-
-        JTableHeader th = salesTable.getTableHeader();
-        th.setFont(Palette.courier(13));
-        th.setBackground(Palette.HEADER);
-        th.setForeground(Color.WHITE);
-        th.setPreferredSize(new Dimension(0, 38));
-
-        DefaultTableCellRenderer center = new DefaultTableCellRenderer();
-        center.setHorizontalAlignment(JLabel.CENTER);
-        DefaultTableCellRenderer zebra = new DefaultTableCellRenderer() {
-            public Component getTableCellRendererComponent(JTable t, Object v, boolean sel, boolean focus, int row, int col) {
-                Component c = super.getTableCellRendererComponent(t, v, sel, focus, row, col);
-                if (!sel) c.setBackground(row % 2 == 0 ? Color.WHITE : Palette.ROW_STRIPE);
-                return c;
-            }
-        };
-        zebra.setHorizontalAlignment(JLabel.LEFT);
-
-        for (int i = 0; i < COLS.length; i++) {
-            boolean left = i == 0 || i == 1;
-            salesTable.getColumnModel().getColumn(i).setCellRenderer(left ? zebra : center);
-            salesTable.getColumnModel().getColumn(i).setPreferredWidth(i == 1 ? 170 : 90);
+    private SaleQueries.Filter filter() {
+        SaleQueries.Filter f = new SaleQueries.Filter();
+        f.keyword = search.getText().trim();
+        f.status = String.valueOf(status.getSelectedItem());
+        f.payment = String.valueOf(payment.getSelectedItem());
+        int ci = cashier.getSelectedIndex() - 1;
+        if (ci >= 0 && ci < cashierIds.size()) f.cashierId = cashierIds.get(ci);
+        LocalDate today = LocalDate.now();
+        String p = String.valueOf(period.getSelectedItem());
+        LocalDate from = null, to = null;
+        switch (p) {
+            case "Today": from = today; to = today; break;
+            case "This Week": from = today.with(DayOfWeek.MONDAY); to = today; break;
+            case "This Month": from = today.withDayOfMonth(1); to = today; break;
+            case "Custom Range":
+                from = org.PSmart.POS.Utils.Components.Inputs.dateOf(fromField);
+                to = org.PSmart.POS.Utils.Components.Inputs.dateOf(toField);
+                break;
+            default: break;
         }
-
-        salesTable.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseClicked(java.awt.event.MouseEvent e) {
-                if (e.getClickCount() == 2) openDetails();
-            }
-        });
-
-        tableScroll = new JScrollPane(salesTable);
-        tableScroll.setBorder(BorderFactory.createEmptyBorder());
-        tableScroll.getViewport().setBackground(Color.WHITE);
-        add(tableScroll);
+        if (from != null) f.from = from.atStartOfDay(ZONE).toInstant().toEpochMilli();
+        if (to != null) f.to = to.plusDays(1).atStartOfDay(ZONE).toInstant().toEpochMilli() - 1;
+        return f;
     }
 
-    // ---------------------------------------------------------------- pagination
-    private void buildPagination() {
-        paginationBar = new PaginationBar(newP -> {
-            page = newP;
-            loadPage();
-        });
-        paginationBar.setPageSize(PAGE_SIZE);
-        add(paginationBar);
+    private void note(String msg) {
+        flash.setText(msg);
+        javax.swing.Timer t = new javax.swing.Timer(5000, e -> flash.setText(" "));
+        t.setRepeats(false);
+        t.start();
     }
 
-    // ---------------------------------------------------------------- data
-    private void applyFilters() {
+    private void reload() {
         page = 0;
-        loadPage();
+        load();
     }
 
-    private void loadPage() {
-        if (loading) return;
-        loading = true;
-        new Thread(this::fetch).start();
-    }
-
-    private void fetch() {
-        try {
-            Long from = rangeFrom(rangeCombo != null ? (String) rangeCombo.getSelectedItem() : "All Time");
-            Long to = null;
-
-            final List<Sale> rows;
-            final long total;
-
-            if (keyword != null && !keyword.isEmpty()) {
-                rows = saleRepository.findSalesByKeywordPage(keyword, page, PAGE_SIZE);
-                total = saleRepository.countSalesByKeyword(keyword);
-            } else if (from != null) {
-                to = System.currentTimeMillis();
-                rows = saleRepository.findSalesByDateRangePage(from, to, page, PAGE_SIZE);
-                total = saleRepository.countSalesByDateRange(from, to);
-            } else {
-                rows = saleRepository.findSalesPage(page, PAGE_SIZE);
-                total = saleRepository.countSales();
+    private void load() {
+        final int token = ++loadToken;
+        final SaleQueries.Filter f = filter();
+        final int pg = page;
+        new SwingWorker<Object[], Void>() {
+            @Override protected Object[] doInBackground() {
+                // one retry: a pooled connection can be stale after the database was idle
+                for (int attempt = 0; ; attempt++) {
+                    try {
+                        List<SaleQueries.Row> r = SaleQueries.rows(f, pg, PAGE_SIZE);
+                        double[] s = SaleQueries.summary(f);
+                        SaleQueries.Filter today = new SaleQueries.Filter();
+                        today.from = LocalDate.now().atStartOfDay(ZONE).toInstant().toEpochMilli();
+                        double[] t = SaleQueries.summary(today);
+                        return new Object[]{r, s, t};
+                    } catch (RuntimeException e) {
+                        if (attempt >= 1) throw e;
+                        try { Thread.sleep(300); } catch (InterruptedException ignored) { }
+                    }
+                }
             }
-
-            SwingUtilities.invokeLater(() -> render(rows, total));
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(this, "Error loading sales: " + ex.getMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
-            });
-        } finally {
-            loading = false;
-        }
+            @Override protected void done() {
+                if (token != loadToken) return;   // a newer request superseded this one
+                try {
+                    @SuppressWarnings("unchecked") List<SaleQueries.Row> r = (List<SaleQueries.Row>) get()[0];
+                    double[] s = (double[]) get()[1];
+                    double[] t = (double[]) get()[2];
+                    render(r, s, t);
+                } catch (Exception ex) {
+                    Throwable x = ex;
+                    while (x.getCause() != null) x = x.getCause();
+                    note("Could not load sales: " + x.getMessage() + "  (press Refresh to retry)");
+                }
+            }
+        }.execute();
     }
 
-    private void render(List<Sale> rows, long total) {
-        totalRows = total;
-        salesTableModel.setRowCount(0);
+    private void render(List<SaleQueries.Row> r, double[] summary, double[] today) {
+        rows = r;
+        model.setRowCount(0);
         SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy HH:mm");
-
-        if (rows != null) {
-            for (Sale s : rows) {
-                String date = s.getCreatedAt() != null ? sdf.format(new Date(s.getCreatedAt())) : "N/A";
-                int items = s.getItems() != null ? s.getItems().size() : 0;
-                salesTableModel.addRow(new Object[]{
-                        s.getReceiptNumber(),
-                        date,
-                        items,
-                        "KES " + MyUtils.formatCurrency(String.valueOf(s.getSubtotal())),
-                        "KES " + MyUtils.formatCurrency(String.valueOf(s.getVatAmount())),
-                        "KES " + MyUtils.formatCurrency(String.valueOf(s.getTotal())),
-                        s.getPaymentMethod(),
-                        s.getStatus()
-                });
-            }
+        for (SaleQueries.Row row : r) {
+            model.addRow(new Object[]{row.receipt, sdf.format(new Date(row.createdAt)), row.customer, row.cashier, row.items,
+                    String.format("%,.2f", row.total), row.payment.replace("MPESA", "M-Pesa").replace("+", " + "),
+                    row.voided() ? "CANCELLED" : row.status});
         }
-
-        paginationBar.setTotalRows(total);
-        paginationBar.setPage(page);
-        pageCountLabel.setText("Row " + (page == 0 ? 1 : page * PAGE_SIZE + 1) + " — " +
-                Math.min((page + 1) * PAGE_SIZE, total) + " of " + total +
-                (keyword.isEmpty() ? "" : "  (filtered)"));
-        refreshSummary();
+        long total = (long) summary[0];
+        pagination.setTotalRows(total);
+        pagination.setPage(page);
+        todayRevenue.setText("KES " + String.format("%,.2f", today[2]));
+        todayCount.setText(String.valueOf((long) today[1]));
+        filteredTotal.setText("KES " + String.format("%,.2f", summary[2]));
+        filteredCount.setText(String.valueOf((long) summary[1]));
+        info.setText(total == 0 ? "No sales match these filters"
+                : (total > summary[1] ? (long) (total - summary[1]) + " cancelled sale(s) in this view" : " "));
     }
 
-    private void refreshSummary() {
+    // ------------------------------------------------------------------ actions
+
+    private void withSale(java.util.function.Consumer<SaleQueries.Row> action) {
+        int r = table.getSelectedRow();
+        if (r < 0 || r >= rows.size()) {
+            note("Select a sale in the list first.");
+            return;
+        }
         try {
-            todayRevenueLabel.setText("KES " + MyUtils.formatCurrency(String.valueOf(saleRepository.getTotalSalesToday())));
-            todayCountLabel.setText(String.valueOf(saleRepository.getSalesCountToday()));
-            SaleRepository repo = saleRepository;
-            long c = repo.countSales();
-            totalSalesLabel.setText(String.valueOf(c));
-        } catch (Exception ex) { /* non-fatal */ }
-    }
-
-    private Long rangeFrom(String sel) {
-        if (sel == null || sel.equals("All Time")) return null;
-        java.util.Calendar cal = java.util.Calendar.getInstance();
-        switch (sel) {
-            case "Today":
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-                cal.set(java.util.Calendar.MINUTE, 0);
-                cal.set(java.util.Calendar.SECOND, 0);
-                cal.set(java.util.Calendar.MILLISECOND, 0);
-                return cal.getTimeInMillis();
-            case "This Week":
-                cal.set(java.util.Calendar.DAY_OF_WEEK, cal.getFirstDayOfWeek());
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-                cal.set(java.util.Calendar.MINUTE, 0);
-                cal.set(java.util.Calendar.SECOND, 0);
-                cal.set(java.util.Calendar.MILLISECOND, 0);
-                return cal.getTimeInMillis();
-            case "This Month":
-                cal.set(java.util.Calendar.DAY_OF_MONTH, 1);
-                cal.set(java.util.Calendar.HOUR_OF_DAY, 0);
-                cal.set(java.util.Calendar.MINUTE, 0);
-                cal.set(java.util.Calendar.SECOND, 0);
-                cal.set(java.util.Calendar.MILLISECOND, 0);
-                return cal.getTimeInMillis();
-            default:
-                return null;
-        }
-    }
-
-    private void openDetails() {
-        int row = salesTable.getSelectedRow();
-        if (row < 0) return;
-        String receipt = (String) salesTableModel.getValueAt(row, 0);
-        java.util.UUID id = findIdByReceipt(receipt);
-        if (id == null) return;
-        Sale sale = saleRepository.findSaleById(id);
-        if (sale != null) {
-            new SaleDetailDialog(SwingUtilities.getWindowAncestor(this), sale, this::applyFilters).setVisible(true);
-        }
-    }
-
-    private java.util.UUID findIdByReceipt(String receipt) {
-        List<Sale> sales = safeAll();
-        for (Sale s : sales) {
-            if (s.getReceiptNumber().equals(receipt)) return s.getUid();
-        }
-        return null;
-    }
-
-    private List<Sale> safeAll() {
-        try {
-            return new ArrayList<>(saleRepository.findAllSales());
+            action.accept(rows.get(r));
         } catch (Exception e) {
-            return new ArrayList<>();
+            note("Could not open the sale: " + e.getMessage());
         }
     }
 
-    private void exportCurrent() {
-        java.util.List<Object[]> rows = new ArrayList<>();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy HH:mm");
-        for (Sale s : safeAll()) {
-            String date = s.getCreatedAt() != null ? sdf.format(new Date(s.getCreatedAt())) : "N/A";
-            int items = s.getItems() != null ? s.getItems().size() : 0;
-            rows.add(new Object[]{
-                    s.getReceiptNumber(), date, items,
-                    s.getSubtotal(), s.getVatAmount(), s.getTotal(),
-                    s.getPaymentMethod(), s.getStatus()
-            });
-        }
-        String[] headers = {"Receipt #", "Date/Time", "Items", "Subtotal", "VAT", "Total", "Payment", "Status"};
-        ExcelExporter.exportToExcel(this, "SalesReport_" + java.time.LocalDate.now(), headers, rows);
+    private void view() {
+        withSale(r -> new SaleViewForm(r.uid, user, this::reload));
+    }
+
+    private void export() {
+        new SwingWorker<List<Object[]>, Void>() {
+            @Override protected List<Object[]> doInBackground() {
+                List<Object[]> out = new ArrayList<>();
+                SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy HH:mm");
+                SaleQueries.Filter f = filter();
+                for (int p = 0; ; p++) {
+                    List<SaleQueries.Row> batch = SaleQueries.rows(f, p, 500);
+                    for (SaleQueries.Row r : batch) {
+                        out.add(new Object[]{r.receipt, sdf.format(new Date(r.createdAt)), r.customer, r.cashier, r.items,
+                                r.subtotal, r.vat, r.total, r.payment, r.voided() ? "CANCELLED" : r.status});
+                    }
+                    if (batch.size() < 500) break;
+                }
+                return out;
+            }
+            @Override protected void done() {
+                try {
+                    ExcelExporter.exportToExcel(SalesPanel.this, "Sales_" + LocalDate.now(),
+                            new String[]{"Receipt #", "Date/Time", "Customer", "Cashier", "Items", "Subtotal", "VAT", "Total", "Payment", "Status"}, get());
+                } catch (Exception ex) {
+                    note("Export failed: " + ex.getMessage());
+                }
+            }
+        }.execute();
     }
 }

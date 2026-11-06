@@ -12,16 +12,7 @@ import java.util.List;
 public class AuthorizationUtils {
 
     public static boolean hasPermission(User user, RoleType roleType, boolean requiresChange) {
-        if (user == null || user.getRoles() == null) return false;
-        for (Role role : user.getRoles()) {
-            if (role.getRoleType() == roleType) {
-                if (requiresChange) {
-                    return Boolean.TRUE.equals(role.getChange());
-                }
-                return Boolean.TRUE.equals(role.getView());
-            }
-        }
-        return false;
+        return requiresChange ? RoleService.canChange(user, roleType) : RoleService.canView(user, roleType);
     }
 
     public static boolean hasRole(User user, RoleType roleType) {
@@ -75,7 +66,7 @@ public class AuthorizationUtils {
                         .setParameter("username", username)
                         .getSingleResult();
 
-                if (authUser != null && authUser.getPassword().equals(password)) {
+                if (authUser != null && PasswordUtil.matches(authUser.getPassword(), password)) {
                     return authUser;
                 }
             } catch (Exception e) {
@@ -85,47 +76,15 @@ public class AuthorizationUtils {
         return null;
     }
 
+    /** Allowed as-is, or a supervisor approves with their own login. */
     public static boolean authorizeAction(Component parent, User currentUser, RoleType roleType,
                                          String actionDescription) {
-        if (hasPermission(currentUser, roleType, true)) {
-            return true;
-        }
-
-        User authUser = promptReAuthorization(parent, actionDescription);
-        if (authUser == null) {
-            JOptionPane.showMessageDialog(parent, "Authorization failed.", "Access Denied", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-
-        if (!hasPermission(authUser, roleType, true)) {
-            JOptionPane.showMessageDialog(parent,
-                    "User '" + authUser.getFullname() + "' does not have permission for: " + actionDescription,
-                    "Insufficient Permissions", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-
-        return true;
+        return SupervisorApproval.require(parent, currentUser, roleType, actionDescription) != null;
     }
 
     public static boolean authorizeView(Component parent, User currentUser, RoleType roleType,
                                        String actionDescription) {
-        if (hasPermission(currentUser, roleType, false)) {
-            return true;
-        }
-
-        User authUser = promptReAuthorization(parent, actionDescription);
-        if (authUser == null) {
-            JOptionPane.showMessageDialog(parent, "Authorization failed.", "Access Denied", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-
-        if (!hasPermission(authUser, roleType, false)) {
-            JOptionPane.showMessageDialog(parent,
-                    "User '" + authUser.getFullname() + "' does not have permission for: " + actionDescription,
-                    "Insufficient Permissions", JOptionPane.ERROR_MESSAGE);
-            return false;
-        }
-
-        return true;
+        if (hasPermission(currentUser, roleType, false)) return true;
+        return SupervisorApproval.require(parent, currentUser, roleType, actionDescription) != null;
     }
 }
