@@ -1,0 +1,7 @@
+package org.PSmart.POS.Repositories;
+
+import org.PSmart.POS.Entities.Item;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ItemRepository extends JpaRepository<Item,Long> {
+}
